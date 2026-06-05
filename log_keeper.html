@@ -1472,14 +1472,22 @@ function dedupeStatusBlocks(blocks) {
   }
   return result;
 }
-// [[HTML]] 블록이 사실은 일반 <details> 상태창인지 판별.
-// 크리에이터 UI(검은 배경/코드에디터 풍 스타일)가 없고 <details>만 있으면
-// 그 <details> HTML 배열을 반환, 아니면 null.
+// [[HTML]] 블록이 사실은 "평범한 <details> 상태창"인지 판별.
+// 디자인 카드(그라데이션·그림자·중첩 details 등)는 평문으로 바꾸지 말고
+// HTML 원본 그대로 렌더해야 하므로 null 을 반환한다.
+// 정말 꾸밈 없는 맨 <details> 상태창만 그 HTML 배열로 반환.
 function extractPlainStatusDetails(html) {
   if (!/<details[\s\S]*?<\/details>/i.test(html)) return null;
-  // 크리에이터 UI 특유의 흔적: 어두운 배경색, letter-spacing, 코드폰트 등
-  const creatorSign = /background\s*:\s*#0|letter-spacing\s*:\s*normal|ui-monospace|monospace/i;
-  // <details> 바깥(껍데기)에 크리에이터 스타일이 있으면 일반 상태창이 아님
+  // 크리에이터 UI / 디자인 카드 흔적 — 하나라도 있으면 HTML 그대로 렌더
+  const creatorSign = /background\s*:\s*#0|letter-spacing\s*:\s*normal|ui-monospace|monospace|gradient|box-shadow|position\s*:\s*absolute/i;
+  // 중첩 <details>(접이식 섹션을 가진 디자인 카드)면 HTML 그대로 렌더
+  try {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html || "";
+    const ds = tpl.content.querySelectorAll("details");
+    for (const d of ds) if (d.querySelector("details")) return null;
+  } catch (e) { /* 파싱 실패 시 아래 정규식 검사로 진행 */ }
+  // <details> 바깥(껍데기)에 디자인 흔적이 있으면 일반 상태창이 아님
   const shell = html.replace(/<details[\s\S]*?<\/details>/gi, "");
   if (creatorSign.test(shell)) return null;
   // <details> 들을 모두 모은다
@@ -1487,7 +1495,7 @@ function extractPlainStatusDetails(html) {
   const re = /<details[\s\S]*?<\/details>/gi;
   let m;
   while ((m = re.exec(html)) !== null) {
-    // 각 details 자체에 크리에이터 UI 흔적이 짙으면 일반 상태창 아님
+    // 각 details 자체에 디자인 흔적이 짙으면 일반 상태창 아님
     if (creatorSign.test(m[0])) return null;
     list.push(m[0]);
   }
