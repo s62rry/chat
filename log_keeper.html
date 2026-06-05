@@ -1739,6 +1739,12 @@ function sanitizeHtml(html) {
           el.removeAttribute(attr.name);
       });
     });
+     // 접힌 채로는 안 보이는 상태창 방지 — summary가 떠 있는(absolute/fixed) details는 펼친 채로 렌더
+    tpl.content.querySelectorAll("details").forEach(d => {
+      const sm = d.querySelector(":scope > summary");
+      const st = ((sm && sm.getAttribute("style")) || "").toLowerCase();
+      if (/position\s*:\s*(absolute|fixed)/.test(st)) d.setAttribute("open", "");
+    });
     return tpl.innerHTML;
   } catch (e) {
     // 깨진 HTML 등으로 처리 실패 — 태그를 다 벗겨 텍스트만 안전하게 반환
