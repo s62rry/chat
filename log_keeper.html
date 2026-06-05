@@ -1739,11 +1739,11 @@ function sanitizeHtml(html) {
           el.removeAttribute(attr.name);
       });
     });
-     // 접힌 채로는 안 보이는 상태창 방지 — summary가 떠 있는(absolute/fixed) details는 펼친 채로 렌더
-    tpl.content.querySelectorAll("details").forEach(d => {
-      const sm = d.querySelector(":scope > summary");
-      const st = ((sm && sm.getAttribute("style")) || "").toLowerCase();
-      if (/position\s*:\s*(absolute|fixed)/.test(st)) d.setAttribute("open", "");
+// summary가 떠 있어(absolute/fixed) 접으면 안 보이는 상태창 — summary를 제자리로 돌려 접혀도 보이게
+    tpl.content.querySelectorAll("details > summary").forEach(sm => {
+      const st = sm.getAttribute("style") || "";
+      if (/position\s*:\s*(absolute|fixed)/i.test(st))
+        sm.setAttribute("style", st.replace(/position\s*:\s*(absolute|fixed)/ig, "position:static"));
     });
     return tpl.innerHTML;
   } catch (e) {
