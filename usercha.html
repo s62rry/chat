@@ -3124,5 +3124,233 @@
     }).catch(() => {});
   })();
 </script>
+<!-- ☁ 선택적 클라우드 동기화 — 로그인 안 하면 동작하지 않음(기존 로컬 방식 그대로). 기존 코드는 건드리지 않고 추가만 함. -->
+<script type="module">
+(async () => {
+  let M;
+  try {
+    const [a, b, c] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js"),
+    ]);
+    M = { ...a, ...b, ...c };
+  } catch (e) { console.warn('[sync] Firebase 로드 실패 — 로컬 전용으로 계속 동작합니다.', e); return; }
+
+  const { initializeApp } = M;
+  const { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = M;
+  const { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } = M;
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD8k_W8RASawVHwKG8LwARGAZVuGEHNutk",
+    authDomain: "s62rry.firebaseapp.com",
+    projectId: "s62rry",
+    storageBucket: "s62rry.firebasestorage.app",
+    messagingSenderId: "780340867027",
+    appId: "1:780340867027:web:40fc4c3b156dc0650c8926"
+  };
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  /* ===== 이 도구의 저장 위치 ===== */
+  const DATA_KEY = 'personakeeper:data';            // 텍스트(캐릭터/카테고리)
+  const IDB_NAME = 'personakeeper', IDB_STORE = 'images'; // 이미지
+  const C_DATA = 'pk_data', C_IMG = 'pk_img';       // Firestore 하위 컬렉션 이름
+  const IMG_CAP = 1000000;                           // 이미지 1개 최대(≈1MB) — 넘으면 이 기기에만 보관
+  const SYNCED_KEY = 'pk:cloudImgLen';               // 이미지 동기화 추적(자체용)
+
+  /* ===== IndexedDB 헬퍼(도구와 동일 규격) ===== */
+  const idbOpen = () => new Promise((res, rej) => { const r = indexedDB.open(IDB_NAME, 1); r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains(IDB_STORE)) d.createObjectStore(IDB_STORE); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  const idbAllKeys = () => idbOpen().then(d => new Promise((res, rej) => { const t = d.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).getAllKeys(); t.onsuccess = () => res(t.result || []); t.onerror = () => rej(t.error); }));
+  const idbGet = k => idbOpen().then(d => new Promise((res, rej) => { const t = d.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(k); t.onsuccess = () => res(t.result || ''); t.onerror = () => rej(t.error); }));
+  const idbSet = (k, v) => idbOpen().then(d => new Promise((res, rej) => { const tx = d.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).put(v, k); tx.oncomplete = () => res(1); tx.onerror = () => rej(tx.error); }));
+  const idbDel = k => idbOpen().then(d => new Promise((res, rej) => { const tx = d.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).delete(k); tx.oncomplete = () => res(1); tx.onerror = () => rej(tx.error); }));
+
+  const hasData = raw => { try { const p = JSON.parse(raw || 'null'); return !!(p && Array.isArray(p.personas) && p.personas.length); } catch { return false; } };
+  const getSynced = () => { try { return JSON.parse(localStorage.getItem(SYNCED_KEY) || '{}'); } catch { return {}; } };
+  const setSynced = m => { try { localStorage.setItem(SYNCED_KEY, JSON.stringify(m)); } catch (e) {} };
+
+  /* ===== 스타일/버튼/모달 (테마 변수 그대로 사용) ===== */
+  const css = document.createElement('style');
+  css.textContent = `
+  #pkSyncBtn{position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;align-items:center;gap:7px;max-width:46vw;
+    padding:9px 14px;border-radius:999px;border:1px solid var(--border,#dde2ea);background:var(--panel,#fff);
+    color:var(--text,#41454f);font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.10);transition:.15s}
+  #pkSyncBtn:hover{border-color:var(--accent,#2f6df0);color:var(--accent-deep,#2258cc)}
+  #pkSyncBtn .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #pkSyncBtn .dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--text-dim,#858a99)}
+  #pkSyncBtn.on .dot{background:#3fbf6f}
+  #pkSyncMask{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:rgba(10,12,20,.45)}
+  #pkSyncMask.show{display:flex}
+  #pkSyncCard{width:min(340px,92vw);background:var(--panel,#fff);color:var(--text,#41454f);border:1px solid var(--border,#dde2ea);
+    border-radius:16px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  #pkSyncCard h3{margin:0 0 4px;font-size:16px;color:var(--text-strong,#1a1d24)}
+  #pkSyncCard p{margin:0 0 14px;font-size:12px;color:var(--text-dim,#858a99);line-height:1.55}
+  #pkSyncCard input{width:100%;box-sizing:border-box;margin-bottom:9px;padding:10px 12px;border-radius:10px;
+    border:1px solid var(--border,#dde2ea);background:var(--bg,#f1f3f7);color:var(--text-strong,#1a1d24);font:inherit;font-size:13px}
+  #pkSyncCard .row{display:flex;gap:8px;margin-top:6px}
+  #pkSyncCard button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border,#dde2ea);background:var(--panel,#fff);
+    color:var(--text,#41454f);font:inherit;font-size:13px;font-weight:600;cursor:pointer;line-height:1.3}
+  #pkSyncCard button small{font-weight:400;opacity:.75;font-size:11px}
+  #pkSyncCard button.primary{background:var(--accent,#2f6df0);border-color:var(--accent,#2f6df0);color:#fff}
+  #pkSyncCard .link{background:none;border:none;color:var(--accent,#2f6df0);font-size:12px;cursor:pointer;padding:4px;flex:none}
+  #pkSyncErr{color:#e2466b;font-size:12px;min-height:16px;margin:2px 0 0}
+  `;
+  document.head.appendChild(css);
+
+  const btn = document.createElement('button');
+  btn.id = 'pkSyncBtn';
+  btn.innerHTML = '<span class="dot"></span><span class="lbl">로그인</span>';
+  document.body.appendChild(btn);
+  const setLabel = t => { btn.querySelector('.lbl').textContent = t; };
+
+  const mask = document.createElement('div');
+  mask.id = 'pkSyncMask';
+  mask.innerHTML = '<div id="pkSyncCard"></div>';
+  document.body.appendChild(mask);
+  const card = mask.querySelector('#pkSyncCard');
+  const closeModal = () => mask.classList.remove('show');
+  mask.addEventListener('click', e => { if (e.target === mask) closeModal(); });
+
+  const toast = m => { const t = document.getElementById('toast'); if (t) { t.textContent = m; t.classList.add('show'); clearTimeout(t._st); t._st = setTimeout(() => t.classList.remove('show'), 1900); } else console.log('[sync]', m); };
+
+  const friendly = code => {
+    if (/invalid-email/.test(code)) return '이메일 형식이 올바르지 않아요.';
+    if (/missing-password|weak-password/.test(code)) return '비밀번호는 6자 이상이어야 해요.';
+    if (/email-already-in-use/.test(code)) return '이미 가입된 이메일이에요. 로그인해 주세요.';
+    if (/invalid-credential|wrong-password|user-not-found/.test(code)) return '이메일 또는 비밀번호가 맞지 않아요.';
+    if (/too-many-requests/.test(code)) return '시도가 많아요. 잠시 후 다시 해주세요.';
+    if (/network/.test(code)) return '네트워크 연결을 확인해 주세요.';
+    return '오류: ' + code;
+  };
+
+  function openLogin() {
+    let signup = false;
+    const submit = async () => {
+      const email = card.querySelector('#pkEmail').value.trim();
+      const pw = card.querySelector('#pkPw').value;
+      const err = card.querySelector('#pkSyncErr');
+      if (!email || !pw) { err.textContent = '이메일과 비밀번호를 입력해주세요.'; return; }
+      err.textContent = '처리 중…';
+      try {
+        if (signup) await createUserWithEmailAndPassword(auth, email, pw);
+        else await signInWithEmailAndPassword(auth, email, pw);
+        closeModal();
+      } catch (ex) { err.textContent = friendly(ex.code || ex.message || ''); }
+    };
+    const render = () => {
+      card.innerHTML =
+        '<h3>' + (signup ? '회원가입' : '로그인') + '</h3>' +
+        '<p>로그인하면 캐릭터 데이터가 클라우드에 저장돼 다른 기기에서도 같은 계정으로 볼 수 있어요. 로그인 안 해도 이 기기에선 그대로 쓸 수 있어요.</p>' +
+        '<input id="pkEmail" type="email" placeholder="이메일" autocomplete="username">' +
+        '<input id="pkPw" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password">' +
+        '<p id="pkSyncErr"></p>' +
+        '<div class="row"><button id="pkCancel">취소</button><button id="pkGo" class="primary">' + (signup ? '가입하기' : '로그인') + '</button></div>' +
+        '<div class="row"><button class="link" id="pkToggle">' + (signup ? '이미 계정이 있어요 → 로그인' : '계정이 없어요 → 회원가입') + '</button></div>';
+      card.querySelector('#pkCancel').onclick = closeModal;
+      card.querySelector('#pkToggle').onclick = () => { signup = !signup; render(); };
+      card.querySelector('#pkGo').onclick = submit;
+      card.querySelector('#pkPw').onkeydown = e => { if (e.key === 'Enter') submit(); };
+    };
+    render();
+    mask.classList.add('show');
+    setTimeout(() => card.querySelector('#pkEmail') && card.querySelector('#pkEmail').focus(), 50);
+  }
+
+  function openAccount(email) {
+    card.innerHTML =
+      '<h3>클라우드 동기화 켜짐</h3>' +
+      '<p>' + (email || '') + '<br>변경하면 자동으로 클라우드에 저장돼요.</p>' +
+      '<div class="row"><button id="pkSyncNow" class="primary">지금 동기화</button></div>' +
+      '<div class="row"><button id="pkLogout">로그아웃</button></div>' +
+      '<div class="row"><button class="link" id="pkClose2">닫기</button></div>';
+    card.querySelector('#pkClose2').onclick = closeModal;
+    card.querySelector('#pkSyncNow').onclick = async () => { closeModal(); toast('동기화 중…'); await pushAll(); toast('동기화됐어요'); };
+    card.querySelector('#pkLogout').onclick = async () => { closeModal(); await signOut(auth); };
+    mask.classList.add('show');
+  }
+
+  /* ===== 동기화 ===== */
+  let user = null, pulling = false, pushTimer = null;
+  const dataDoc = () => doc(db, 'users', user.uid, C_DATA, 'main');
+  const cloudData = async () => { try { const s = await getDoc(dataDoc()); return s.exists() ? (s.data().j || '') : ''; } catch (e) { return ''; } };
+
+  async function pull() {
+    pulling = true;
+    try {
+      const cj = await cloudData();
+      if (cj) localStorage.setItem(DATA_KEY, cj);
+      const snap = await getDocs(collection(db, 'users', user.uid, C_IMG));
+      const cloudVids = new Set(), lenMap = {}, writes = [];
+      snap.forEach(d => { const v = d.data().d || ''; cloudVids.add(d.id); lenMap[d.id] = v.length; if (v) writes.push(idbSet(d.id, v)); });
+      await Promise.all(writes);
+      const localKeys = await idbAllKeys();
+      await Promise.all(localKeys.filter(k => !cloudVids.has(k)).map(k => idbDel(k)));
+      setSynced(lenMap);
+    } finally { pulling = false; }
+    location.reload();
+  }
+
+  async function pushAll() {
+    if (!user) return;
+    try {
+      await setDoc(dataDoc(), { j: localStorage.getItem(DATA_KEY) || '' });
+      const localKeys = await idbAllKeys();
+      const synced = getSynced(), newMap = {};
+      let batch = writeBatch(db), ops = 0, skipped = 0;
+      const flush = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
+      for (const k of localKeys) {
+        const val = await idbGet(k);
+        const len = (val || '').length;
+        newMap[k] = len;
+        if (synced[k] === len) continue;            // 변동 없음
+        if (len > IMG_CAP) { skipped++; continue; }  // 너무 큼 → 이 기기에만
+        batch.set(doc(db, 'users', user.uid, C_IMG, k), { d: val }); ops++; await flush();
+      }
+      for (const k of Object.keys(synced)) { if (!localKeys.includes(k)) { batch.delete(doc(db, 'users', user.uid, C_IMG, k)); ops++; await flush(); } }
+      if (ops > 0) await batch.commit();
+      setSynced(newMap);
+      if (skipped) toast(skipped + '개 이미지는 너무 커서 이 기기에만 보관돼요');
+    } catch (e) { console.warn('[sync] push 실패', e); toast('동기화 실패: 네트워크를 확인하세요'); }
+  }
+
+  const schedulePush = () => { clearTimeout(pushTimer); pushTimer = setTimeout(pushAll, 1500); };
+
+  // 로컬 데이터 변경 감지 — 도구 코드는 안 건드리고 setItem만 가로챔(실패해도 원래 저장엔 영향 없음)
+  const _set = localStorage.setItem.bind(localStorage);
+  localStorage.setItem = function (k, v) { _set(k, v); try { if (k === DATA_KEY && user && !pulling) schedulePush(); } catch (e) {} };
+  window.addEventListener('pagehide', () => { if (user && pushTimer) { clearTimeout(pushTimer); pushAll(); } });
+
+  async function firstSync() {
+    const cj = await cloudData();
+    const localRaw = localStorage.getItem(DATA_KEY) || '';
+    if (cj === localRaw) return;                     // 이미 같음 — 아무것도 안 함(무한루프 방지)
+    const cHas = hasData(cj), lHas = hasData(localRaw);
+    if (cHas && lHas) {
+      card.innerHTML =
+        '<h3>데이터가 양쪽에 있어요</h3>' +
+        '<p>클라우드와 이 기기 양쪽에 캐릭터 데이터가 있어요. 어느 쪽으로 맞출까요? <b>(고른 쪽이 남고 다른 쪽은 덮어써져요.)</b></p>' +
+        '<div class="row"><button id="pkPull" class="primary">클라우드 불러오기 <small>(이 기기 덮어씀)</small></button></div>' +
+        '<div class="row"><button id="pkPush">이 기기 올리기 <small>(클라우드 덮어씀)</small></button></div>';
+      mask.classList.add('show');
+      card.querySelector('#pkPull').onclick = async () => { closeModal(); toast('불러오는 중…'); await pull(); };
+      card.querySelector('#pkPush').onclick = async () => { closeModal(); toast('올리는 중…'); await pushAll(); toast('클라우드에 올렸어요'); };
+    } else if (cHas) {
+      toast('클라우드 데이터 불러오는 중…'); await pull();
+    } else if (lHas) {
+      toast('클라우드에 백업 중…'); await pushAll(); toast('클라우드 동기화 켜짐');
+    }
+  }
+
+  btn.onclick = () => { if (user) openAccount(user.email); else openLogin(); };
+
+  onAuthStateChanged(auth, async u => {
+    user = u;
+    if (u) { btn.classList.add('on'); setLabel(u.email ? u.email.split('@')[0] : '동기화 켜짐'); await firstSync(); }
+    else { btn.classList.remove('on'); setLabel('로그인'); }
+  });
+})();
+</script>
 </body>
 </html>
