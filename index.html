@@ -2416,7 +2416,7 @@
     </div>
     <div class="searchbox">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="search" placeholder="검색" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="tool-search" data-lpignore="true" data-1p-ignore>
+      <input type="text" id="search" placeholder="검색" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="tool-search" data-lpignore="true" data-1p-ignore readonly onfocus="this.removeAttribute('readonly')" onblur="this.setAttribute('readonly','readonly')">
     </div>
   </div>
 
@@ -7921,7 +7921,7 @@
 
   const { initializeApp } = M;
   const { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = M;
-  const { getFirestore, doc, getDoc, setDoc } = M;
+  const { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } = M;
 
   const firebaseConfig = {
     apiKey: "AIzaSyD8k_W8RASawVHwKG8LwARGAZVuGEHNutk",
@@ -7935,15 +7935,36 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
 
-  /* ===== 동기화할 콘텐츠 키 (위젯 위치·테마·사용량 등 기기별 설정은 제외) ===== */
-  const KEYS = ['chathub:notes', 'chathub:note', 'chathub:todos', 'chathub:ddays', 'chathub:ytPlaylist', 'chathub:ytLoop'];
-  const COL = 'hub_data';
+  /* ===== 동기화 대상 (전부) ===== */
+  const KEYS_LS = ['chathub:notes', 'chathub:note', 'chathub:todos', 'chathub:ddays', 'chathub:dday',
+    'chathub:toolUsage', 'chathub:widgetShow', 'chathub:widgetPos', 'chathub:widgetFold',
+    'chathub:theme', 'chathub:ytPlaylist', 'chathub:ytLoop'];           // localStorage (작음)
+  const KEYS_IDB = ['chathub:photos', 'chathub:bg', 'chathub:profile',
+    'chathub:trash', 'chathub:stickers', 'chathub:deco'];               // IndexedDB (큼 — 배경/사진/스티커 등)
+  const IDB_NAME = 'chathub', IDB_STORE = 'kv';
+  const COL_MAIN = 'hub_data', COL_KV = 'hub_kv';
+  const CHUNK = 900000;                 // 1MB 한도 회피용 조각 크기
+  const SYNCED_KEY = 'hub:syncKvLen';   // IDB 키별 동기화 추적
 
-  const localV = () => { const v = {}; for (const k of KEYS) { const x = localStorage.getItem(k); if (x != null) v[k] = x; } return v; };
-  const sig = v => JSON.stringify(KEYS.map(k => (k in v ? v[k] : null)));
-  const isEmpty = v => KEYS.every(k => { const x = v[k]; return x == null || x === '' || x === '[]' || x === '{}' || x === 'null'; });
+  const idbOpen = () => new Promise((res, rej) => { const r = indexedDB.open(IDB_NAME, 1); r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains(IDB_STORE)) d.createObjectStore(IDB_STORE); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  const idbGet = k => idbOpen().then(d => new Promise((res, rej) => { const t = d.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(k); t.onsuccess = () => res(t.result); t.onerror = () => rej(t.error); }));
+  const idbSet = (k, v) => idbOpen().then(d => new Promise((res, rej) => { const tx = d.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).put(v, k); tx.oncomplete = () => res(1); tx.onerror = () => rej(tx.error); }));
+  const idbDel = k => idbOpen().then(d => new Promise((res, rej) => { const tx = d.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).delete(k); tx.oncomplete = () => res(1); tx.onerror = () => rej(tx.error); }));
 
-  /* ===== 모달 스타일 (허브 팔레트: --sky 강조, --ink 글자) ===== */
+  const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h; };
+  const safeId = k => k.replace(/:/g, '_');
+  const getSynced = () => { try { return JSON.parse(localStorage.getItem(SYNCED_KEY) || '{}'); } catch { return {}; } };
+  const setSynced = m => { try { localStorage.setItem(SYNCED_KEY, JSON.stringify(m)); } catch (e) {} };
+
+  async function localState() {
+    const v = {}; for (const k of KEYS_LS) { const x = localStorage.getItem(k); if (x != null) v[k] = x; }
+    const idb = {}; for (const k of KEYS_IDB) { try { const val = await idbGet(k); if (val != null) idb[k] = String(val); } catch (e) {} }
+    return { v, idb };
+  }
+  const stateSig = st => { const p = []; for (const k of KEYS_LS) p.push(k + '=' + (st.v[k] == null ? '' : st.v[k])); for (const k of KEYS_IDB) p.push(k + '#' + (st.idb[k] == null ? '-' : st.idb[k].length)); return hash(p.join('|')); };
+  const idbSig = st => { const p = []; for (const k of KEYS_IDB) p.push(k + '#' + (st.idb[k] == null ? '-' : st.idb[k].length)); return p.join('|'); };
+
+  /* ===== 모달/트레이 스타일 (허브 팔레트) ===== */
   const css = document.createElement('style');
   css.textContent = `
   #syncMask{position:fixed;inset:0;z-index:100000;display:none;align-items:center;justify-content:center;background:rgba(40,36,50,.42)}
@@ -7975,7 +7996,6 @@
   `;
   document.head.appendChild(css);
 
-  /* ===== 모달 ===== */
   const mask = document.createElement('div');
   mask.id = 'syncMask';
   mask.innerHTML = '<div id="syncCard"></div>';
@@ -7984,13 +8004,8 @@
   const closeModal = () => mask.classList.remove('show');
   mask.addEventListener('click', e => { if (e.target === mask) closeModal(); });
 
-  // 자체 토스트(허브에 #toast 있으면 그걸, 없으면 자체 생성)
   let _st;
-  const toast = m => {
-    let t = document.getElementById('toast');
-    if (!t) { t = document.getElementById('syncToast'); if (!t) { t = document.createElement('div'); t.id = 'syncToast'; document.body.appendChild(t); } }
-    t.textContent = m; t.classList.add('show'); clearTimeout(_st); _st = setTimeout(() => t.classList.remove('show'), 1900);
-  };
+  const toast = m => { let t = document.getElementById('toast'); if (!t) { t = document.getElementById('syncToast'); if (!t) { t = document.createElement('div'); t.id = 'syncToast'; document.body.appendChild(t); } } t.textContent = m; t.classList.add('show'); clearTimeout(_st); _st = setTimeout(() => t.classList.remove('show'), 1900); };
 
   const friendly = code => {
     if (/invalid-email/.test(code)) return '이메일 형식이 올바르지 않아요.';
@@ -8038,7 +8053,7 @@
   function openAccount(email) {
     card.innerHTML =
       '<h3>클라우드 동기화 켜짐</h3>' +
-      '<p>' + (email || '') + '<br>메모·할일·디데이·플레이리스트가 자동으로 클라우드에 저장돼요.</p>' +
+      '<p>' + (email || '') + '<br>메모·할일·테마·배경·스티커까지 전부 자동으로 클라우드에 저장돼요.</p>' +
       '<div class="row"><button id="sySyncNow" class="primary">지금 동기화</button></div>' +
       '<div class="row"><button id="syLogout">로그아웃</button></div>' +
       '<div class="row"><button class="link" id="syClose2">닫기</button></div>';
@@ -8048,89 +8063,130 @@
     mask.classList.add('show');
   }
 
-  /* ===== 작업표시줄 트레이 + 시작 메뉴에 계정 항목 삽입 ===== */
+  /* ===== 트레이/시작 메뉴 계정 항목 ===== */
   const openTrigger = () => { if (user) openAccount(user.email); else openLogin(); };
-
   const tray = document.querySelector('.taskbar-tray');
   let trayAcc = null;
   if (tray) {
     trayAcc = document.createElement('span');
-    trayAcc.className = 'tray-item';
-    trayAcc.id = 'trayAccount';
+    trayAcc.className = 'tray-item'; trayAcc.id = 'trayAccount';
     trayAcc.title = '로그인 / 클라우드 동기화';
     trayAcc.onclick = openTrigger;
-    const clock = document.getElementById('trayClock');
-    if (clock) tray.insertBefore(trayAcc, clock); else tray.appendChild(trayAcc);
+    const heart = document.getElementById('trayHeart');
+    if (heart && heart.parentNode) heart.parentNode.insertBefore(trayAcc, heart.nextSibling);
+    else tray.appendChild(trayAcc);
   }
-
   let smAcc = null;
   const smLists = document.querySelectorAll('#startMenu .sm-list');
   if (smLists.length) {
     smAcc = document.createElement('div');
-    smAcc.className = 'sm-item';
-    smAcc.id = 'smAccount';
+    smAcc.className = 'sm-item'; smAcc.id = 'smAccount';
     smAcc.innerHTML = '<span class="sm-ic">☁</span><span class="acc-label">로그인</span>';
     smAcc.onclick = () => { const sm = document.getElementById('startMenu'); if (sm) sm.classList.remove('show'); openTrigger(); };
     smLists[smLists.length - 1].appendChild(smAcc);
   }
-
   function paint() {
-    if (trayAcc) {
-      if (user) trayAcc.innerHTML = '<span class="acc-dot"></span><span class="acc-name">' + (user.email ? user.email.split('@')[0] : '동기화') + '</span>';
-      else trayAcc.textContent = '로그인';
-    }
-    if (smAcc) {
-      const lab = smAcc.querySelector('.acc-label');
-      if (lab) lab.textContent = user ? '계정 · ' + (user.email ? user.email.split('@')[0] : '동기화 켜짐') : '로그인';
-    }
+    if (trayAcc) { if (user) trayAcc.innerHTML = '<span class="acc-dot"></span><span class="acc-name">' + (user.email ? user.email.split('@')[0] : '동기화') + '</span>'; else trayAcc.textContent = '로그인'; }
+    if (smAcc) { const lab = smAcc.querySelector('.acc-label'); if (lab) lab.textContent = user ? '계정 · ' + (user.email ? user.email.split('@')[0] : '동기화 켜짐') : '로그인'; }
   }
 
   /* ===== 동기화 ===== */
-  let user = null, pulling = false, pushTimer = null;
-  const mainDoc = () => doc(db, 'users', user.uid, COL, 'main');
+  let user = null, pulling = false, pushTimer = null, pollTimer = null, lastIdbSig = null;
+  const mainDoc = () => doc(db, 'users', user.uid, COL_MAIN, 'main');
+  const kvDoc = id => doc(db, 'users', user.uid, COL_KV, id);
+
+  async function deleteKV(safe, n) {
+    let batch = writeBatch(db), ops = 0; const flush = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
+    batch.delete(kvDoc(safe)); ops++;
+    if (n > 1) for (let i = 0; i < n; i++) { batch.delete(kvDoc(safe + '__' + i)); ops++; await flush(); }
+    await batch.commit();
+  }
 
   async function pushAll() {
     if (!user) return;
-    try { await setDoc(mainDoc(), { v: localV() }); }
-    catch (e) { console.warn('[sync] push 실패', e); toast('동기화 실패: 네트워크를 확인하세요'); }
+    try {
+      const st = await localState();
+      await setDoc(mainDoc(), { v: st.v, sig: stateSig(st) });   // localStorage 전체(작음)
+      const synced = getSynced(), newSynced = {};
+      for (const k of KEYS_IDB) {
+        const safe = safeId(k), val = st.idb[k];
+        if (val == null) { if (synced[safe]) await deleteKV(safe, synced[safe].n || 1); continue; }
+        if (synced[safe] && synced[safe].len === val.length) { newSynced[safe] = synced[safe]; continue; }  // 변동 없음
+        const chunks = []; for (let i = 0; i < val.length; i += CHUNK) chunks.push(val.slice(i, i + CHUNK));
+        if (chunks.length === 0) chunks.push('');
+        let batch = writeBatch(db), ops = 0; const flush = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
+        if (chunks.length === 1) { batch.set(kvDoc(safe), { k, n: 1, d: chunks[0] }); ops++; }
+        else { batch.set(kvDoc(safe), { k, n: chunks.length }); ops++; await flush(); for (let i = 0; i < chunks.length; i++) { batch.set(kvDoc(safe + '__' + i), { d: chunks[i] }); ops++; await flush(); } }
+        const prevN = synced[safe] ? (synced[safe].n || 1) : 0;
+        for (let i = chunks.length; i < prevN; i++) { batch.delete(kvDoc(safe + '__' + i)); ops++; await flush(); }
+        await batch.commit();
+        newSynced[safe] = { len: val.length, n: chunks.length };
+      }
+      setSynced(newSynced);
+      lastIdbSig = idbSig(st);
+    } catch (e) { console.warn('[sync] push 실패', e); toast('동기화 실패: 네트워크를 확인하세요'); }
   }
+
   async function pull() {
     pulling = true;
     try {
-      const s = await getDoc(mainDoc());
-      if (s.exists()) { const v = s.data().v || {}; for (const k of KEYS) { if (v[k] != null) localStorage.setItem(k, v[k]); else localStorage.removeItem(k); } }
+      const m = await getDoc(mainDoc());
+      if (m.exists()) { const v = m.data().v || {}; for (const k of KEYS_LS) { if (v[k] != null) localStorage.setItem(k, v[k]); else localStorage.removeItem(k); } }
+      const snap = await getDocs(collection(db, 'users', user.uid, COL_KV));
+      const manifests = {}, chunkMap = {};
+      snap.forEach(d => {
+        const id = d.id, data = d.data(), us = id.lastIndexOf('__');
+        if (us >= 0 && /^\d+$/.test(id.slice(us + 2))) { const base = id.slice(0, us); (chunkMap[base] = chunkMap[base] || {})[+id.slice(us + 2)] = data.d || ''; }
+        else manifests[id] = data;
+      });
+      const newSynced = {}, present = new Set();
+      for (const safe of Object.keys(manifests)) {
+        const man = manifests[safe], k = man.k || KEYS_IDB.find(x => safeId(x) === safe);
+        if (!k) continue;
+        let val;
+        if ((man.n || 1) <= 1) val = man.d != null ? man.d : '';
+        else { const cm = chunkMap[safe] || {}, parts = []; for (let i = 0; i < man.n; i++) parts.push(cm[i] || ''); val = parts.join(''); }
+        await idbSet(k, val);
+        newSynced[safe] = { len: val.length, n: man.n || 1 }; present.add(k);
+      }
+      for (const k of KEYS_IDB) { if (!present.has(k)) await idbDel(k); }   // 클라우드에 없는 건 로컬에서도 제거
+      setSynced(newSynced);
     } finally { pulling = false; }
     location.reload();
   }
+
   const schedulePush = () => { clearTimeout(pushTimer); pushTimer = setTimeout(pushAll, 1500); };
+  function startWatch(sig) { lastIdbSig = sig != null ? sig : lastIdbSig; clearInterval(pollTimer); pollTimer = setInterval(async () => { if (!user || pulling) return; const s = idbSig(await localState()); if (lastIdbSig !== null && s !== lastIdbSig) { lastIdbSig = s; schedulePush(); } else { lastIdbSig = s; } }, 5000); }
+  function stopWatch() { clearInterval(pollTimer); pollTimer = null; }
 
   const _set = localStorage.setItem.bind(localStorage);
-  localStorage.setItem = function (k, v) { _set(k, v); try { if (KEYS.includes(k) && user && !pulling) schedulePush(); } catch (e) {} };
+  localStorage.setItem = function (k, v) { _set(k, v); try { if (KEYS_LS.includes(k) && user && !pulling) schedulePush(); } catch (e) {} };
   const _rm = localStorage.removeItem.bind(localStorage);
-  localStorage.removeItem = function (k) { _rm(k); try { if (KEYS.includes(k) && user && !pulling) schedulePush(); } catch (e) {} };
+  localStorage.removeItem = function (k) { _rm(k); try { if (KEYS_LS.includes(k) && user && !pulling) schedulePush(); } catch (e) {} };
   window.addEventListener('pagehide', () => { if (user && pushTimer) { clearTimeout(pushTimer); pushAll(); } });
 
   async function firstSync() {
-    let s; try { s = await getDoc(mainDoc()); } catch (e) { return; }
-    const cloudExists = s.exists();
-    const cloudV = cloudExists ? (s.data().v || {}) : {};
-    const lv = localV();
-    if (cloudExists && sig(cloudV) === sig(lv)) return;
-    if (!cloudExists) { if (!isEmpty(lv)) { toast('클라우드에 백업 중…'); await pushAll(); toast('클라우드 동기화 켜짐'); } return; }
-    if (isEmpty(lv)) { toast('클라우드 데이터 불러오는 중…'); await pull(); return; }
+    let m; try { m = await getDoc(mainDoc()); } catch (e) { return; }
+    const st = await localState();
+    const localEmpty = Object.keys(st.v).length === 0 && Object.keys(st.idb).length === 0;
+    const cloudExists = m.exists();
+    if (cloudExists && m.data().sig === stateSig(st)) { startWatch(idbSig(st)); return; }
+    if (!cloudExists) { if (!localEmpty) { toast('클라우드에 백업 중…'); await pushAll(); toast('클라우드 동기화 켜짐'); } startWatch(idbSig(st)); return; }
+    if (localEmpty) { toast('클라우드 데이터 불러오는 중…'); await pull(); return; }
     card.innerHTML =
       '<h3>데이터가 양쪽에 있어요</h3>' +
-      '<p>클라우드와 이 기기 양쪽에 메모·할일 등이 있어요. 어느 쪽으로 맞출까요? <b>(고른 쪽이 남고 다른 쪽은 덮어써져요.)</b></p>' +
+      '<p>클라우드와 이 기기 양쪽에 데이터가 있어요. 어느 쪽으로 맞출까요? <b>(고른 쪽이 남고 다른 쪽은 덮어써져요.)</b></p>' +
       '<div class="row"><button id="syPull" class="primary">클라우드 불러오기 <small>(이 기기 덮어씀)</small></button></div>' +
       '<div class="row"><button id="syPush">이 기기 올리기 <small>(클라우드 덮어씀)</small></button></div>';
     mask.classList.add('show');
     card.querySelector('#syPull').onclick = async () => { closeModal(); toast('불러오는 중…'); await pull(); };
-    card.querySelector('#syPush').onclick = async () => { closeModal(); toast('올리는 중…'); await pushAll(); toast('클라우드에 올렸어요'); };
+    card.querySelector('#syPush').onclick = async () => { closeModal(); toast('올리는 중…'); await pushAll(); toast('클라우드에 올렸어요'); startWatch(); };
   }
 
   onAuthStateChanged(auth, async u => {
     user = u; paint();
-    if (u) { await firstSync(); }
+    if (u) await firstSync();
+    else { stopWatch(); lastIdbSig = null; }
   });
 })();
 </script>
