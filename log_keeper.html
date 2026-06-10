@@ -3343,8 +3343,9 @@ window.addEventListener("visibilitychange", () => {
   /* ===== 이 도구의 저장 위치 (IndexedDB에 전체 상태) ===== */
   const IDB_NAME = "logKeeperDB", IDB_STORE = "appState", IDB_KEY = "state";
   const C_CHATS = 'lk_chats', C_META = 'lk_meta';
-  const CHUNK = 900000;                 // 큰 채팅은 1MB 한도 회피용으로 조각내 저장(스킵 안 함)
+  const CHUNK = 300000;                 // 조각 크기(글자). 한글=3바이트라 300k자 ≈ 최대 900KB < 1MB 안전
   const SYNCED_KEY = 'lk:syncedSig';
+  const LASTSIG_KEY = 'lk:lastSig';
 
   const idbOpen = () => new Promise((res, rej) => { const r = indexedDB.open(IDB_NAME, 1); r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains(IDB_STORE)) d.createObjectStore(IDB_STORE); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   const idbGetState = () => idbOpen().then(d => new Promise((res, rej) => { const t = d.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(IDB_KEY); t.onsuccess = () => res(t.result); t.onerror = () => rej(t.error); }));
@@ -3355,11 +3356,14 @@ window.addEventListener("visibilitychange", () => {
   const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h; };
   const getSynced = () => { try { return JSON.parse(localStorage.getItem(SYNCED_KEY) || '{}'); } catch { return {}; } };
   const setSynced = m => { try { localStorage.setItem(SYNCED_KEY, JSON.stringify(m)); } catch (e) {} };
+  const getLastSig = () => { const x = localStorage.getItem(LASTSIG_KEY); return x == null ? null : +x; };
+  const setLastSig = s => { try { localStorage.setItem(LASTSIG_KEY, String(s)); } catch (e) {} };
+  function chunkStr(s) { const out = []; let i = 0; while (i < s.length) { let end = Math.min(s.length, i + CHUNK); if (end < s.length) { const c = s.charCodeAt(end - 1); if (c >= 0xD800 && c <= 0xDBFF) end--; } out.push(s.slice(i, end)); i = end; } if (!out.length) out.push(''); return out; }
 
   /* ===== 스타일/버튼/모달 ===== */
   const css = document.createElement('style');
   css.textContent = `
-  #syncBtn{position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;align-items:center;gap:7px;max-width:46vw;
+  #syncBtn{position:fixed;left:16px;bottom:16px;z-index:9999;display:flex;align-items:center;gap:7px;max-width:46vw;
     padding:9px 14px;border-radius:999px;border:1px solid var(--border,#dde2ea);background:var(--panel,#fff);
     color:var(--text,#41454f);font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.10);transition:.15s}
   #syncBtn:hover{border-color:var(--accent,#2f6df0);color:var(--accent-deep,#2258cc)}
@@ -3472,7 +3476,7 @@ window.addEventListener("visibilitychange", () => {
         const j = JSON.stringify(c);
         const prev = synced[c.id], prevLen = prev ? (prev.len != null ? prev.len : prev) : -1, prevN = prev ? (prev.n || 1) : 0;
         if (prevLen === j.length) { newMap[c.id] = { len: j.length, n: prevN }; continue; }   // 변동 없음
-        const chunks = []; for (let i = 0; i < j.length; i += CHUNK) chunks.push(j.slice(i, i + CHUNK));
+        const chunks = chunkStr(j);
         if (chunks.length <= 1) { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: 1, j: chunks.length ? chunks[0] : j }); ops++; await flush(); }
         else { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: chunks.length }); ops++; await flush(); for (let i = 0; i < chunks.length; i++) { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i), { d: chunks[i] }); ops++; await flush(); } }
         for (let i = chunks.length; i < prevN; i++) { batch.delete(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i)); ops++; await flush(); }
@@ -3487,9 +3491,11 @@ window.addEventListener("visibilitychange", () => {
           await flush();
         }
       }
-      batch.set(metaDoc(), { folders: JSON.stringify(folders), order: chats.map(c => c.id), sig: hash(canon(st)) }); ops++;
+      const sg = hash(canon(st));
+      batch.set(metaDoc(), { folders: JSON.stringify(folders), order: chats.map(c => c.id), sig: sg }); ops++;
       await batch.commit();
       setSynced(newMap);
+      setLastSig(sg);
       lastCanon = canon(st);
     } catch (e) { console.warn('[sync] push 실패', e); toast('동기화 실패: 네트워크를 확인하세요'); }
   }
@@ -3518,6 +3524,7 @@ window.addEventListener("visibilitychange", () => {
       Object.keys(map).forEach(id => { if (!order.includes(id)) chats.push(map[id]); });
       await idbSetState({ chats, folders });
       setSynced(lenMap);
+      if (meta.exists()) setLastSig(meta.data().sig);
     } finally { pulling = false; }
     location.reload();
   }
@@ -3538,16 +3545,17 @@ window.addEventListener("visibilitychange", () => {
     let meta; try { meta = await getDoc(metaDoc()); } catch (e) { return; }
     const st = await readState();
     const localEmpty = !(st.chats && st.chats.length);
-    if (!meta.exists()) {
-      if (!localEmpty) { toast('클라우드에 백업 중…'); await pushAll(); toast('클라우드 동기화 켜짐'); }
-      lastCanon = canon(st); startPoll(); return;
-    }
-    if (meta.data().sig === hash(canon(st)) && !localEmpty) { lastCanon = canon(st); startPoll(); return; }
-    if (localEmpty) { toast('클라우드 로그 불러오는 중…'); await pull(); return; }
-    // 둘 다 데이터, 다름 → 선택
+    const localSig = hash(canon(st));
+    const cloudSig = meta.exists() ? meta.data().sig : null;
+    const lastSig = getLastSig();
+    if (!meta.exists()) { if (!localEmpty) { toast('클라우드에 백업 중…'); await pushAll(); toast('클라우드 동기화 켜짐'); } setLastSig(localSig); lastCanon = canon(st); startPoll(); return; }
+    if (cloudSig === localSig) { setLastSig(cloudSig); lastCanon = canon(st); startPoll(); return; }       // 이미 같음
+    if (localEmpty || localSig === lastSig) { toast('클라우드 로그 불러오는 중…'); await pull(); return; } // 이 기기는 그대로·비었음 → 클라우드 가져오기
+    if (cloudSig === lastSig) { toast('클라우드에 백업 중…'); await pushAll(); startPoll(); return; }        // 클라우드는 그대로, 이 기기만 바뀜 → 올리기
+    // 마지막 동기화 이후 양쪽 다 바뀜 → 진짜 충돌일 때만 물어봄
     card.innerHTML =
-      '<h3>로그가 양쪽에 있어요</h3>' +
-      '<p>클라우드와 이 기기 양쪽에 로그가 있어요. 어느 쪽으로 맞출까요? <b>(고른 쪽이 남고 다른 쪽은 덮어써져요.)</b></p>' +
+      '<h3>로그가 양쪽에서 바뀌었어요</h3>' +
+      '<p>이 기기와 클라우드 양쪽이 마지막 동기화 이후 각각 바뀌었어요. 어느 쪽으로 맞출까요? <b>(고른 쪽이 남고 다른 쪽은 덮어써져요.)</b></p>' +
       '<div class="row"><button id="syPull" class="primary">클라우드 불러오기 <small>(이 기기 덮어씀)</small></button></div>' +
       '<div class="row"><button id="syPush">이 기기 올리기 <small>(클라우드 덮어씀)</small></button></div>';
     mask.classList.add('show');
