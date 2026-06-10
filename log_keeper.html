@@ -3351,6 +3351,8 @@ window.addEventListener("visibilitychange", () => {
   const idbGetState = () => idbOpen().then(d => new Promise((res, rej) => { const t = d.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(IDB_KEY); t.onsuccess = () => res(t.result); t.onerror = () => rej(t.error); }));
   const idbSetState = v => idbOpen().then(d => new Promise((res, rej) => { const tx = d.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).put(v, IDB_KEY); tx.oncomplete = () => res(1); tx.onerror = () => rej(tx.error); }));
   const readState = async () => { try { return (await idbGetState()) || { chats: [], folders: [] }; } catch (e) { return { chats: [], folders: [] }; } };
+  // 로딩 경합으로 잠깐 빈 것처럼 읽히는 것 방지(빈 결과면 한 번 더 확인)
+  const readStateStable = async () => { let s = await readState(); if (!(s && s.chats && s.chats.length)) { await new Promise(r => setTimeout(r, 500)); s = await readState(); } return s; };
 
   const canon = st => JSON.stringify({ folders: st.folders || [], chats: (st.chats || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1)) });
   const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h; };
@@ -3492,11 +3494,12 @@ window.addEventListener("visibilitychange", () => {
   }
 
   /* ===== 동기화 ===== */
-  let user = null, pulling = false, pushTimer = null, pollTimer = null, lastCanon = null;
+  let user = null, pulling = false, pushing = false, pushTimer = null, pollTimer = null, lastCanon = null;
   const metaDoc = () => doc(db, 'users', user.uid, C_META, 'main');
 
   async function pushAll(force) {
-    if (!user) return;
+    if (!user || pushing) return;
+    pushing = true;
     try {
       const st = await readState();
       const chats = st.chats || [], folders = st.folders || [];
@@ -3529,6 +3532,7 @@ window.addEventListener("visibilitychange", () => {
       setLastSig(sg);
       lastCanon = canon(st);
     } catch (e) { console.warn('[sync] push 실패', e); toast('동기화 실패: 네트워크를 확인하세요'); }
+    finally { pushing = false; }
   }
 
   async function pull() {
@@ -3564,9 +3568,9 @@ window.addEventListener("visibilitychange", () => {
   function startPoll() {
     clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
-      if (!user || pulling) return;
-      const c = canon(await readState());
-      if (lastCanon !== null && c !== lastCanon) { lastCanon = c; schedulePush(); }
+      if (!user || pulling || pushing) return;
+      const sig = hash(canon(await readState()));
+      if (sig !== getLastSig()) schedulePush();   // 클라우드 반영분과 다르면 올림(성공 시 lastSig 갱신→멈춤, 실패 시 다음 폴에서 재시도)
     }, 4000);
   }
   function stopPoll() { clearInterval(pollTimer); pollTimer = null; }
@@ -3574,7 +3578,7 @@ window.addEventListener("visibilitychange", () => {
 
   async function firstSync() {
     let meta; try { meta = await getDoc(metaDoc()); } catch (e) { return; }
-    const st = await readState();
+    const st = await readStateStable();
     const localEmpty = !(st.chats && st.chats.length);
     // 구버전이 큰 로그(1MB+)를 빠뜨렸던 흔적 복구: 클라우드에 없는 로컬 로그가 있으면 전체 강제 업로드
     if (getSyncVer() < SYNC_VER) {
