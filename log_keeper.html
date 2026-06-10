@@ -3358,18 +3358,22 @@ window.addEventListener("visibilitychange", () => {
   const setSynced = m => { try { localStorage.setItem(SYNCED_KEY, JSON.stringify(m)); } catch (e) {} };
   const getLastSig = () => { const x = localStorage.getItem(LASTSIG_KEY); return x == null ? null : +x; };
   const setLastSig = s => { try { localStorage.setItem(LASTSIG_KEY, String(s)); } catch (e) {} };
+  const VER_KEY = 'lk:syncVer', SYNC_VER = 2;
+  const getSyncVer = () => +(localStorage.getItem(VER_KEY) || 0);
+  const setSyncVer = v => { try { localStorage.setItem(VER_KEY, String(v)); } catch (e) {} };
   function chunkStr(s) { const out = []; let i = 0; while (i < s.length) { let end = Math.min(s.length, i + CHUNK); if (end < s.length) { const c = s.charCodeAt(end - 1); if (c >= 0xD800 && c <= 0xDBFF) end--; } out.push(s.slice(i, end)); i = end; } if (!out.length) out.push(''); return out; }
 
   /* ===== 스타일/버튼/모달 ===== */
   const css = document.createElement('style');
   css.textContent = `
-  #syncBtn{position:fixed;left:16px;bottom:16px;z-index:9999;display:flex;align-items:center;gap:7px;max-width:46vw;
-    padding:9px 14px;border-radius:999px;border:1px solid var(--border,#dde2ea);background:var(--panel,#fff);
-    color:var(--text,#41454f);font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.10);transition:.15s}
-  #syncBtn:hover{border-color:var(--accent,#2f6df0);color:var(--accent-deep,#2258cc)}
-  #syncBtn .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #syncBtn .dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--text-dim,#858a99)}
-  #syncBtn.on .dot{background:#3fbf6f}
+  #syncBtn{position:relative}
+  #syncBtn svg{width:20px;height:20px;display:block}
+  #syncBtn.on{color:var(--accent,#2f6df0)}
+  #syncBtn.on::after{content:'';position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;
+    background:#3fbf6f;border:2px solid var(--panel,#fff)}
+  #syncBtn.floating{position:fixed;left:16px;bottom:16px;z-index:9999;padding:9px 14px;border-radius:999px;
+    border:1px solid var(--border,#dde2ea);background:var(--panel,#fff);color:var(--text,#41454f);
+    font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.10)}
   #syncMask{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:rgba(10,12,20,.45)}
   #syncMask.show{display:flex}
   #syncCard{width:min(340px,92vw);background:var(--panel,#fff);color:var(--text,#41454f);border:1px solid var(--border,#dde2ea);
@@ -3390,9 +3394,22 @@ window.addEventListener("visibilitychange", () => {
 
   const btn = document.createElement('button');
   btn.id = 'syncBtn';
-  btn.innerHTML = '<span class="dot"></span><span class="lbl">로그인</span>';
-  document.body.appendChild(btn);
-  const setLabel = t => { btn.querySelector('.lbl').textContent = t; };
+  btn.type = 'button';
+  btn.title = '로그인 / 클라우드 동기화';
+  btn.setAttribute('aria-label', '클라우드 동기화');
+  const CLOUD_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .4-8.98 6 6 0 0 0-11.64-1.3A4 4 0 0 0 6.5 16.9"/><path d="M12 13v7"/><path d="m9 16 3-3 3 3"/></svg>';
+  const hdr = document.querySelector('.header-actions');
+  if (hdr) {
+    btn.className = 'icon';
+    btn.innerHTML = CLOUD_SVG;
+    const themeBtn = document.getElementById('themeBtn');
+    if (themeBtn) hdr.insertBefore(btn, themeBtn); else hdr.appendChild(btn);
+  } else {
+    btn.className = 'floating';
+    btn.innerHTML = '<span class="lbl">로그인</span>';
+    document.body.appendChild(btn);
+  }
+  const setLabel = t => { btn.title = '클라우드 동기화 · ' + t; const l = btn.querySelector('.lbl'); if (l) l.textContent = t; };
 
   const mask = document.createElement('div');
   mask.id = 'syncMask';
@@ -3455,7 +3472,7 @@ window.addEventListener("visibilitychange", () => {
       '<div class="row"><button id="syLogout">로그아웃</button></div>' +
       '<div class="row"><button class="link" id="syClose2">닫기</button></div>';
     card.querySelector('#syClose2').onclick = closeModal;
-    card.querySelector('#sySyncNow').onclick = async () => { closeModal(); toast('동기화 중…'); await pushAll(); toast('동기화됐어요'); };
+    card.querySelector('#sySyncNow').onclick = async () => { closeModal(); toast('전체 동기화 중…'); await pushAll(true); toast('동기화됐어요'); };
     card.querySelector('#syLogout').onclick = async () => { closeModal(); await signOut(auth); };
     mask.classList.add('show');
   }
@@ -3464,12 +3481,12 @@ window.addEventListener("visibilitychange", () => {
   let user = null, pulling = false, pushTimer = null, pollTimer = null, lastCanon = null;
   const metaDoc = () => doc(db, 'users', user.uid, C_META, 'main');
 
-  async function pushAll() {
+  async function pushAll(force) {
     if (!user) return;
     try {
       const st = await readState();
       const chats = st.chats || [], folders = st.folders || [];
-      const synced = getSynced(), newMap = {};
+      const synced = force ? {} : getSynced(), newMap = {};
       let batch = writeBatch(db), ops = 0;
       const flush = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
       for (const c of chats) {
@@ -3545,6 +3562,20 @@ window.addEventListener("visibilitychange", () => {
     let meta; try { meta = await getDoc(metaDoc()); } catch (e) { return; }
     const st = await readState();
     const localEmpty = !(st.chats && st.chats.length);
+    // 구버전이 큰 로그(1MB+)를 빠뜨렸던 흔적 복구: 클라우드에 없는 로컬 로그가 있으면 전체 강제 업로드
+    if (getSyncVer() < SYNC_VER) {
+      setSyncVer(SYNC_VER);
+      if (meta.exists() && !localEmpty) {
+        try {
+          const snap = await getDocs(collection(db, 'users', user.uid, C_CHATS));
+          const cloudIds = new Set();
+          snap.forEach(d => { const id = d.id, us = id.lastIndexOf('__'); cloudIds.add(us >= 0 && /^\d+$/.test(id.slice(us + 2)) ? id.slice(0, us) : id); });
+          if ((st.chats || []).some(c => !cloudIds.has(c.id))) {
+            setSynced({}); toast('빠진 로그를 올리는 중…'); await pushAll(true); toast('동기화 복구 완료'); startPoll(); return;
+          }
+        } catch (e) { console.warn('[sync] 복구 점검 실패', e); }
+      }
+    }
     const localSig = hash(canon(st));
     const cloudSig = meta.exists() ? meta.data().sig : null;
     const lastSig = getLastSig();
