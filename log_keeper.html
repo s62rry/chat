@@ -3343,7 +3343,7 @@ window.addEventListener("visibilitychange", () => {
   /* ===== 이 도구의 저장 위치 (IndexedDB에 전체 상태) ===== */
   const IDB_NAME = "logKeeperDB", IDB_STORE = "appState", IDB_KEY = "state";
   const C_CHATS = 'lk_chats', C_META = 'lk_meta';
-  const DOC_CAP = 1000000;              // 단일 채팅 최대(≈1MB) — 넘으면 이 기기에만 보관
+  const CHUNK = 900000;                 // 큰 채팅은 1MB 한도 회피용으로 조각내 저장(스킵 안 함)
   const SYNCED_KEY = 'lk:syncedSig';
 
   const idbOpen = () => new Promise((res, rej) => { const r = indexedDB.open(IDB_NAME, 1); r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains(IDB_STORE)) d.createObjectStore(IDB_STORE); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
@@ -3466,21 +3466,31 @@ window.addEventListener("visibilitychange", () => {
       const st = await readState();
       const chats = st.chats || [], folders = st.folders || [];
       const synced = getSynced(), newMap = {};
-      let batch = writeBatch(db), ops = 0, skipped = 0;
+      let batch = writeBatch(db), ops = 0;
       const flush = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
       for (const c of chats) {
-        const j = JSON.stringify(c); newMap[c.id] = j.length;
-        if (synced[c.id] === j.length) continue;
-        if (j.length > DOC_CAP) { skipped++; continue; }
-        batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { j }); ops++; await flush();
+        const j = JSON.stringify(c);
+        const prev = synced[c.id], prevLen = prev ? (prev.len != null ? prev.len : prev) : -1, prevN = prev ? (prev.n || 1) : 0;
+        if (prevLen === j.length) { newMap[c.id] = { len: j.length, n: prevN }; continue; }   // 변동 없음
+        const chunks = []; for (let i = 0; i < j.length; i += CHUNK) chunks.push(j.slice(i, i + CHUNK));
+        if (chunks.length <= 1) { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: 1, j: chunks.length ? chunks[0] : j }); ops++; await flush(); }
+        else { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: chunks.length }); ops++; await flush(); for (let i = 0; i < chunks.length; i++) { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i), { d: chunks[i] }); ops++; await flush(); } }
+        for (let i = chunks.length; i < prevN; i++) { batch.delete(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i)); ops++; await flush(); }
+        newMap[c.id] = { len: j.length, n: chunks.length };
       }
       const live = new Set(chats.map(c => c.id));
-      for (const id of Object.keys(synced)) { if (!live.has(id)) { batch.delete(doc(db, 'users', user.uid, C_CHATS, id)); ops++; await flush(); } }
+      for (const id of Object.keys(synced)) {
+        if (!live.has(id)) {
+          const pn = synced[id] && synced[id].n ? synced[id].n : 1;
+          batch.delete(doc(db, 'users', user.uid, C_CHATS, id)); ops++;
+          if (pn > 1) for (let i = 0; i < pn; i++) { batch.delete(doc(db, 'users', user.uid, C_CHATS, id + '__' + i)); ops++; await flush(); }
+          await flush();
+        }
+      }
       batch.set(metaDoc(), { folders: JSON.stringify(folders), order: chats.map(c => c.id), sig: hash(canon(st)) }); ops++;
       await batch.commit();
       setSynced(newMap);
       lastCanon = canon(st);
-      if (skipped) toast(skipped + '개 로그는 너무 커서 이 기기에만 보관돼요');
     } catch (e) { console.warn('[sync] push 실패', e); toast('동기화 실패: 네트워크를 확인하세요'); }
   }
 
@@ -3491,8 +3501,19 @@ window.addEventListener("visibilitychange", () => {
       let folders = [], order = [];
       if (meta.exists()) { const d = meta.data(); try { folders = JSON.parse(d.folders || '[]'); } catch (e) {} order = Array.isArray(d.order) ? d.order : []; }
       const snap = await getDocs(collection(db, 'users', user.uid, C_CHATS));
+      const manifests = {}, chunkMap = {};
+      snap.forEach(dd => {
+        const id = dd.id, data = dd.data(), us = id.lastIndexOf('__');
+        if (us >= 0 && /^\d+$/.test(id.slice(us + 2))) { const base = id.slice(0, us); (chunkMap[base] = chunkMap[base] || {})[+id.slice(us + 2)] = data.d || ''; }
+        else manifests[id] = data;
+      });
       const map = {}, lenMap = {};
-      snap.forEach(dd => { const raw = dd.data().j || ''; try { const c = JSON.parse(raw || 'null'); if (c && c.id) { map[c.id] = c; lenMap[c.id] = raw.length; } } catch (e) {} });
+      for (const id of Object.keys(manifests)) {
+        const man = manifests[id]; let raw;
+        if ((man.n || 1) <= 1) raw = man.j != null ? man.j : '';
+        else { const cm = chunkMap[id] || {}, parts = []; for (let i = 0; i < man.n; i++) parts.push(cm[i] || ''); raw = parts.join(''); }
+        try { const c = JSON.parse(raw || 'null'); if (c && c.id) { map[c.id] = c; lenMap[c.id] = { len: raw.length, n: man.n || 1 }; } } catch (e) {}
+      }
       let chats = order.filter(id => map[id]).map(id => map[id]);
       Object.keys(map).forEach(id => { if (!order.includes(id)) chats.push(map[id]); });
       await idbSetState({ chats, folders });
