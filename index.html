@@ -8055,15 +8055,29 @@
   }
 
   function openAccount(email) {
-    card.innerHTML =
-      '<h3>클라우드 동기화 켜짐</h3>' +
-      '<p>' + (email || '') + '<br>메모·할일·테마·배경·스티커까지 전부 자동으로 클라우드에 저장돼요.</p>' +
-      '<div class="row"><button id="sySyncNow" class="primary">지금 동기화</button></div>' +
-      '<div class="row"><button id="syLogout">로그아웃</button></div>' +
-      '<div class="row"><button class="link" id="syClose2">닫기</button></div>';
-    card.querySelector('#syClose2').onclick = closeModal;
-    card.querySelector('#sySyncNow').onclick = async () => { closeModal(); toast('동기화 중…'); await pushAll(); toast('동기화됐어요'); };
-    card.querySelector('#syLogout').onclick = async () => { closeModal(); await signOut(auth); };
+    const home = () => {
+      card.innerHTML =
+        '<h3>클라우드 동기화 켜짐</h3>' +
+        '<p>' + (email || '') + '<br>메모·할일·테마·배경·스티커까지 전부 자동 저장돼요. 직접 맞추려면 아래 버튼을 쓰세요.</p>' +
+        '<div class="row"><button id="sySyncNow" class="primary">이 기기 → 클라우드 (올리기)</button></div>' +
+        '<div class="row"><button id="syPullNow">클라우드 → 이 기기 (받기)</button></div>' +
+        '<div class="row"><button id="syLogout">로그아웃</button></div>' +
+        '<div class="row"><button class="link" id="syClose2">닫기</button></div>';
+      card.querySelector('#syClose2').onclick = closeModal;
+      card.querySelector('#sySyncNow').onclick = async () => { closeModal(); toast('전체 동기화 중…'); await pushAll(true); toast('동기화됐어요'); };
+      card.querySelector('#syPullNow').onclick = confirmPull;
+      card.querySelector('#syLogout').onclick = async () => { closeModal(); await signOut(auth); };
+    };
+    const confirmPull = () => {
+      card.innerHTML =
+        '<h3>클라우드에서 불러올까요?</h3>' +
+        '<p>클라우드에 저장된 내용으로 <b>이 기기의 현재 내용을 덮어써요.</b> 이 기기에만 있는 변경은 사라질 수 있어요.</p>' +
+        '<div class="row"><button id="syPullGo" class="primary">불러오기 <small>(이 기기 덮어씀)</small></button></div>' +
+        '<div class="row"><button id="syPullCancel">취소</button></div>';
+      card.querySelector('#syPullCancel').onclick = home;
+      card.querySelector('#syPullGo').onclick = async () => { closeModal(); toast('불러오는 중…'); await pull(); };
+    };
+    home();
     mask.classList.add('show');
   }
 
@@ -8106,13 +8120,13 @@
     await batch.commit();
   }
 
-  async function pushAll() {
+  async function pushAll(force) {
     if (!user) return;
     try {
       const st = await localState();
       const sg = stateSig(st);
       await setDoc(mainDoc(), { v: st.v, sig: sg });   // localStorage 전체(작음)
-      const synced = getSynced(), newSynced = {};
+      const synced = force ? {} : getSynced(), newSynced = {};
       for (const k of KEYS_IDB) {
         const safe = safeId(k), val = st.idb[k];
         if (val == null) { if (synced[safe]) await deleteKV(safe, synced[safe].n || 1); continue; }
