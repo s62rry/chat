@@ -2416,7 +2416,7 @@
     </div>
     <div class="searchbox">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="search" placeholder="검색">
+      <input type="text" id="search" placeholder="검색" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="tool-search" data-lpignore="true" data-1p-ignore>
     </div>
   </div>
 
@@ -7905,6 +7905,234 @@
       bootApp();
     });
   })();
+</script>
+<!-- ☁ 선택적 클라우드 동기화 — 로그인 안 하면 동작하지 않음(기존 로컬 방식 그대로). 작업표시줄/시작 메뉴에 계정 항목으로 들어감. -->
+<script type="module">
+(async () => {
+  let M;
+  try {
+    const [a, b, c] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js"),
+    ]);
+    M = { ...a, ...b, ...c };
+  } catch (e) { console.warn('[sync] Firebase 로드 실패 — 로컬 전용으로 계속 동작합니다.', e); return; }
+
+  const { initializeApp } = M;
+  const { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = M;
+  const { getFirestore, doc, getDoc, setDoc } = M;
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD8k_W8RASawVHwKG8LwARGAZVuGEHNutk",
+    authDomain: "s62rry.firebaseapp.com",
+    projectId: "s62rry",
+    storageBucket: "s62rry.firebasestorage.app",
+    messagingSenderId: "780340867027",
+    appId: "1:780340867027:web:40fc4c3b156dc0650c8926"
+  };
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  /* ===== 동기화할 콘텐츠 키 (위젯 위치·테마·사용량 등 기기별 설정은 제외) ===== */
+  const KEYS = ['chathub:notes', 'chathub:note', 'chathub:todos', 'chathub:ddays', 'chathub:ytPlaylist', 'chathub:ytLoop'];
+  const COL = 'hub_data';
+
+  const localV = () => { const v = {}; for (const k of KEYS) { const x = localStorage.getItem(k); if (x != null) v[k] = x; } return v; };
+  const sig = v => JSON.stringify(KEYS.map(k => (k in v ? v[k] : null)));
+  const isEmpty = v => KEYS.every(k => { const x = v[k]; return x == null || x === '' || x === '[]' || x === '{}' || x === 'null'; });
+
+  /* ===== 모달 스타일 (허브 팔레트: --sky 강조, --ink 글자) ===== */
+  const css = document.createElement('style');
+  css.textContent = `
+  #syncMask{position:fixed;inset:0;z-index:100000;display:none;align-items:center;justify-content:center;background:rgba(40,36,50,.42)}
+  #syncMask.show{display:flex}
+  #syncCard{width:min(340px,92vw);background:#fff;color:var(--ink,#4a4651);border:1px solid #ece6f1;
+    border-radius:18px;padding:22px;box-shadow:0 20px 60px rgba(60,50,80,.28)}
+  #syncCard h3{margin:0 0 4px;font-size:16px;color:var(--ink,#4a4651)}
+  #syncCard p{margin:0 0 14px;font-size:12px;color:var(--ink-soft,#948e9d);line-height:1.55}
+  #syncCard input{width:100%;box-sizing:border-box;margin-bottom:9px;padding:10px 12px;border-radius:11px;
+    border:1px solid #e6dfee;background:#f7f4fa;color:var(--ink,#4a4651);font:inherit;font-size:13px}
+  #syncCard input:focus{outline:none;border-color:var(--sky,#5cb3f5)}
+  #syncCard .row{display:flex;gap:8px;margin-top:6px}
+  #syncCard button{flex:1;padding:10px;border-radius:11px;border:1px solid #e6dfee;background:#fff;
+    color:var(--ink,#4a4651);font:inherit;font-size:13px;font-weight:600;cursor:pointer;line-height:1.3}
+  #syncCard button small{font-weight:400;opacity:.75;font-size:11px}
+  #syncCard button.primary{background:var(--sky,#5cb3f5);border-color:var(--sky,#5cb3f5);color:#fff}
+  #syncCard button:hover{background:var(--sky-soft,#e7f3fe)}
+  #syncCard button.primary:hover{filter:brightness(.96);background:var(--sky,#5cb3f5)}
+  #syncCard .link{background:none;border:none;color:var(--sky,#5cb3f5);font-size:12px;cursor:pointer;padding:4px;flex:none}
+  #syncCard .link:hover{background:none}
+  #syncErr{color:#e2466b;font-size:12px;min-height:16px;margin:2px 0 0}
+  #trayAccount{display:inline-flex;align-items:center;gap:5px}
+  #trayAccount .acc-dot{width:7px;height:7px;border-radius:50%;background:#3fbf6f;display:inline-block;flex:none}
+  #trayAccount .acc-name{max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #syncToast{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:100001;
+    background:rgba(40,36,50,.92);color:#fff;padding:9px 16px;border-radius:999px;font-size:12.5px;
+    opacity:0;pointer-events:none;transition:opacity .2s}
+  #syncToast.show{opacity:1}
+  `;
+  document.head.appendChild(css);
+
+  /* ===== 모달 ===== */
+  const mask = document.createElement('div');
+  mask.id = 'syncMask';
+  mask.innerHTML = '<div id="syncCard"></div>';
+  document.body.appendChild(mask);
+  const card = mask.querySelector('#syncCard');
+  const closeModal = () => mask.classList.remove('show');
+  mask.addEventListener('click', e => { if (e.target === mask) closeModal(); });
+
+  // 자체 토스트(허브에 #toast 있으면 그걸, 없으면 자체 생성)
+  let _st;
+  const toast = m => {
+    let t = document.getElementById('toast');
+    if (!t) { t = document.getElementById('syncToast'); if (!t) { t = document.createElement('div'); t.id = 'syncToast'; document.body.appendChild(t); } }
+    t.textContent = m; t.classList.add('show'); clearTimeout(_st); _st = setTimeout(() => t.classList.remove('show'), 1900);
+  };
+
+  const friendly = code => {
+    if (/invalid-email/.test(code)) return '이메일 형식이 올바르지 않아요.';
+    if (/missing-password|weak-password/.test(code)) return '비밀번호는 6자 이상이어야 해요.';
+    if (/email-already-in-use/.test(code)) return '이미 가입된 이메일이에요. 로그인해 주세요.';
+    if (/invalid-credential|wrong-password|user-not-found/.test(code)) return '이메일 또는 비밀번호가 맞지 않아요.';
+    if (/too-many-requests/.test(code)) return '시도가 많아요. 잠시 후 다시 해주세요.';
+    if (/network/.test(code)) return '네트워크 연결을 확인해 주세요.';
+    return '오류: ' + code;
+  };
+
+  function openLogin() {
+    let signup = false;
+    const submit = async () => {
+      const email = card.querySelector('#syEmail').value.trim();
+      const pw = card.querySelector('#syPw').value;
+      const err = card.querySelector('#syncErr');
+      if (!email || !pw) { err.textContent = '이메일과 비밀번호를 입력해주세요.'; return; }
+      err.textContent = '처리 중…';
+      try {
+        if (signup) await createUserWithEmailAndPassword(auth, email, pw);
+        else await signInWithEmailAndPassword(auth, email, pw);
+        closeModal();
+      } catch (ex) { err.textContent = friendly(ex.code || ex.message || ''); }
+    };
+    const render = () => {
+      card.innerHTML =
+        '<h3>' + (signup ? '회원가입' : '로그인') + '</h3>' +
+        '<p>로그인하면 여기서 한 번에 로그인되고, 다른 도구들도 같은 계정으로 동기화돼요. 로그인 안 해도 평소처럼 쓸 수 있어요.</p>' +
+        '<input id="syEmail" type="email" placeholder="이메일" autocomplete="username">' +
+        '<input id="syPw" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password">' +
+        '<p id="syncErr"></p>' +
+        '<div class="row"><button id="syCancel">취소</button><button id="syGo" class="primary">' + (signup ? '가입하기' : '로그인') + '</button></div>' +
+        '<div class="row"><button class="link" id="syToggle">' + (signup ? '이미 계정이 있어요 → 로그인' : '계정이 없어요 → 회원가입') + '</button></div>';
+      card.querySelector('#syCancel').onclick = closeModal;
+      card.querySelector('#syToggle').onclick = () => { signup = !signup; render(); };
+      card.querySelector('#syGo').onclick = submit;
+      card.querySelector('#syPw').onkeydown = e => { if (e.key === 'Enter') submit(); };
+    };
+    render();
+    mask.classList.add('show');
+    setTimeout(() => card.querySelector('#syEmail') && card.querySelector('#syEmail').focus(), 50);
+  }
+
+  function openAccount(email) {
+    card.innerHTML =
+      '<h3>클라우드 동기화 켜짐</h3>' +
+      '<p>' + (email || '') + '<br>메모·할일·디데이·플레이리스트가 자동으로 클라우드에 저장돼요.</p>' +
+      '<div class="row"><button id="sySyncNow" class="primary">지금 동기화</button></div>' +
+      '<div class="row"><button id="syLogout">로그아웃</button></div>' +
+      '<div class="row"><button class="link" id="syClose2">닫기</button></div>';
+    card.querySelector('#syClose2').onclick = closeModal;
+    card.querySelector('#sySyncNow').onclick = async () => { closeModal(); toast('동기화 중…'); await pushAll(); toast('동기화됐어요'); };
+    card.querySelector('#syLogout').onclick = async () => { closeModal(); await signOut(auth); };
+    mask.classList.add('show');
+  }
+
+  /* ===== 작업표시줄 트레이 + 시작 메뉴에 계정 항목 삽입 ===== */
+  const openTrigger = () => { if (user) openAccount(user.email); else openLogin(); };
+
+  const tray = document.querySelector('.taskbar-tray');
+  let trayAcc = null;
+  if (tray) {
+    trayAcc = document.createElement('span');
+    trayAcc.className = 'tray-item';
+    trayAcc.id = 'trayAccount';
+    trayAcc.title = '로그인 / 클라우드 동기화';
+    trayAcc.onclick = openTrigger;
+    const clock = document.getElementById('trayClock');
+    if (clock) tray.insertBefore(trayAcc, clock); else tray.appendChild(trayAcc);
+  }
+
+  let smAcc = null;
+  const smLists = document.querySelectorAll('#startMenu .sm-list');
+  if (smLists.length) {
+    smAcc = document.createElement('div');
+    smAcc.className = 'sm-item';
+    smAcc.id = 'smAccount';
+    smAcc.innerHTML = '<span class="sm-ic">☁</span><span class="acc-label">로그인</span>';
+    smAcc.onclick = () => { const sm = document.getElementById('startMenu'); if (sm) sm.classList.remove('show'); openTrigger(); };
+    smLists[smLists.length - 1].appendChild(smAcc);
+  }
+
+  function paint() {
+    if (trayAcc) {
+      if (user) trayAcc.innerHTML = '<span class="acc-dot"></span><span class="acc-name">' + (user.email ? user.email.split('@')[0] : '동기화') + '</span>';
+      else trayAcc.textContent = '로그인';
+    }
+    if (smAcc) {
+      const lab = smAcc.querySelector('.acc-label');
+      if (lab) lab.textContent = user ? '계정 · ' + (user.email ? user.email.split('@')[0] : '동기화 켜짐') : '로그인';
+    }
+  }
+
+  /* ===== 동기화 ===== */
+  let user = null, pulling = false, pushTimer = null;
+  const mainDoc = () => doc(db, 'users', user.uid, COL, 'main');
+
+  async function pushAll() {
+    if (!user) return;
+    try { await setDoc(mainDoc(), { v: localV() }); }
+    catch (e) { console.warn('[sync] push 실패', e); toast('동기화 실패: 네트워크를 확인하세요'); }
+  }
+  async function pull() {
+    pulling = true;
+    try {
+      const s = await getDoc(mainDoc());
+      if (s.exists()) { const v = s.data().v || {}; for (const k of KEYS) { if (v[k] != null) localStorage.setItem(k, v[k]); else localStorage.removeItem(k); } }
+    } finally { pulling = false; }
+    location.reload();
+  }
+  const schedulePush = () => { clearTimeout(pushTimer); pushTimer = setTimeout(pushAll, 1500); };
+
+  const _set = localStorage.setItem.bind(localStorage);
+  localStorage.setItem = function (k, v) { _set(k, v); try { if (KEYS.includes(k) && user && !pulling) schedulePush(); } catch (e) {} };
+  const _rm = localStorage.removeItem.bind(localStorage);
+  localStorage.removeItem = function (k) { _rm(k); try { if (KEYS.includes(k) && user && !pulling) schedulePush(); } catch (e) {} };
+  window.addEventListener('pagehide', () => { if (user && pushTimer) { clearTimeout(pushTimer); pushAll(); } });
+
+  async function firstSync() {
+    let s; try { s = await getDoc(mainDoc()); } catch (e) { return; }
+    const cloudExists = s.exists();
+    const cloudV = cloudExists ? (s.data().v || {}) : {};
+    const lv = localV();
+    if (cloudExists && sig(cloudV) === sig(lv)) return;
+    if (!cloudExists) { if (!isEmpty(lv)) { toast('클라우드에 백업 중…'); await pushAll(); toast('클라우드 동기화 켜짐'); } return; }
+    if (isEmpty(lv)) { toast('클라우드 데이터 불러오는 중…'); await pull(); return; }
+    card.innerHTML =
+      '<h3>데이터가 양쪽에 있어요</h3>' +
+      '<p>클라우드와 이 기기 양쪽에 메모·할일 등이 있어요. 어느 쪽으로 맞출까요? <b>(고른 쪽이 남고 다른 쪽은 덮어써져요.)</b></p>' +
+      '<div class="row"><button id="syPull" class="primary">클라우드 불러오기 <small>(이 기기 덮어씀)</small></button></div>' +
+      '<div class="row"><button id="syPush">이 기기 올리기 <small>(클라우드 덮어씀)</small></button></div>';
+    mask.classList.add('show');
+    card.querySelector('#syPull').onclick = async () => { closeModal(); toast('불러오는 중…'); await pull(); };
+    card.querySelector('#syPush').onclick = async () => { closeModal(); toast('올리는 중…'); await pushAll(); toast('클라우드에 올렸어요'); };
+  }
+
+  onAuthStateChanged(auth, async u => {
+    user = u; paint();
+    if (u) { await firstSync(); }
+  });
+})();
 </script>
 </body>
 </html>
