@@ -8133,9 +8133,9 @@
         if (synced[safe] && synced[safe].len === val.length) { newSynced[safe] = synced[safe]; continue; }  // 변동 없음
         const chunks = chunkStr(val);
         if (chunks.length === 0) chunks.push('');
-        let batch = writeBatch(db), ops = 0; const flush = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
-        if (chunks.length === 1) { batch.set(kvDoc(safe), { k, n: 1, d: chunks[0] }); ops++; }
-        else { batch.set(kvDoc(safe), { k, n: chunks.length }); ops++; await flush(); for (let i = 0; i < chunks.length; i++) { batch.set(kvDoc(safe + '__' + i), { d: chunks[i] }); ops++; await flush(); } }
+        let batch = writeBatch(db), ops = 0, bytes = 0; const flush = async () => { if (ops >= 200 || bytes > 4000000) { await batch.commit(); batch = writeBatch(db); ops = 0; bytes = 0; } };
+        if (chunks.length === 1) { batch.set(kvDoc(safe), { k, n: 1, d: chunks[0] }); ops++; bytes += chunks[0].length * 3; }
+        else { batch.set(kvDoc(safe), { k, n: chunks.length }); ops++; await flush(); for (let i = 0; i < chunks.length; i++) { batch.set(kvDoc(safe + '__' + i), { d: chunks[i] }); ops++; bytes += chunks[i].length * 3; await flush(); } }
         const prevN = synced[safe] ? (synced[safe].n || 1) : 0;
         for (let i = chunks.length; i < prevN; i++) { batch.delete(kvDoc(safe + '__' + i)); ops++; await flush(); }
         await batch.commit();
