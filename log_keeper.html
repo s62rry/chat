@@ -3494,7 +3494,7 @@ window.addEventListener("visibilitychange", () => {
   }
 
   /* ===== 동기화 ===== */
-  let user = null, pulling = false, pushing = false, pushTimer = null, pollTimer = null, lastCanon = null;
+  let user = null, pulling = false, pushing = false, pushTimer = null, pollTimer = null, lastCanon = null, lastFail = 0;
   const metaDoc = () => doc(db, 'users', user.uid, C_META, 'main');
 
   async function pushAll(force) {
@@ -3504,15 +3504,15 @@ window.addEventListener("visibilitychange", () => {
       const st = await readState();
       const chats = st.chats || [], folders = st.folders || [];
       const synced = force ? {} : getSynced(), newMap = {};
-      let batch = writeBatch(db), ops = 0;
-      const flush = async () => { if (ops >= 400) { await batch.commit(); batch = writeBatch(db); ops = 0; } };
+      let batch = writeBatch(db), ops = 0, bytes = 0;
+      const flush = async () => { if (ops >= 200 || bytes > 4000000) { await batch.commit(); batch = writeBatch(db); ops = 0; bytes = 0; } };
       for (const c of chats) {
         const j = JSON.stringify(c);
         const prev = synced[c.id], prevLen = prev ? (prev.len != null ? prev.len : prev) : -1, prevN = prev ? (prev.n || 1) : 0;
         if (prevLen === j.length) { newMap[c.id] = { len: j.length, n: prevN }; continue; }   // 변동 없음
         const chunks = chunkStr(j);
-        if (chunks.length <= 1) { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: 1, j: chunks.length ? chunks[0] : j }); ops++; await flush(); }
-        else { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: chunks.length }); ops++; await flush(); for (let i = 0; i < chunks.length; i++) { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i), { d: chunks[i] }); ops++; await flush(); } }
+        if (chunks.length <= 1) { const jj = chunks.length ? chunks[0] : j; batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: 1, j: jj }); ops++; bytes += jj.length * 3; await flush(); }
+        else { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: chunks.length }); ops++; await flush(); for (let i = 0; i < chunks.length; i++) { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i), { d: chunks[i] }); ops++; bytes += chunks[i].length * 3; await flush(); } }
         for (let i = chunks.length; i < prevN; i++) { batch.delete(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i)); ops++; await flush(); }
         newMap[c.id] = { len: j.length, n: chunks.length };
       }
@@ -3531,7 +3531,7 @@ window.addEventListener("visibilitychange", () => {
       setSynced(newMap);
       setLastSig(sg);
       lastCanon = canon(st);
-    } catch (e) { console.warn('[sync] push 실패', e); toast('동기화 실패: 네트워크를 확인하세요'); }
+    } catch (e) { console.warn('[sync] push 실패', e); const t = Date.now(); if (t - lastFail > 30000) { lastFail = t; toast('동기화 지연 — 잠시 후 자동으로 다시 시도해요'); } }
     finally { pushing = false; }
   }
 
