@@ -2724,7 +2724,7 @@
   applyBackground();
   renderCard();
 </script>
-<!-- ☁ 선택적 클라우드 동기화 — 로그인 안 하면 동작하지 않음(기존 로컬 방식 그대로). 기존 코드는 안 건드리고 추가만 함. -->
+<!-- ☁ 선택적 클라우드 동기화 — 로그인 안 하면 동작하지 않음(기존 로컬 방식 그대로). 데이터·테마·히스토리(이미지 포함) 동기화. -->
 <script type="module">
 (async () => {
   let M;
@@ -2739,7 +2739,7 @@
 
   const { initializeApp } = M;
   const { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = M;
-  const { getFirestore, doc, getDoc, setDoc } = M;
+  const { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } = M;
 
   const firebaseConfig = {
     apiKey: "AIzaSyD8k_W8RASawVHwKG8LwARGAZVuGEHNutk",
@@ -2753,24 +2753,38 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
 
-  /* ===== 이 도구 설정 ===== */
-  const KEYS = ['quotecard:data'];     // 동기화할 localStorage 키
-  const COL = 'qc_data';     // Firestore 하위 컬렉션
+  /* ===== 동기화 대상 ===== */
+  const SMALL = ['quotecard:data', 'quotecard:theme'];   // 작음 → main 문서
+  const HIST = 'quotecard:history';                      // 큼(이미지) → 조각 문서
+  const COL_MAIN = 'qc_data', COL_HIST = 'qc_hist';
+  const CHUNK = 300000;                 // 조각 크기(글자). 한글=3바이트라 300k자 ≈ 최대 900KB < 1MB 안전
+  const LASTSIG_KEY = 'qc:lastSig', HS_KEY = 'qc:histSync';
 
-  const localV = () => { const v = {}; for (const k of KEYS) { const x = localStorage.getItem(k); if (x != null) v[k] = x; } return v; };
-  const sig = v => JSON.stringify(KEYS.map(k => (k in v ? v[k] : null)));
-  const isEmpty = v => KEYS.every(k => { const x = v[k]; return x == null || x === '' || x === '[]' || x === '{}' || x === 'null'; });
+  const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h; };
+  function chunkStr(s) { const out = []; let i = 0; while (i < s.length) { let end = Math.min(s.length, i + CHUNK); if (end < s.length) { const c = s.charCodeAt(end - 1); if (c >= 0xD800 && c <= 0xDBFF) end--; } out.push(s.slice(i, end)); i = end; } return out; }
+  const getLastSig = () => { const x = localStorage.getItem(LASTSIG_KEY); return x == null ? null : +x; };
+  const setLastSig = s => { try { localStorage.setItem(LASTSIG_KEY, String(s)); } catch (e) {} };
+  const getHS = () => { try { return JSON.parse(localStorage.getItem(HS_KEY) || 'null'); } catch { return null; } };
+  const setHS = m => { try { localStorage.setItem(HS_KEY, JSON.stringify(m)); } catch (e) {} };
 
-  /* ===== 스타일/버튼/모달 (테마 변수 그대로 사용) ===== */
+  function localState() {
+    const v = {}; for (const k of SMALL) { const x = localStorage.getItem(k); if (x != null) v[k] = x; }
+    return { v, h: localStorage.getItem(HIST) || '' };
+  }
+  const stateSig = st => hash(SMALL.map(k => st.v[k] == null ? '\u0000' : st.v[k]).join('\u0001') + '\u0001' + st.h);
+  const isEmpty = st => Object.keys(st.v).length === 0 && !st.h;
+
+  /* ===== 스타일/버튼/모달 ===== */
   const css = document.createElement('style');
   css.textContent = `
-  #syncBtn{position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;align-items:center;gap:7px;max-width:46vw;
-    padding:9px 14px;border-radius:999px;border:1px solid var(--border,#dde2ea);background:var(--panel,#fff);
-    color:var(--text,#41454f);font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.10);transition:.15s}
-  #syncBtn:hover{border-color:var(--accent,#2f6df0);color:var(--accent-deep,#2258cc)}
-  #syncBtn .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #syncBtn .dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--text-dim,#858a99)}
-  #syncBtn.on .dot{background:#3fbf6f}
+  #syncBtn{position:relative}
+  #syncBtn svg{width:20px;height:20px;display:block}
+  #syncBtn.on{color:var(--accent,#2f6df0)}
+  #syncBtn.on::after{content:'';position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;
+    background:#3fbf6f;border:2px solid var(--panel,#fff)}
+  #syncBtn.floating{position:fixed;right:16px;bottom:16px;z-index:9999;padding:9px 14px;border-radius:999px;
+    border:1px solid var(--border,#dde2ea);background:var(--panel,#fff);color:var(--text,#41454f);
+    font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.10)}
   #syncMask{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:rgba(10,12,20,.45)}
   #syncMask.show{display:flex}
   #syncCard{width:min(340px,92vw);background:var(--panel,#fff);color:var(--text,#41454f);border:1px solid var(--border,#dde2ea);
@@ -2790,14 +2804,16 @@
   document.head.appendChild(css);
 
   const btn = document.createElement('button');
-  btn.id = 'syncBtn';
-  btn.innerHTML = '<span class="dot"></span><span class="lbl">로그인</span>';
-  document.body.appendChild(btn);
-  const setLabel = t => { btn.querySelector('.lbl').textContent = t; };
+  btn.id = 'syncBtn'; btn.type = 'button'; btn.title = '로그인 / 클라우드 동기화';
+  btn.setAttribute('aria-label', '클라우드 동기화');
+  const CLOUD_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .4-8.98 6 6 0 0 0-11.64-1.3A4 4 0 0 0 6.5 16.9"/><path d="M12 13v7"/><path d="m9 16 3-3 3 3"/></svg>';
+  const hdr = document.querySelector('.header-actions');
+  if (hdr) { btn.className = 'icon'; btn.innerHTML = CLOUD_SVG; hdr.appendChild(btn); }
+  else { btn.className = 'floating'; btn.innerHTML = '<span class="lbl">로그인</span>'; document.body.appendChild(btn); }
+  const setLabel = t => { btn.title = '클라우드 동기화 · ' + t; const l = btn.querySelector('.lbl'); if (l) l.textContent = t; };
 
   const mask = document.createElement('div');
-  mask.id = 'syncMask';
-  mask.innerHTML = '<div id="syncCard"></div>';
+  mask.id = 'syncMask'; mask.innerHTML = '<div id="syncCard"></div>';
   document.body.appendChild(mask);
   const card = mask.querySelector('#syncCard');
   const closeModal = () => mask.classList.remove('show');
@@ -2832,7 +2848,7 @@
     const render = () => {
       card.innerHTML =
         '<h3>' + (signup ? '회원가입' : '로그인') + '</h3>' +
-        '<p>로그인하면 데이터가 클라우드에 저장돼 다른 기기에서도 같은 계정으로 볼 수 있어요. 로그인 안 해도 이 기기에선 그대로 쓸 수 있어요.</p>' +
+        '<p>로그인하면 카드 설정과 히스토리가 클라우드에 저장돼 다른 기기에서도 같은 계정으로 볼 수 있어요. 로그인 안 해도 이 기기에선 그대로 쓸 수 있어요.</p>' +
         '<input id="syEmail" type="email" placeholder="이메일" autocomplete="username">' +
         '<input id="syPw" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password">' +
         '<p id="syncErr"></p>' +
@@ -2849,60 +2865,118 @@
   }
 
   function openAccount(email) {
-    card.innerHTML =
-      '<h3>클라우드 동기화 켜짐</h3>' +
-      '<p>' + (email || '') + '<br>변경하면 자동으로 클라우드에 저장돼요.</p>' +
-      '<div class="row"><button id="sySyncNow" class="primary">지금 동기화</button></div>' +
-      '<div class="row"><button id="syLogout">로그아웃</button></div>' +
-      '<div class="row"><button class="link" id="syClose2">닫기</button></div>';
-    card.querySelector('#syClose2').onclick = closeModal;
-    card.querySelector('#sySyncNow').onclick = async () => { closeModal(); toast('동기화 중…'); await pushAll(); toast('동기화됐어요'); };
-    card.querySelector('#syLogout').onclick = async () => { closeModal(); await signOut(auth); };
+    const home = () => {
+      card.innerHTML =
+        '<h3>클라우드 동기화 켜짐</h3>' +
+        '<p>' + (email || '') + '<br>카드 설정·히스토리가 자동 저장돼요. 직접 맞추려면 아래 버튼을 쓰세요.</p>' +
+        '<div class="row"><button id="sySyncNow" class="primary">이 기기 → 클라우드 (올리기)</button></div>' +
+        '<div class="row"><button id="syPullNow">클라우드 → 이 기기 (받기)</button></div>' +
+        '<div class="row"><button id="syLogout">로그아웃</button></div>' +
+        '<div class="row"><button class="link" id="syClose2">닫기</button></div>';
+      card.querySelector('#syClose2').onclick = closeModal;
+      card.querySelector('#sySyncNow').onclick = async () => { closeModal(); toast('전체 동기화 중…'); await pushAll(true); toast('동기화됐어요'); };
+      card.querySelector('#syPullNow').onclick = confirmPull;
+      card.querySelector('#syLogout').onclick = async () => { closeModal(); await signOut(auth); };
+    };
+    const confirmPull = () => {
+      card.innerHTML =
+        '<h3>클라우드에서 불러올까요?</h3>' +
+        '<p>클라우드에 저장된 내용으로 <b>이 기기의 현재 카드·히스토리를 덮어써요.</b> 이 기기에만 있는 변경은 사라질 수 있어요.</p>' +
+        '<div class="row"><button id="syPullGo" class="primary">불러오기 <small>(이 기기 덮어씀)</small></button></div>' +
+        '<div class="row"><button id="syPullCancel">취소</button></div>';
+      card.querySelector('#syPullCancel').onclick = home;
+      card.querySelector('#syPullGo').onclick = async () => { closeModal(); toast('불러오는 중…'); await pull(); };
+    };
+    home();
     mask.classList.add('show');
   }
 
   /* ===== 동기화 ===== */
-  let user = null, pulling = false, pushTimer = null;
-  const mainDoc = () => doc(db, 'users', user.uid, COL, 'main');
+  let user = null, pulling = false, pushing = false, pushTimer = null, pollTimer = null, lastFail = 0;
+  const mainDoc = () => doc(db, 'users', user.uid, COL_MAIN, 'main');
+  const histDoc = id => doc(db, 'users', user.uid, COL_HIST, id);
 
-  async function pushAll() {
-    if (!user) return;
-    try { await setDoc(mainDoc(), { v: localV() }); }
-    catch (e) { console.warn('[sync] push 실패', e); toast('동기화 실패: 네트워크를 확인하세요'); }
+  async function pushAll(force) {
+    if (!user || pushing) return;
+    pushing = true;
+    try {
+      const st = localState();
+      const sg = stateSig(st);
+      const hs = getHS();
+      let hn;
+      if (!force && hs && hs.len === st.h.length) {
+        hn = hs.n || 0;                                  // 히스토리 변동 없음
+      } else {
+        const chunks = st.h ? chunkStr(st.h) : [];
+        let prevN = hs ? (hs.n || 0) : 0;
+        if (force) { try { const m0 = await getDoc(mainDoc()); if (m0.exists() && typeof m0.data().hn === 'number') prevN = Math.max(prevN, m0.data().hn); } catch (e) {} }
+        let batch = writeBatch(db), ops = 0, bytes = 0;
+        const flush = async () => { if (ops >= 200 || bytes > 4000000) { await batch.commit(); batch = writeBatch(db); ops = 0; bytes = 0; } };
+        for (let i = 0; i < chunks.length; i++) { batch.set(histDoc(String(i)), { d: chunks[i] }); ops++; bytes += chunks[i].length * 3; await flush(); }
+        for (let i = chunks.length; i < prevN; i++) { batch.delete(histDoc(String(i))); ops++; await flush(); }   // 남는 옛 조각 정리
+        if (ops) await batch.commit();
+        hn = chunks.length;
+        setHS({ len: st.h.length, n: hn });
+      }
+      await setDoc(mainDoc(), { v: st.v, hn, sig: sg });
+      setLastSig(sg);
+    } catch (e) { console.warn('[sync] push 실패', e); const t = Date.now(); if (t - lastFail > 30000) { lastFail = t; toast('동기화 지연 — 잠시 후 자동으로 다시 시도해요'); } }
+    finally { pushing = false; }
   }
+
   async function pull() {
     pulling = true;
     try {
-      const s = await getDoc(mainDoc());
-      if (s.exists()) { const v = s.data().v || {}; for (const k of KEYS) { if (v[k] != null) localStorage.setItem(k, v[k]); else localStorage.removeItem(k); } }
+      const m = await getDoc(mainDoc());
+      if (m.exists()) {
+        const v = m.data().v || {};
+        for (const k of SMALL) { if (v[k] != null) localStorage.setItem(k, v[k]); else localStorage.removeItem(k); }
+        const hn = m.data().hn || 0;
+        if (hn > 0) {
+          const snap = await getDocs(collection(db, 'users', user.uid, COL_HIST));
+          const cm = {}; snap.forEach(d => { if (/^\d+$/.test(d.id)) cm[+d.id] = d.data().d || ''; });
+          const parts = []; for (let i = 0; i < hn; i++) parts.push(cm[i] || '');
+          const joined = parts.join('');
+          localStorage.setItem(HIST, joined); setHS({ len: joined.length, n: hn });
+        } else { localStorage.removeItem(HIST); setHS({ len: 0, n: 0 }); }
+        setLastSig(m.data().sig);
+      }
     } finally { pulling = false; }
     location.reload();
   }
-  const schedulePush = () => { clearTimeout(pushTimer); pushTimer = setTimeout(pushAll, 1500); };
+
+  const schedulePush = () => { clearTimeout(pushTimer); pushTimer = setTimeout(() => pushAll(false), 1500); };
+  function startWatch() { clearInterval(pollTimer); pollTimer = setInterval(() => { if (!user || pulling || pushing) return; if (stateSig(localState()) !== getLastSig()) schedulePush(); }, 5000); }
+  function stopWatch() { clearInterval(pollTimer); pollTimer = null; }
 
   const _set = localStorage.setItem.bind(localStorage);
-  localStorage.setItem = function (k, v) { _set(k, v); try { if (KEYS.includes(k) && user && !pulling) schedulePush(); } catch (e) {} };
+  localStorage.setItem = function (k, v) { _set(k, v); try { if ((SMALL.includes(k) || k === HIST) && user && !pulling) schedulePush(); } catch (e) {} };
   const _rm = localStorage.removeItem.bind(localStorage);
-  localStorage.removeItem = function (k) { _rm(k); try { if (KEYS.includes(k) && user && !pulling) schedulePush(); } catch (e) {} };
-  window.addEventListener('pagehide', () => { if (user && pushTimer) { clearTimeout(pushTimer); pushAll(); } });
+  localStorage.removeItem = function (k) { _rm(k); try { if ((SMALL.includes(k) || k === HIST) && user && !pulling) schedulePush(); } catch (e) {} };
+  window.addEventListener('pagehide', () => { if (user && pushTimer) { clearTimeout(pushTimer); pushAll(false); } });
 
   async function firstSync() {
-    let s; try { s = await getDoc(mainDoc()); } catch (e) { return; }
-    const cloudExists = s.exists();
-    const cloudV = cloudExists ? (s.data().v || {}) : {};
-    const lv = localV();
-    if (cloudExists && sig(cloudV) === sig(lv)) return;        // 이미 같음
-    if (!cloudExists) { if (!isEmpty(lv)) { toast('클라우드에 백업 중…'); await pushAll(); toast('클라우드 동기화 켜짐'); } return; }
-    if (isEmpty(lv)) { toast('클라우드 데이터 불러오는 중…'); await pull(); return; }
-    // 둘 다 데이터 있고 다름 → 선택
+    let m; try { m = await getDoc(mainDoc()); } catch (e) { startWatch(); return; }
+    const st = localState();
+    const localSig = stateSig(st);
+    const cloudExists = m.exists();
+    // 구버전(데이터만, sig 없음) 클라우드 → 새 형식으로 업그레이드(히스토리 포함)
+    if (cloudExists && m.data().sig == null) { if (!isEmpty(st)) { toast('동기화 업그레이드 중…'); await pushAll(true); toast('동기화 켜짐'); } startWatch(); return; }
+    const cloudSig = cloudExists ? m.data().sig : null;
+    const lastSig = getLastSig();
+    if (!cloudExists) { if (!isEmpty(st)) { toast('클라우드에 백업 중…'); await pushAll(true); toast('클라우드 동기화 켜짐'); } setLastSig(localSig); startWatch(); return; }
+    if (cloudSig === localSig) { setLastSig(cloudSig); startWatch(); return; }                 // 이미 같음
+    if (isEmpty(st) || localSig === lastSig) { toast('클라우드 불러오는 중…'); await pull(); return; }   // 이 기기는 그대로·비었음 → 받기
+    if (cloudSig === lastSig) { toast('클라우드에 백업 중…'); await pushAll(false); startWatch(); return; }  // 이 기기만 바뀜 → 올리기
+    // 마지막 동기화 이후 양쪽 다 바뀜 → 진짜 충돌일 때만 물어봄
     card.innerHTML =
-      '<h3>데이터가 양쪽에 있어요</h3>' +
-      '<p>클라우드와 이 기기 양쪽에 데이터가 있어요. 어느 쪽으로 맞출까요? <b>(고른 쪽이 남고 다른 쪽은 덮어써져요.)</b></p>' +
+      '<h3>데이터가 양쪽에서 바뀌었어요</h3>' +
+      '<p>이 기기와 클라우드 양쪽이 마지막 동기화 이후 각각 바뀌었어요. 어느 쪽으로 맞출까요? <b>(고른 쪽이 남고 다른 쪽은 덮어써져요.)</b></p>' +
       '<div class="row"><button id="syPull" class="primary">클라우드 불러오기 <small>(이 기기 덮어씀)</small></button></div>' +
       '<div class="row"><button id="syPush">이 기기 올리기 <small>(클라우드 덮어씀)</small></button></div>';
     mask.classList.add('show');
     card.querySelector('#syPull').onclick = async () => { closeModal(); toast('불러오는 중…'); await pull(); };
-    card.querySelector('#syPush').onclick = async () => { closeModal(); toast('올리는 중…'); await pushAll(); toast('클라우드에 올렸어요'); };
+    card.querySelector('#syPush').onclick = async () => { closeModal(); toast('올리는 중…'); await pushAll(true); toast('클라우드에 올렸어요'); startWatch(); };
   }
 
   btn.onclick = () => { if (user) openAccount(user.email); else openLogin(); };
@@ -2910,7 +2984,7 @@
   onAuthStateChanged(auth, async u => {
     user = u;
     if (u) { btn.classList.add('on'); setLabel(u.email ? u.email.split('@')[0] : '동기화 켜짐'); await firstSync(); }
-    else { btn.classList.remove('on'); setLabel('로그인'); }
+    else { btn.classList.remove('on'); setLabel('로그인'); stopWatch(); }
   });
 })();
 </script>
