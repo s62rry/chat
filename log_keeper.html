@@ -57,7 +57,6 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
   ::selection { background: var(--accent-soft); color: var(--accent-deep); }
@@ -541,21 +540,19 @@
   .hl-excerpt:hover { opacity: 0.88; }
   /* 형광펜 — 칠한 텍스트 */
   mark.hl {
-    border-radius: 2px;
-    padding: 0 0.1em;
-    /* 글자보다 살짝 낮은 높이 — 위아래 여백 생기게 */
-    box-shadow: 0 -0.12em 0 0.48em #fff3a8 inset;
-    background: transparent;
+    border-radius: 3px;
+    padding: 0.05em 0.12em;
+    background: #fff3a8;
     color: inherit;
   }
-  mark.hl.hl-yellow { box-shadow: 0 -0.12em 0 0.48em #fff3a8 inset; }
-  mark.hl.hl-green  { box-shadow: 0 -0.12em 0 0.48em #b6f0c4 inset; }
-  mark.hl.hl-pink   { box-shadow: 0 -0.12em 0 0.48em #ffc4dd inset; }
-  mark.hl.hl-blue   { box-shadow: 0 -0.12em 0 0.48em #bcdcff inset; }
-  [data-theme="dark"] mark.hl.hl-yellow { box-shadow: 0 -0.12em 0 0.48em #6b5d1a inset; color: #fff; }
-  [data-theme="dark"] mark.hl.hl-green  { box-shadow: 0 -0.12em 0 0.48em #1f5a36 inset; color: #fff; }
-  [data-theme="dark"] mark.hl.hl-pink   { box-shadow: 0 -0.12em 0 0.48em #6e2348 inset; color: #fff; }
-  [data-theme="dark"] mark.hl.hl-blue   { box-shadow: 0 -0.12em 0 0.48em #1f456e inset; color: #fff; }
+  mark.hl.hl-yellow { background: #fff3a8; }
+  mark.hl.hl-green  { background: #b6f0c4; }
+  mark.hl.hl-pink   { background: #ffc4dd; }
+  mark.hl.hl-blue   { background: #bcdcff; }
+  [data-theme="dark"] mark.hl.hl-yellow { background: #6b5d1a; color: #fff; }
+  [data-theme="dark"] mark.hl.hl-green  { background: #1f5a36; color: #fff; }
+  [data-theme="dark"] mark.hl.hl-pink   { background: #6e2348; color: #fff; }
+  [data-theme="dark"] mark.hl.hl-blue   { background: #1f456e; color: #fff; }
   /* 형광펜 색 고르는 팔레트 */
   .hl-palette {
     position: absolute; z-index: 900;
