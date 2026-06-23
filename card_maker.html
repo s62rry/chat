@@ -2355,23 +2355,64 @@
 
   // html-to-image 사용으로 measureHighlights 불필요 (CSS 그대로 캡처)
 
+  // 현재 폰트 CSS URL을 fetch해서 @font-face를 base64로 변환 후 <style> 주입
+  function embedCurrentFont() {
+    // 현재 카드에 적용된 font-family에서 폰트명 추출
+    const family = state.fontFamily || '';
+    // BUILTIN_FONTS에서 현재 폰트의 Google Fonts URL 찾기
+    const fontDef = BUILTIN_FONTS.find(function(f) { return f.family === family; });
+    const fontUrl = fontDef && fontDef.url;
+    if (!fontUrl) return Promise.resolve(null); // Pretendard 등 내장 폰트는 패스
+
+    // 이미 주입된 스타일 있으면 재사용
+    const existing = document.getElementById('qc-font-embed');
+    if (existing && existing.dataset.url === fontUrl) return Promise.resolve(existing);
+
+    // Google Fonts CSS fetch → @font-face 규칙 파싱 → woff2 URL들 base64 변환
+    return fetch(fontUrl, { mode: 'cors' })
+      .then(function(r) { return r.text(); })
+      .then(function(css) {
+        // CSS 안의 url(...) 들을 추출해서 base64로 변환
+        const urlMatches = [];
+        css.replace(/url(([^)]+))/g, function(_, u) { urlMatches.push(u.replace(/['"]/g, '')); });
+        return Promise.all(urlMatches.map(function(u) {
+          return fetch(u, { mode: 'cors' })
+            .then(function(r) { return r.blob(); })
+            .then(function(blob) {
+              return new Promise(function(resolve) {
+                const reader = new FileReader();
+                reader.onload = function() { resolve({ url: u, data: reader.result }); };
+                reader.readAsDataURL(blob);
+              });
+            })
+            .catch(function() { return { url: u, data: u }; });
+        })).then(function(results) {
+          let embedCss = css;
+          results.forEach(function(r) { embedCss = embedCss.replace(r.url, r.data); });
+          if (existing) existing.remove();
+          const style = document.createElement('style');
+          style.id = 'qc-font-embed';
+          style.dataset.url = fontUrl;
+          style.textContent = embedCss;
+          document.head.appendChild(style);
+          return style;
+        });
+      })
+      .catch(function() { return null; });
+  }
+
   function renderCardCanvas() {
-    // html-to-image — CSS를 그대로 캡처 (형광펜 우회 로직 불필요)
     const shownW = card.getBoundingClientRect().width || 540;
     const TARGET_W = 1360;
     const pixelRatio = Math.max(2, Math.min(4, TARGET_W / shownW));
 
-    const opt = {
-      pixelRatio: pixelRatio,
-      useCORS: true,
-    };
+    const opt = { pixelRatio: pixelRatio, useCORS: true };
 
-    // html-to-image는 첫 번째 호출 시 폰트를 fetch해서 캐시함
-    // 두 번 호출하면 두 번째가 폰트 완전히 로드된 상태로 캡처됨
-    return document.fonts.ready.then(function() {
-      return htmlToImage.toPng(card, opt); // 첫 번째: 폰트 캐시 채우기
+    // 폰트 임베드 후 캡처
+    return embedCurrentFont().then(function() {
+      return document.fonts.ready;
     }).then(function() {
-      return htmlToImage.toPng(card, opt); // 두 번째: 정확한 캡처
+      return htmlToImage.toPng(card, opt);
     }).then(function(dataUrl) {
       return new Promise(function(resolve, reject) {
         const img = new Image();
