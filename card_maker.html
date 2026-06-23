@@ -2331,8 +2331,13 @@
   // getClientRects 는 이미 scaleX 가 적용된 화면 실제 위치를 주므로
   // card 직속 div 에 그대로 쓰면 화면과 정확히 일치한다.
   function measureHighlights() {
-    // card 기준으로 위치를 잼
     const baseRect = card.getBoundingClientRect();
+    // quoteText의 실제 line-height와 font-size 차이만큼 y 보정
+    const qtStyle = getComputedStyle(quoteText);
+    const fontSize = parseFloat(qtStyle.fontSize) || 16;
+    const lineHeight = parseFloat(qtStyle.lineHeight) || fontSize * 1.75;
+    // line-height와 font-size 차이의 절반 = 행간 여백 위쪽 (leading)
+    const leading = (lineHeight - fontSize) / 2;
     const marks = quoteText.querySelectorAll('mark.qhl');
     const rects = [];
     marks.forEach(mk => {
@@ -2341,9 +2346,9 @@
         const r = list[i];
         rects.push({
           x: r.left - baseRect.left,
-          y: r.top - baseRect.top,
+          y: r.top - baseRect.top + leading,  // leading만큼 아래로 보정
           w: r.width,
-          h: r.height
+          h: r.height - leading               // 높이는 leading만큼 줄임
         });
       }
     });
