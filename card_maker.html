@@ -2364,11 +2364,15 @@
     const opt = {
       pixelRatio: pixelRatio,
       useCORS: true,
-      skipAutoScale: false,
     };
 
-    // html-to-image는 Promise<dataURL> 반환 — canvas로 변환해서 기존 인터페이스 유지
-    return htmlToImage.toPng(card, opt).then(function(dataUrl) {
+    // html-to-image는 첫 번째 호출 시 폰트를 fetch해서 캐시함
+    // 두 번 호출하면 두 번째가 폰트 완전히 로드된 상태로 캡처됨
+    return document.fonts.ready.then(function() {
+      return htmlToImage.toPng(card, opt); // 첫 번째: 폰트 캐시 채우기
+    }).then(function() {
+      return htmlToImage.toPng(card, opt); // 두 번째: 정확한 캡처
+    }).then(function(dataUrl) {
       return new Promise(function(resolve, reject) {
         const img = new Image();
         img.onload = function() {
