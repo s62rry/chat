@@ -2346,9 +2346,9 @@
         const r = list[i];
         rects.push({
           x: r.left - baseRect.left,
-          y: r.top - baseRect.top + leading,  // leading만큼 아래로 보정
+          y: r.top - baseRect.top + leading * 0.5,  // leading 절반만 보정
           w: r.width,
-          h: r.height - leading               // 높이는 leading만큼 줄임
+          h: r.height - leading * 0.5               // 높이도 절반만 줄임
         });
       }
     });
