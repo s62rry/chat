@@ -429,7 +429,7 @@
     color: inherit;
     background-color: var(--hl-color);
     background-image: none;
-    padding: 0 0.04em;
+    padding: 0.08em 0.15em;
   }
 
   /* 미리보기 드래그 서식 툴바 */
@@ -444,7 +444,6 @@
     padding: 3px 8px; border: none; border-radius: 5px;
     font-size: 12px; font-weight: 600; cursor: pointer;
     background: transparent; color: var(--text);
-    transition: background 0.12s;
   }
   .pt-btn:hover { background: var(--accent-soft); color: var(--accent); }
   .pt-sep { width: 1px; height: 16px; background: var(--border); margin: 0 2px; }
@@ -1646,9 +1645,1488 @@
             .replace(/>/g, '&gt;');
   }
   function formatQuote(text) {
-    // {#rrggbb|텍스트} → 글씨색. escapeHtml 전에 처리.
+    // {#rrggbb|텍스트} 글씨색 — escapeHtml 전에 처리해야 { } | 가 안 깨짐
     const colorSpans = [];
     text = text.replace(/{(#[0-9a-fA-F]{3,8})|([^}]*)}/g, function(_, color, content) {
-      var idx = colorSpans.length;
+      var i = colorSpans.length;
       colorSpans.push('<span style="color:' + color + '">' + content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>');
-      return '
+      return ' c' + i + ' ';
+    });
+    let s = escapeHtml(text);
+    s = s.replace(/ c(d+) /g, function(_, i) { return colorSpans[+i] || ''; });
+    // 형광펜: ==글씨==
+    s = s.replace(/==([^=]+)==/g, '<mark class="qhl">$1</mark>');
+    // 볼드: **글씨** (이탤릭보다 먼저)
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // 이탤릭: *글씨*
+    s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    return s;
+  }
+
+  // ============ 카드 렌더링 ============
+  // 형광펜 색을 실제 카드와 안내 예시에 함께 적용
+  function applyHighlightColor() {
+    document.documentElement.style.setProperty('--hl-color', state.hlColor);
+    quoteText.style.setProperty('--hl-color', state.hlColor);
+  }
+
+  // 여러 장 — 현재 보고 있는 페이지 번호 (0부터)
+  let curPage = 0;
+
+  // 본문을 '---' 구분선으로 나눠 페이지 배열로 반환
+  function getPages() {
+    const raw = $('quoteInput').value;
+    // 한 줄에 --- (앞뒤 공백 허용) 만 있는 줄을 구분선으로
+    const parts = raw.split(/\n[ \t]*-{3,}[ \t]*\n/);
+    // 각 조각의 앞뒤 빈 줄만 정리 (내부 줄바꿈은 유지)
+    return parts.map(p => p.replace(/^\n+|\n+$/g, ''));
+  }
+
+  // 페이지 네비게이션 표시 갱신
+  function updatePageNav() {
+    const pages = getPages();
+    const nav = $('pageNav');
+    if (pages.length <= 1) {
+      nav.style.display = 'none';
+      curPage = 0;
+    } else {
+      nav.style.display = 'flex';
+      if (curPage >= pages.length) curPage = pages.length - 1;
+      if (curPage < 0) curPage = 0;
+      $('pageInd').textContent = (curPage + 1) + ' / ' + pages.length;
+    }
+  }
+
+  function renderCard() {
+    const pages = getPages();
+    if (curPage >= pages.length) curPage = pages.length - 1;
+    if (curPage < 0) curPage = 0;
+    const q = pages[curPage] || '';
+    const base = q.trim() ? q : '문구를 입력하면 여기에 표시됩니다.';
+    // 인용부호: 켜면 문구 앞뒤에 큰따옴표 / 서식 적용
+    const inner = state.quoteMark ? ('\u201C' + base + '\u201D') : base;
+    quoteText.innerHTML = formatQuote(inner);
+    // 형광펜 색 적용
+    applyHighlightColor();
+
+    const m = makerInput.value.trim();
+    const c = charInput.value.trim();
+    charName.textContent = c || '캐릭터';
+    makerName.textContent = m || '제작자';
+
+    // 출처 표시 on/off
+    cardSep.style.display = state.showCredit ? '' : 'none';
+    cardCredit.style.display = state.showCredit ? '' : 'none';
+
+    updatePageNav();
+  }
+  $('quoteInput').addEventListener('input', renderCard);
+
+  // 페이지 이동 버튼
+  $('pagePrev').addEventListener('click', () => {
+    if (curPage > 0) { curPage--; renderCard(); }
+  });
+  $('pageNext').addEventListener('click', () => {
+    const pages = getPages();
+    if (curPage < pages.length - 1) { curPage++; renderCard(); }
+  });
+  // 구분선 넣기 버튼 — 현재 커서 위치에 --- 줄 삽입
+  $('applyTextColor').addEventListener('click', () => {
+    const ta = $('quoteInput');
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    if (s === e) { alert('색을 바꿀 텍스트를 먼저 선택하세요.'); return; }
+    const color = $('textColorPick').value;
+    const sel = ta.value.slice(s, e);
+    const wrapped = '{' + color + '|' + sel + '}';
+    ta.value = ta.value.slice(0, s) + wrapped + ta.value.slice(e);
+    ta.selectionStart = ta.selectionEnd = s + wrapped.length;
+    ta.dispatchEvent(new Event('input')); ta.focus();
+  });
+  $('removeTextColor').addEventListener('click', () => {
+    const ta = $('quoteInput');
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    if (s === e) { alert('글씨색을 제거할 텍스트를 먼저 선택하세요.'); return; }
+    const sel = ta.value.slice(s, e);
+    const cleaned = sel.replace(/{#[0-9a-fA-F]{3,8}|([^}]*)}/g, '$1');
+    ta.value = ta.value.slice(0, s) + cleaned + ta.value.slice(e);
+    ta.selectionStart = s; ta.selectionEnd = s + cleaned.length;
+    ta.dispatchEvent(new Event('input')); ta.focus();
+  });
+  $('insertSepBtn').addEventListener('click', () => {
+    const ta = $('quoteInput');
+    const v = ta.value;
+    // 커서(선택영역) 위치
+    const s = ta.selectionStart;
+    const e = ta.selectionEnd;
+    const before = v.slice(0, s);
+    const after = v.slice(e);
+    // 앞은 줄바꿈으로 끝나야, 뒤는 줄바꿈으로 시작해야 '한 줄 ---' 이 됨
+    let ins = '---';
+    if (before.length && !before.endsWith('\n')) ins = '\n' + ins;
+    if (after.length && !after.startsWith('\n')) ins = ins + '\n';
+    else if (after.length === 0) ins = ins + '\n';
+    ta.value = before + ins + after;
+    // 커서를 삽입한 --- 줄 다음으로
+    const caret = (before + ins).length;
+    ta.focus();
+    ta.setSelectionRange(caret, caret);
+    renderCard();
+  });
+
+
+  // ============ 형광펜 색 스와치 ============
+  function renderHlSwatches() {
+    const wrap = $('hlSwatches');
+    wrap.innerHTML = '';
+    HL_COLORS.forEach(col => {
+      const sw = document.createElement('span');
+      sw.className = 'hl-swatch' + (col === state.hlColor ? ' on' : '');
+      sw.style.background = col;
+      sw.title = '형광펜 색';
+      sw.addEventListener('click', () => {
+        state.hlColor = col;
+        data.hlColor = col;
+        renderHlSwatches();
+        renderCard();
+        saveData();
+      });
+      wrap.appendChild(sw);
+    });
+    // 직접 색 고르기 버튼 (무지개 팔레트)
+    const isCustom = HL_COLORS.indexOf(state.hlColor) === -1;
+    const pick = document.createElement('span');
+    pick.className = 'hl-swatch hl-swatch-custom' + (isCustom ? ' on' : '');
+    pick.title = '직접 색 고르기';
+    // 커스텀 색을 쓰는 중이면 그 색을 동그라미에 보여줌
+    if (isCustom) pick.style.background = state.hlColor;
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.className = 'hl-color-input';
+    colorInput.value = /^#[0-9a-fA-F]{6}$/.test(state.hlColor)
+      ? state.hlColor : '#ffe17d';
+    colorInput.addEventListener('input', () => {
+      state.hlColor = colorInput.value;
+      data.hlColor = colorInput.value;
+      renderCard();
+    });
+    colorInput.addEventListener('change', () => {
+      state.hlColor = colorInput.value;
+      data.hlColor = colorInput.value;
+      renderHlSwatches();
+      renderCard();
+      saveData();
+    });
+    pick.appendChild(colorInput);
+    wrap.appendChild(pick);
+  }
+  renderHlSwatches();
+
+  // ============ 글자 스타일 ============
+  function applyStyle() {
+    const size = $('sizeRange').value;
+    const textCol = $('textColor').value;
+    const accentCol = $('accentColor').value;
+    const lh = $('lineHeightRange').value;
+    const ls = $('letterRange').value;
+    const scale = $('scaleRange').value;
+    const gap = $('gapRange').value;
+    const pad = $('padRange').value;
+    const creditSize = $('creditSizeRange').value;
+    const radius = $('radiusRange').value;
+    const fontScale = parseFloat($('fontScaleRange').value);
+
+    card.style.fontFamily = state.fontFamily;
+    card.style.padding = pad + 'px';
+    card.style.textAlign = state.align;
+    card.style.borderRadius = radius + 'px';
+    // 카드 비율 — 너비는 가변(최대치 제한), 높이는 비율로 자동
+    const r = RATIOS[state.ratio];
+    card.style.width = '100%';
+    card.style.maxWidth = r.w + 'px';
+    card.style.height = 'auto';
+    card.style.aspectRatio = r.w + ' / ' + r.h;
+
+    // 본문 크기 = 슬라이더 크기 × 글씨체 보정 배율
+    const realSize = size * fontScale;
+    quoteText.style.fontSize = realSize + 'px';
+    quoteText.style.color = textCol;
+    quoteText.style.fontWeight = state.weight;
+    quoteText.style.lineHeight = lh;
+    quoteText.style.letterSpacing = ls + 'px';
+    // 줄바꿈 단위: keep-all=단어 단위, break-all=글자 단위
+    quoteText.style.wordBreak = state.wordBreak;
+    // 첫 줄 들여쓰기 (글자 크기에 비례해 한 글자만큼)
+    quoteText.style.textIndent = state.indent ? realSize + 'px' : '0';
+    // 장평: scaleX 로 가로 폭 조절 (정렬 방향에 맞춰 기준점 설정)
+    const origin = (state.align === 'left' || state.align === 'justify') ? 'left'
+                 : (state.align === 'right' ? 'right' : 'center');
+    quoteText.style.transformOrigin = origin;
+    quoteText.style.transform = 'scaleX(' + (scale / 100) + ')';
+
+    // 글자 그림자 on/off
+    const shadowCss = state.shadow ? '0 2px 8px rgba(0,0,0,0.45)' : 'none';
+    quoteText.style.textShadow = shadowCss;
+    charName.style.textShadow = shadowCss;
+    makerName.style.textShadow = shadowCss;
+
+    charName.style.color = textCol;
+    makerName.style.color = textCol;
+    charName.style.fontWeight = state.weight >= 600 ? 700 : 600;
+    // 출처 글자 크기 — 글씨체 보정 배율도 함께 반영
+    charName.style.fontSize = (creditSize * fontScale) + 'px';
+    makerName.style.fontSize = (creditSize * 0.8 * fontScale) + 'px';
+    cardSep.style.background = accentCol;
+    cardSep.style.marginTop = gap + 'px';
+
+    // 강조선 위치: 양쪽맞춤은 왼쪽 정렬과 동일하게 앞쪽에 둠
+    cardSep.style.marginLeft = (state.align === 'left' || state.align === 'justify') ? '0' : 'auto';
+    cardSep.style.marginRight = state.align === 'right' ? '0' : 'auto';
+    cardCredit.style.justifyContent =
+      state.align === 'center' ? 'center' : (state.align === 'right' ? 'flex-end' : 'flex-start');
+
+    $('sizeVal').textContent = size + 'px';
+    $('lineHeightVal').textContent = (+lh).toFixed(2);
+    $('letterVal').textContent = ls + 'px';
+    $('scaleVal').textContent = scale + '%';
+    $('gapVal').textContent = gap + 'px';
+    $('padVal').textContent = pad + 'px';
+    $('creditSizeVal').textContent = creditSize + 'px';
+    $('radiusVal').textContent = radius + 'px';
+    $('fontScaleVal').textContent = Math.round(fontScale * 100) + '%';
+  }
+  ['sizeRange','textColor','accentColor','lineHeightRange','letterRange','scaleRange',
+   'gapRange','padRange','creditSizeRange','radiusRange']
+    .forEach(id => $(id).addEventListener('input', applyStyle));
+
+  // 정렬 버튼
+  document.querySelectorAll('#alignSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#alignSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.align = btn.dataset.align;
+      applyStyle();
+    });
+  });
+
+  // 굵기 버튼
+  document.querySelectorAll('#weightSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#weightSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.weight = parseInt(btn.dataset.weight, 10);
+      applyStyle();
+    });
+  });
+
+  // 줄바꿈 단위 버튼
+  document.querySelectorAll('#breakSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#breakSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.wordBreak = btn.dataset.break;
+      applyStyle();
+    });
+  });
+
+  // 들여쓰기 토글 (버튼 하나로 온오프)
+  $('indentToggle').addEventListener('click', () => {
+    state.indent = !state.indent;
+    $('indentToggle').classList.toggle('on', state.indent);
+    applyStyle();
+  });
+
+  // 인용부호 토글
+  $('quoteToggle').addEventListener('click', () => {
+    state.quoteMark = !state.quoteMark;
+    $('quoteToggle').classList.toggle('on', state.quoteMark);
+    renderCard();
+  });
+
+  // 출처 표시 토글
+  $('creditToggle').addEventListener('click', () => {
+    state.showCredit = !state.showCredit;
+    $('creditToggle').classList.toggle('on', state.showCredit);
+    renderCard();
+  });
+
+  // 글자 그림자 토글
+  $('shadowToggle').addEventListener('click', () => {
+    state.shadow = !state.shadow;
+    $('shadowToggle').classList.toggle('on', state.shadow);
+    applyStyle();
+  });
+
+  // 카드 비율 버튼
+  document.querySelectorAll('#ratioSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#ratioSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.ratio = btn.dataset.ratio;
+      applyStyle();
+    });
+  });
+
+  // ============ 배경 ============
+  function applyBackground() {
+    // dim: 음수면 흰 막(밝게), 양수면 검은 막(어둡게)
+    const dim = parseInt($('dimRange').value, 10);
+    if (dim >= 0) {
+      cardOverlay.style.background = 'rgba(0,0,0,' + (dim / 100) + ')';
+      $('dimVal').textContent = dim === 0 ? '없음' : ('어둡게 ' + dim + '%');
+    } else {
+      cardOverlay.style.background = 'rgba(255,255,255,' + (-dim / 100) + ')';
+      $('dimVal').textContent = '밝게 ' + (-dim) + '%';
+    }
+
+    if (state.bgMode === 'color') {
+      cardBg.style.backgroundImage = 'none';
+      cardBg.style.backgroundColor = $('bgColor').value;
+    } else if (state.bgMode === 'gradient') {
+      const cols = [$('gradColor1').value, $('gradColor2').value];
+      cardBg.style.backgroundColor = 'transparent';
+      cardBg.style.backgroundImage = GRADIENTS[gradTypeIdx].css(cols);
+      cardBg.style.backgroundSize = 'cover';
+      cardBg.style.backgroundPosition = '50% 50%';
+    } else if (state.bgMode === 'image') {
+      cardBg.style.backgroundColor = '#1a1d29';
+      if (state.bgImageData) {
+        cardBg.style.backgroundImage = 'url(' + state.bgImageData + ')';
+        cardBg.style.backgroundSize = $('bgSizeRange').value + '%';
+        cardBg.style.backgroundPosition =
+          $('bgPosXRange').value + '% ' + $('bgPosYRange').value + '%';
+      } else {
+        cardBg.style.backgroundImage = 'none';
+      }
+      $('bgSizeVal').textContent = $('bgSizeRange').value + '%';
+      $('bgPosXVal').textContent = $('bgPosXRange').value + '%';
+      $('bgPosYVal').textContent = $('bgPosYRange').value + '%';
+    }
+
+    // 배경 블러 — 이미지 모드에서만 적용. 가장자리 비침 방지를 위해 살짝 확대.
+    const blur = (state.bgMode === 'image') ? parseInt($('bgBlurRange').value, 10) : 0;
+    cardBg.style.filter = blur ? 'blur(' + blur + 'px)' : 'none';
+    cardBg.style.transform = blur ? 'scale(1.08)' : 'none';
+    $('bgBlurVal').textContent = $('bgBlurRange').value + 'px';
+  }
+  ['bgColor','dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange']
+    .forEach(id => $(id).addEventListener('input', applyBackground));
+  ['gradColor1','gradColor2'].forEach(id => {
+    $(id).addEventListener('input', () => { renderGradGrid(); applyBackground(); });
+  });
+
+  // 배경 모드 전환
+  document.querySelectorAll('#bgModeSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#bgModeSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.bgMode = btn.dataset.mode;
+      $('bgColorPanel').style.display = state.bgMode === 'color' ? '' : 'none';
+      $('bgGradPanel').style.display = state.bgMode === 'gradient' ? '' : 'none';
+      $('bgImagePanel').style.display = state.bgMode === 'image' ? '' : 'none';
+      applyBackground();
+    });
+  });
+
+  // 배경 이미지 업로드
+  $('bgBtn').addEventListener('click', () => $('bgFile').click());
+  $('bgFile').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      state.bgImageData = ev.target.result;
+      applyBackground();
+      toast('배경 이미지를 적용했습니다');
+    };
+    reader.readAsDataURL(file);
+  });
+  $('bgClearBtn').addEventListener('click', () => {
+    state.bgImageData = '';
+    $('bgFile').value = '';
+    applyBackground();
+    toast('배경 이미지를 제거했습니다');
+  });
+
+  // ============ 글씨체 추가 모달 ============
+  const fontOverlay = $('fontOverlay');
+  $('addFontBtn').addEventListener('click', () => {
+    $('fontNameInput').value = '';
+    $('fontUrlInput').value = '';
+    $('fontFamilyInput').value = '';
+    fontOverlay.classList.add('show');
+    $('fontNameInput').focus();
+  });
+  $('fontCancel').addEventListener('click', () => fontOverlay.classList.remove('show'));
+  function confirmFont() {
+    const name = $('fontNameInput').value.trim();
+    const url = $('fontUrlInput').value.trim();
+    const family = $('fontFamilyInput').value.trim();
+    if (!name) { $('fontNameInput').focus(); return; }
+    if (!family) { $('fontFamilyInput').focus(); toast('font-family 이름을 입력하세요'); return; }
+    data.fonts.push({ name, family, url });
+    saveData();
+    if (url) loadFontUrl(url);
+    state.fontFamily = family;
+    renderFontGrid();
+    applyStyle();
+    fontOverlay.classList.remove('show');
+    toast('글씨체 "' + name + '" 추가됨');
+  }
+  $('fontConfirm').addEventListener('click', confirmFont);
+
+  fontOverlay.addEventListener('click', e => {
+    if (e.target === fontOverlay) fontOverlay.classList.remove('show');
+  });
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      fontOverlay.classList.remove('show');
+      $('resetOverlay').classList.remove('show');
+    }
+  });
+
+  // ============ 초기화 ============
+  const resetOverlay = $('resetOverlay');
+  $('resetBtn').addEventListener('click', () => resetOverlay.classList.add('show'));
+  $('resetCancel').addEventListener('click', () => resetOverlay.classList.remove('show'));
+  resetOverlay.addEventListener('click', e => {
+    if (e.target === resetOverlay) resetOverlay.classList.remove('show');
+  });
+
+  // 설정만 초기화 — 입력/스타일을 기본값으로, 저장 데이터는 유지
+  function resetSettings() {
+    $('quoteInput').value = '';
+    $('makerInput').value = '';
+    $('charInput').value = '';
+    // 슬라이더·색 기본값
+    const defaults = {
+      sizeRange: 22, textColor: '#ffffff', accentColor: '#ffffff',
+      lineHeightRange: 1.75, letterRange: -0.2, scaleRange: 100,
+      gapRange: 26, padRange: 56, creditSizeRange: 15, radiusRange: 0,
+      bgColor: '#1a1d29', gradColor1: '#2f6df0', gradColor2: '#1a1d4e',
+      dimRange: 35, bgSizeRange: 100, bgPosXRange: 50, bgPosYRange: 50, bgBlurRange: 0
+    };
+    Object.keys(defaults).forEach(id => { if ($(id)) $(id).value = defaults[id]; });
+    // state 기본값
+    state.fontFamily = BUILTIN_FONTS[0].family;
+    state.align = 'left';
+    state.weight = 400;
+    state.ratio = 'square';
+    state.wordBreak = 'keep-all';
+    state.indent = false;
+    state.quoteMark = false;
+    state.showCredit = true;
+    state.shadow = false;
+    state.bgMode = 'color';
+    state.bgImageData = '';
+    $('fontScaleRange').value = getFontScale(state.fontFamily);
+    // 버튼 active 상태 동기화
+    const setActive = (sel, fn) =>
+      document.querySelectorAll(sel).forEach(b => b.classList.toggle('active', fn(b)));
+    setActive('#alignSeg button', b => b.dataset.align === 'left');
+    setActive('#weightSeg button', b => b.dataset.weight === '400');
+    setActive('#breakSeg button', b => b.dataset.break === 'keep-all');
+    setActive('#ratioSeg button', b => b.dataset.ratio === 'square');
+    setActive('#bgModeSeg button', b => b.dataset.mode === 'color');
+    $('bgColorPanel').style.display = '';
+    $('bgGradPanel').style.display = 'none';
+    $('bgImagePanel').style.display = 'none';
+    $('indentToggle').classList.remove('on');
+    $('quoteToggle').classList.remove('on');
+    $('creditToggle').classList.add('on');
+    $('shadowToggle').classList.remove('on');
+    renderFontGrid();
+    renderGradGrid();
+    applyStyle();
+    applyBackground();
+    renderCard();
+  }
+  $('resetSoft').addEventListener('click', () => {
+    resetSettings();
+    resetOverlay.classList.remove('show');
+    toast('설정을 초기화했습니다');
+  });
+  // 전체 초기화 — 저장 데이터까지 삭제
+  $('resetHard').addEventListener('click', () => {
+    data = { makers: [], chars: [], pairs: [], fonts: [], fontScales: {}, presets: [] };
+    applySeed();  // 기본 제작자·캐릭터는 다시 채움
+    try {
+      saveData();
+      localStorage.removeItem(THEME_KEY);
+    } catch {}
+    resetSettings();
+    renderPresetGrid();
+    resetOverlay.classList.remove('show');
+    toast('전체 데이터를 초기화했습니다 (기본 제작자·캐릭터 복원)');
+  });
+
+  // ============ 테마 ============
+  const themeIcon = $('themeIcon');
+  const sun = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+  const moon = '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>';
+  // 미리보기 드래그 서식 툴바
+  window.addEventListener('DOMContentLoaded', function() {
+    const tb = document.createElement('div');
+    tb.id = 'preview-toolbar';
+    tb.innerHTML =
+      '<button class="pt-btn" data-fmt="bold"><b>B</b></button>' +
+      '<button class="pt-btn" data-fmt="italic"><i>I</i></button>' +
+      '<button class="pt-btn" data-fmt="highlight">H</button>' +
+      '<div class="pt-sep"></div>' +
+      '<input type="color" class="pt-color" id="pt-color-pick" value="#e74c3c">' +
+      '<button class="pt-btn" data-fmt="color">A</button>';
+    document.body.appendChild(tb);
+    let saved = null;
+    const qt = document.getElementById('quoteText');
+    if (!qt) return;
+    document.addEventListener('mouseup', function(e) {
+      if (e.target.closest('#preview-toolbar')) return;
+      setTimeout(function() {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.toString().trim()) { tb.style.display='none'; return; }
+        const range = sel.getRangeAt(0);
+        if (!qt.contains(range.commonAncestorContainer)) { tb.style.display='none'; return; }
+        saved = sel.toString();
+        const rect = range.getBoundingClientRect();
+        tb.style.display = 'flex';
+        const tx = rect.left + rect.width/2 - tb.offsetWidth/2;
+        const ty = rect.top + window.scrollY - tb.offsetHeight - 8;
+        tb.style.left = Math.max(8, tx) + 'px';
+        tb.style.top = Math.max(8, ty) + 'px';
+      }, 10);
+    });
+    tb.addEventListener('click', function(e) {
+      const btn = e.target.closest('.pt-btn');
+      if (!btn || !saved) return;
+      const fmt = btn.dataset.fmt;
+      const ta = document.getElementById('quoteInput');
+      const raw = ta.value;
+      const pos = raw.indexOf(saved);
+      if (pos === -1) { tb.style.display='none'; return; }
+      let w;
+      if (fmt==='bold') w='**'+saved+'**';
+      else if (fmt==='italic') w='*'+saved+'*';
+      else if (fmt==='highlight') w='=='+saved+'==';
+      else if (fmt==='color') { const c=document.getElementById('pt-color-pick').value; w='{'+c+'|'+saved+'}'; }
+      if (!w) return;
+      ta.value = raw.slice(0,pos)+w+raw.slice(pos+saved.length);
+      ta.dispatchEvent(new Event('input'));
+      tb.style.display='none';
+      window.getSelection().removeAllRanges();
+      saved=null;
+    });
+    document.addEventListener('mousedown', function(e) {
+      if (!e.target.closest('#preview-toolbar')) tb.style.display='none';
+    });
+  });
+
+  function applyTheme(t) {
+    document.body.dataset.theme = t;
+    themeIcon.innerHTML = t === 'dark' ? moon : sun;
+  }
+  applyTheme(localStorage.getItem(THEME_KEY) || 'light');
+
+  // 로그 보관함 ✂ 발췌 버튼에서 보낸 텍스트+캐릭터명 수신
+  function applyIncoming(payload) {
+    try {
+      const { text, charName, ts } = payload;
+      if (Date.now() - ts > 5 * 60 * 1000) return;
+      localStorage.removeItem('qc:incoming');
+      if (!text) return;
+      const ta = $('quoteInput');
+      ta.value = text;
+      ta.dispatchEvent(new Event('input'));
+      if (charName) {
+        const ci = $('charInput');
+        ci.value = charName;
+        ci.dispatchEvent(new Event('input'));
+        const pair = data.pairs.find(function(p) { return p.char === charName; });
+        if (pair && pair.maker) {
+          const mi = $('makerInput');
+          mi.value = pair.maker;
+          mi.dispatchEvent(new Event('input'));
+        }
+      }
+      ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      ta.focus();
+    } catch(e) {}
+  }
+  (function() {
+    try { const r = localStorage.getItem('qc:incoming'); if (r) applyIncoming(JSON.parse(r)); } catch(e) {}
+  })();
+  window.addEventListener('storage', function(e) {
+    if (e.key !== 'qc:incoming' || !e.newValue) return;
+    try { applyIncoming(JSON.parse(e.newValue)); } catch(e) {}
+  });
+  $('themeBtn').addEventListener('click', () => {
+    const next = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch {}
+  });
+
+  // ============ 이미지 저장 / 복사 ============
+  // 둥근 모서리 + 배경 블러를 반영해 최종 캔버스를 만듦.
+  // 블러가 켜지면 배경/오버레이/글자를 따로 캡처해 합성한다.
+  const cardInner = document.querySelector('.card-inner');
+
+  // canvas ctx.filter 의 blur 가 실제로 동작하는지 1회 검사 (캐시)
+  let _blurFilterOK = null;
+  function blurFilterWorks() {
+    if (_blurFilterOK !== null) return _blurFilterOK;
+    try {
+      const t = document.createElement('canvas');
+      t.width = t.height = 9;
+      const c = t.getContext('2d');
+      // 가운데 1px 흰 점을 그리고 블러 → 퍼지면 주변 픽셀이 0이 아님
+      c.fillStyle = '#fff';
+      c.fillRect(4, 4, 1, 1);
+      const src = t;
+      const t2 = document.createElement('canvas');
+      t2.width = t2.height = 9;
+      const c2 = t2.getContext('2d');
+      c2.filter = 'blur(2px)';
+      c2.drawImage(src, 0, 0);
+      const px = c2.getImageData(1, 1, 1, 1).data; // 모서리 픽셀
+      _blurFilterOK = px[3] > 0; // 알파가 퍼졌으면 OK
+    } catch { _blurFilterOK = false; }
+    return _blurFilterOK;
+  }
+
+  // 이미지를 블러 처리해 ctx 의 (dx,dy,dw,dh) 영역에 그림
+  function drawBlurred(ctx, img, blurPx, dx, dy, dw, dh) {
+    if (blurPx <= 0) { ctx.drawImage(img, dx, dy, dw, dh); return; }
+    if (blurFilterWorks()) {
+      ctx.save();
+      ctx.filter = 'blur(' + blurPx + 'px)';
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.restore();
+      return;
+    }
+    // 폴백: 작게 줄였다가 키우면 자연스러운 블러가 됨 (모든 브라우저 동작)
+    const steps = Math.max(1, Math.round(blurPx / 2));
+    let cur = document.createElement('canvas');
+    cur.width = img.width; cur.height = img.height;
+    cur.getContext('2d').drawImage(img, 0, 0);
+    for (let i = 0; i < steps; i++) {
+      const sw = Math.max(2, Math.round(cur.width / 2));
+      const sh = Math.max(2, Math.round(cur.height / 2));
+      const small = document.createElement('canvas');
+      small.width = sw; small.height = sh;
+      const sc = small.getContext('2d');
+      sc.imageSmoothingEnabled = true;
+      sc.drawImage(cur, 0, 0, sw, sh);
+      cur = small;
+    }
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(cur, dx, dy, dw, dh);
+    ctx.restore();
+  }
+
+  // 이미지(data URL)를 블러 처리한 새 data URL 로 반환
+  function makeBlurredImage(srcURL, blurLevel) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const cv = document.createElement('canvas');
+          cv.width = img.naturalWidth || img.width;
+          cv.height = img.naturalHeight || img.height;
+          const ctx = cv.getContext('2d');
+          // blurLevel(슬라이더 0~20) → 이미지 해상도에 비례해 픽셀 환산.
+          // 화면 블러는 540px 카드 기준 N px 이므로, 원본 해상도에선
+          // (해상도/540) 배만 곱하면 화면과 같은 시각적 블러가 됨.
+          const px = blurLevel * (cv.width / 540);
+          drawBlurred(ctx, img, px, 0, 0, cv.width, cv.height);
+          resolve(cv.toDataURL('image/png'));
+        } catch (e) { reject(e); }
+      };
+      img.onerror = () => reject(new Error('이미지 로드 실패'));
+      img.src = srcURL;
+    });
+  }
+
+  // 형광펜 mark 들의 위치를 card 기준 좌표(줄별 사각형)로 측정.
+  // card 기준으로 재는 이유: 형광펜 div 를 quoteText 안이 아니라
+  // card 직속에 넣어야 quoteText 의 scaleX(장평) 변형을 안 받기 때문.
+  // getClientRects 는 이미 scaleX 가 적용된 화면 실제 위치를 주므로
+  // card 직속 div 에 그대로 쓰면 화면과 정확히 일치한다.
+  function measureHighlights() {
+    const baseRect = card.getBoundingClientRect();
+    const marks = quoteText.querySelectorAll('mark.qhl');
+    const rects = [];
+    marks.forEach(mk => {
+      const list = mk.getClientRects();
+      for (let i = 0; i < list.length; i++) {
+        const r = list[i];
+        rects.push({
+          x: r.left - baseRect.left,
+          y: r.top - baseRect.top,
+          w: r.width,
+          h: r.height
+        });
+      }
+    });
+    return rects;
+  }
+
+  function renderCardCanvas() {
+    // 화면 카드 너비에 맞춰 scale 을 정함 — 카드가 작게 보여도
+    // 결과 이미지는 충분한 해상도(목표 너비 ~1360px)가 되도록.
+    const shownW = card.getBoundingClientRect().width || 540;
+    const TARGET_W = 1360;
+    let scale = TARGET_W / shownW;
+    scale = Math.max(2, Math.min(4, scale));   // 2~4배 사이로 제한
+    const radius = parseInt($('radiusRange').value, 10) * scale;
+    const blur = (state.bgMode === 'image' && state.bgImageData)
+      ? parseInt($('bgBlurRange').value, 10) : 0;
+
+    // ── 형광펜 처리 ──────────────────────────────────────
+    // html2canvas 는 인라인 요소(mark)의 background 를 줄 단위로 잘못
+    // 칠한다. 그래서 캡처 직전 onclone 콜백에서, 복제본의 형광펜을
+    // 측정해둔 줄별 위치에 맞춰 '절대배치 div' 로 깔아준다.
+    // div(블록 요소)의 위치·배경은 html2canvas 가 정확히 그린다.
+    const hlRects = measureHighlights();   // quoteText 기준 좌표
+    const hlColor = state.hlColor;
+
+    const opt = {
+      scale: scale,
+      useCORS: true,
+      backgroundColor: null,
+      onclone: function (clonedDoc) {
+        const cqt = clonedDoc.getElementById('quoteText');
+        const ccard = clonedDoc.getElementById('card');
+        if (!cqt || !ccard) return;
+        // 복제본의 형광펜 배경은 숨김 (글자만 남김)
+        cqt.querySelectorAll('mark.qhl').forEach(mk => {
+          mk.style.backgroundColor = 'transparent';
+          mk.style.backgroundImage = 'none';
+        });
+        if (hlRects.length === 0) return;
+        // 형광펜 띠 div 를 card 직속에 절대배치로 삽입.
+        // quoteText 안이 아니라 card 직속에 넣는 이유: quoteText 에
+        // 걸린 scaleX(장평) 변형을 div 가 또 받으면 위치가 어긋남.
+        // card 직속이면 변형 영향 없이 측정한 그대로 그려진다.
+        // z-index:0 → cardBg/cardOverlay(z-index auto) 위,
+        //             card-inner(z-index:1, 글자) 아래에 깔림.
+        hlRects.forEach(r => {
+          const band = clonedDoc.createElement('div');
+          band.style.position = 'absolute';
+          band.style.left = r.x + 'px';
+          band.style.top = r.y + 'px';
+          band.style.width = r.w + 'px';
+          band.style.height = r.h + 'px';
+          band.style.background = hlColor;
+          band.style.zIndex = '0';
+          band.style.pointerEvents = 'none';
+          ccard.appendChild(band);
+        });
+      }
+    };
+
+    function lockCardSize() {}
+    function unlockCardSize() {}
+
+    function clipRound(ctx, w, h) {
+      if (radius <= 0) return;
+      const r = Math.min(radius, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(r, 0);
+      ctx.arcTo(w, 0, w, h, r);
+      ctx.arcTo(w, h, 0, h, r);
+      ctx.arcTo(0, h, 0, 0, r);
+      ctx.arcTo(0, 0, w, 0, r);
+      ctx.closePath();
+      ctx.clip();
+    }
+
+    if (blur > 0) {
+      // 배경 이미지 자체를 미리 블러 처리한 data URL 로 만들어,
+      // 캡처 동안만 cardBg 에 끼워넣는다. (html2canvas 는 일반 이미지처럼 캡처)
+      const savedBgImage = cardBg.style.backgroundImage;
+      const savedFilter = cardBg.style.filter;
+      const savedTransform = cardBg.style.transform;
+
+      return makeBlurredImage(state.bgImageData, blur).then(blurredURL => {
+        cardBg.style.filter = 'none';
+        cardBg.style.transform = 'none';
+        cardBg.style.backgroundImage = 'url(' + blurredURL + ')';
+
+        return html2canvas(card, opt).then(src => {
+          cardBg.style.backgroundImage = savedBgImage;
+          cardBg.style.filter = savedFilter;
+          cardBg.style.transform = savedTransform;
+          unlockCardSize();
+
+          const w = src.width, h = src.height;
+          const out = document.createElement('canvas');
+          out.width = w; out.height = h;
+          const ctx = out.getContext('2d');
+          clipRound(ctx, w, h);
+          ctx.drawImage(src, 0, 0);
+          return out;
+        }).catch(err => {
+          cardBg.style.backgroundImage = savedBgImage;
+          cardBg.style.filter = savedFilter;
+          cardBg.style.transform = savedTransform;
+          unlockCardSize();
+          throw err;
+        });
+      });
+    }
+
+    // 블러 없음 — 통째로 캡처 후 둥근 모서리만 적용
+    return html2canvas(card, opt).then(src => {
+      unlockCardSize();
+      const w = src.width, h = src.height;
+      const out = document.createElement('canvas');
+      out.width = w; out.height = h;
+      const ctx = out.getContext('2d');
+      clipRound(ctx, w, h);
+      ctx.drawImage(src, 0, 0);
+      return out;
+    }).catch(err => {
+      unlockCardSize();
+      throw err;
+    });
+  }
+
+  // 한 페이지를 렌더하고 끝나면 원래 페이지로 복귀
+  function renderPageCanvas(pageIdx) {
+    const keep = curPage;
+    curPage = pageIdx;
+    renderCard();
+    return renderCardCanvas().then(canvas => {
+      curPage = keep;
+      renderCard();
+      return canvas;
+    }).catch(err => {
+      curPage = keep;
+      renderCard();
+      throw err;
+    });
+  }
+
+  function saveImage() {
+    const pages = getPages();
+    if (pages.length <= 1) {
+      // 한 장
+      toast('이미지 생성 중...');
+      renderCardCanvas().then(canvas => {
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = 'quote-card.png';
+        a.click();
+        toast('이미지를 저장했습니다');
+        addHistory();
+      }).catch(() => toast('이미지 생성에 실패했습니다'));
+      return;
+    }
+    // 여러 장 — 순차로 한 장씩 저장
+    toast(pages.length + '장 생성 중...');
+    let i = 0;
+    function step() {
+      if (i >= pages.length) {
+        toast(pages.length + '장을 모두 저장했습니다');
+        addHistory();
+        return;
+      }
+      renderPageCanvas(i).then(canvas => {
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = 'quote-card-' + (i + 1) + '.png';
+        a.click();
+        i++;
+        // 브라우저가 연속 다운로드를 막지 않도록 약간 텀
+        setTimeout(step, 400);
+      }).catch(() => toast('이미지 생성에 실패했습니다'));
+    }
+    step();
+  }
+  function copyImage() {
+    if (!navigator.clipboard || !window.ClipboardItem) {
+      toast('이 브라우저는 이미지 복사를 지원하지 않습니다');
+      return;
+    }
+    // 복사는 현재 보고 있는 페이지 한 장만
+    toast('이미지 생성 중...');
+    renderCardCanvas().then(canvas => {
+      addHistory();   // 캔버스가 만들어졌으면 기록 (복사 성공 여부와 무관)
+      canvas.toBlob(blob => {
+        if (!blob) { toast('이미지 생성에 실패했습니다'); return; }
+        navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+          .then(() => toast('이미지를 클립보드에 복사했습니다'))
+          .catch(() => toast('이미지 복사에 실패했습니다'));
+      }, 'image/png');
+    }).catch(() => toast('이미지 생성에 실패했습니다'));
+  }
+  $('downloadBtn').addEventListener('click', saveImage);
+  $('copyBtn').addEventListener('click', copyImage);
+
+  // ============ 히스토리 ============
+  const HISTORY_KEY = 'quotecard:history';
+  const HISTORY_MAX = 20;
+  let history = [];
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (raw) history = JSON.parse(raw);
+    if (!Array.isArray(history)) history = [];
+  } catch { history = []; }
+  function saveHistory() {
+    function trySave() {
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); return true; }
+      catch { return false; }
+    }
+    // 0차: 일단 그대로
+    if (trySave()) return;
+    // 1차: 오래된 항목(뒤쪽)부터 지우며 재시도 — 새 항목(앞)은 지킴
+    while (history.length > 1) {
+      history.pop();
+      if (trySave()) { renderHistory(); return; }
+    }
+    // 2차: 항목 1개로도 안 되면 — 모든 항목의 배경 이미지를 떼고 재시도
+    history.forEach(h => {
+      if (h.settings) { h.settings.bgImageData = ''; h._bgDropped = true; }
+    });
+    if (trySave()) { renderHistory(); return; }
+    // 3차: 그래도 안 되면 썸네일까지 떼고 재시도
+    history.forEach(h => { h.thumb = ''; });
+    if (trySave()) { renderHistory(); return; }
+    // 4차: 최후 — 그 키를 비우고 새(맨앞) 항목 하나만, 배경·썸네일 없이
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+      if (history.length) {
+        const only = history[0];
+        if (only.settings) only.settings.bgImageData = '';
+        only.thumb = '';
+        history = [only];
+        if (trySave()) { renderHistory(); return; }
+      }
+    } catch {}
+    // 정말 안 되면 — 적어도 메모리상 배열은 유지 (이번 세션 내 동작)
+  }
+  // 현재 카드 상태를 히스토리에 추가 (작은 썸네일 포함)
+  // 현재 모든 편집 설정을 객체로 모음 (히스토리 저장용)
+  function captureSettings() {
+    const ids = ['sizeRange','textColor','accentColor','lineHeightRange',
+      'letterRange','scaleRange','gapRange','padRange','creditSizeRange',
+      'radiusRange','fontScaleRange','bgColor','gradColor1','gradColor2',
+      'dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange'];
+    const sliders = {};
+    ids.forEach(id => { if ($(id)) sliders[id] = $(id).value; });
+    return {
+      sliders: sliders,
+      fontFamily: state.fontFamily,
+      align: state.align,
+      weight: state.weight,
+      ratio: state.ratio,
+      wordBreak: state.wordBreak,
+      indent: state.indent,
+      quoteMark: state.quoteMark,
+      showCredit: state.showCredit,
+      shadow: state.shadow,
+      bgMode: state.bgMode,
+      bgImageData: state.bgImageData,
+      gradTypeIdx: (typeof gradTypeIdx !== 'undefined' ? gradTypeIdx : 0),
+      hlColor: state.hlColor
+    };
+  }
+
+  // 배경 이미지(data URL)를 히스토리 저장용으로 작게 압축.
+  // 원본은 수 MB 라 localStorage 한도(약 5MB)를 넘기 쉬우므로
+  // 가로 최대 1100px, JPEG 품질 0.72 로 줄인다.
+  function compressForHistory(dataURL) {
+    return new Promise(resolve => {
+      if (!dataURL) { resolve(''); return; }
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxW = 1100;
+          let w = img.naturalWidth || img.width;
+          let h = img.naturalHeight || img.height;
+          if (w > maxW) { h = Math.round(h * (maxW / w)); w = maxW; }
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(cv.toDataURL('image/jpeg', 0.72));
+        } catch { resolve(dataURL); }   // 압축 실패 시 원본
+      };
+      img.onerror = () => resolve(dataURL);
+      img.src = dataURL;
+    });
+  }
+
+  function addHistory() {
+    const pages = getPages();
+    const fullText = $('quoteInput').value.trim();
+    if (!fullText) return;
+
+    const now = new Date();
+    const stamp = (now.getMonth() + 1) + '월 ' + now.getDate() + '일 '
+      + String(now.getHours()).padStart(2, '0') + ':'
+      + String(now.getMinutes()).padStart(2, '0');
+    const settings = captureSettings();
+
+    // 기록 항목을 만들어 넣음 (썸네일·압축배경 채운 뒤 호출)
+    function commit(thumb) {
+      const entry = {
+        id: Date.now(),
+        text: fullText,
+        maker: makerInput.value.trim(),
+        char: charInput.value.trim(),
+        pageCount: pages.length,
+        thumb: thumb || '',
+        stamp: stamp,
+        settings: settings
+      };
+      if (history.length && history[0].text === fullText) {
+        history[0] = entry;
+      } else {
+        history.unshift(entry);
+      }
+      if (history.length > HISTORY_MAX) history = history.slice(0, HISTORY_MAX);
+      saveHistory();
+      renderHistory();
+    }
+
+    // 배경 이미지가 있으면 압축본으로 교체 (저장 용량 절약)
+    const bgPromise = (settings.bgMode === 'image' && settings.bgImageData)
+      ? compressForHistory(settings.bgImageData)
+      : Promise.resolve(settings.bgImageData);
+
+    bgPromise.then(compressedBg => {
+      settings.bgImageData = compressedBg || '';
+      // 썸네일 생성 시도 — 실패해도 기록은 남김
+      let canvasPromise;
+      try {
+        canvasPromise = renderCardCanvas();
+      } catch (err) {
+        commit('');
+        return;
+      }
+      canvasPromise.then(canvas => {
+        // 썸네일은 작게 — 히스토리 누적 용량 절약 (가로 96px, JPEG 0.55)
+        const tw = 96;
+        const th = Math.round(canvas.height * (tw / canvas.width));
+        const tc = document.createElement('canvas');
+        tc.width = tw; tc.height = th;
+        tc.getContext('2d').drawImage(canvas, 0, 0, tw, th);
+        let thumb = '';
+        try { thumb = tc.toDataURL('image/jpeg', 0.55); } catch {}
+        commit(thumb);
+      }).catch(() => commit(''));
+    });
+  }
+
+  // 히스토리에 저장된 설정을 현재 편집기에 복원
+  function restoreSettings(s) {
+    if (!s) return;
+    if (s.sliders) {
+      Object.keys(s.sliders).forEach(id => {
+        if ($(id)) $(id).value = s.sliders[id];
+      });
+    }
+    if (s.fontFamily) state.fontFamily = s.fontFamily;
+    if (s.align) state.align = s.align;
+    if (s.weight) state.weight = s.weight;
+    if (s.ratio) state.ratio = s.ratio;
+    if (s.wordBreak) state.wordBreak = s.wordBreak;
+    state.indent = !!s.indent;
+    state.quoteMark = !!s.quoteMark;
+    state.showCredit = s.showCredit !== false;
+    state.shadow = !!s.shadow;
+    if (s.bgMode) state.bgMode = s.bgMode;
+    state.bgImageData = s.bgImageData || '';
+    if (typeof s.gradTypeIdx === 'number' && typeof gradTypeIdx !== 'undefined') {
+      gradTypeIdx = s.gradTypeIdx;
+    }
+    if (s.hlColor) state.hlColor = s.hlColor;
+    // 버튼 active 상태 동기화
+    const setActive = (sel, fn) =>
+      document.querySelectorAll(sel).forEach(b => b.classList.toggle('active', fn(b)));
+    setActive('#alignSeg button', b => b.dataset.align === state.align);
+    setActive('#weightSeg button', b => b.dataset.weight === String(state.weight));
+    setActive('#breakSeg button', b => b.dataset.break === state.wordBreak);
+    setActive('#ratioSeg button', b => b.dataset.ratio === state.ratio);
+    setActive('#bgModeSeg button', b => b.dataset.mode === state.bgMode);
+    $('bgColorPanel').style.display = state.bgMode === 'color' ? '' : 'none';
+    $('bgGradPanel').style.display = state.bgMode === 'gradient' ? '' : 'none';
+    $('bgImagePanel').style.display = state.bgMode === 'image' ? '' : 'none';
+    $('indentToggle').classList.toggle('on', state.indent);
+    $('quoteToggle').classList.toggle('on', state.quoteMark);
+    $('creditToggle').classList.toggle('on', state.showCredit);
+    $('shadowToggle').classList.toggle('on', state.shadow);
+    renderFontGrid();
+    renderGradGrid();
+    renderHlSwatches();
+    applyStyle();
+    applyBackground();
+    renderCard();
+  }
+  function renderHistory() {
+    const wrap = $('historyList');
+    wrap.innerHTML = '';
+    if (history.length === 0) {
+      const e = document.createElement('div');
+      e.className = 'history-empty';
+      e.textContent = '아직 기록이 없어요';
+      wrap.appendChild(e);
+      return;
+    }
+    history.forEach((h, i) => {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'history-thumb';
+      if (h.thumb) thumb.style.backgroundImage = 'url(' + h.thumb + ')';
+
+      const info = document.createElement('div');
+      info.className = 'history-info';
+      const txt = document.createElement('div');
+      txt.className = 'history-text';
+      // 첫 줄만 미리보기로
+      txt.textContent = h.text.split('\n')[0];
+      const meta = document.createElement('div');
+      meta.className = 'history-meta';
+      const parts = [h.stamp];
+      if (h.pageCount > 1) parts.push(h.pageCount + '장');
+      if (h.char) parts.push(h.char);
+      meta.textContent = parts.join(' · ');
+      info.appendChild(txt);
+      info.appendChild(meta);
+
+      const del = document.createElement('button');
+      del.className = 'history-del';
+      del.textContent = '×';
+      del.title = '기록 삭제';
+      del.addEventListener('click', e => {
+        e.stopPropagation();
+        history = history.filter(x => x.id !== h.id);
+        saveHistory();
+        renderHistory();
+      });
+
+      // 항목 클릭 — 문구·제작자·캐릭터 + 글자/배경 설정 전체 복원
+      item.addEventListener('click', () => {
+        $('quoteInput').value = h.text;
+        if (h.maker) makerInput.value = h.maker;
+        if (h.char) charInput.value = h.char;
+        curPage = 0;
+        // 저장된 설정이 있으면 함께 복원
+        if (h.settings) restoreSettings(h.settings);
+        renderCard();
+        toast('이 기록을 불러왔어요');
+      });
+
+      item.appendChild(thumb);
+      item.appendChild(info);
+      item.appendChild(del);
+      wrap.appendChild(item);
+    });
+  }
+  $('historyClear').addEventListener('click', () => {
+    if (history.length === 0) return;
+    history = [];
+    saveHistory();
+    renderHistory();
+    toast('히스토리를 모두 지웠어요');
+  });
+  renderHistory();
+
+
+  // ============ 카드 우클릭 메뉴 ============
+  const ctxMenu = $('ctxMenu');
+  card.addEventListener('contextmenu', e => {
+    e.preventDefault(); // 브라우저 기본 메뉴 대신 커스텀 메뉴
+    ctxMenu.classList.add('show');
+    // 화면 밖으로 나가지 않게 위치 보정
+    const mw = 160, mh = 90;
+    let x = e.clientX, y = e.clientY;
+    if (x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
+    if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+    ctxMenu.style.left = x + 'px';
+    ctxMenu.style.top = y + 'px';
+  });
+  function closeCtx() { ctxMenu.classList.remove('show'); }
+  $('ctxCopy').addEventListener('click', () => { closeCtx(); copyImage(); });
+  $('ctxSave').addEventListener('click', () => { closeCtx(); saveImage(); });
+  document.addEventListener('click', closeCtx);
+  document.addEventListener('scroll', closeCtx, true);
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtx(); });
+
+  // ============ 초기화 ============
+  $('fontScaleRange').value = getFontScale(state.fontFamily);
+  renderFontGrid();
+  renderGradGrid();
+  renderPresetGrid();
+  applyStyle();
+  applyBackground();
+  renderCard();
+</script>
+<!-- ☁ 선택적 클라우드 동기화 — 로그인 안 하면 동작하지 않음(기존 로컬 방식 그대로). 데이터·테마·히스토리(이미지 포함) 동기화. -->
+<script type="module">
+(async () => {
+  let M;
+  try {
+    const [a, b, c] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js"),
+    ]);
+    M = { ...a, ...b, ...c };
+  } catch (e) { console.warn('[sync] Firebase 로드 실패 — 로컬 전용으로 계속 동작합니다.', e); return; }
+
+  const { initializeApp } = M;
+  const { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = M;
+  const { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } = M;
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD8k_W8RASawVHwKG8LwARGAZVuGEHNutk",
+    authDomain: "s62rry.firebaseapp.com",
+    projectId: "s62rry",
+    storageBucket: "s62rry.firebasestorage.app",
+    messagingSenderId: "780340867027",
+    appId: "1:780340867027:web:40fc4c3b156dc0650c8926"
+  };
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  /* ===== 동기화 대상 ===== */
+  const SMALL = ['quotecard:data', 'quotecard:theme'];   // 작음 → main 문서
+  const HIST = 'quotecard:history';                      // 큼(이미지) → 조각 문서
+  const COL_MAIN = 'qc_data', COL_HIST = 'qc_hist';
+  const CHUNK = 300000;                 // 조각 크기(글자). 한글=3바이트라 300k자 ≈ 최대 900KB < 1MB 안전
+  const LASTSIG_KEY = 'qc:lastSig', HS_KEY = 'qc:histSync';
+
+  const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h; };
+  function chunkStr(s) { const out = []; let i = 0; while (i < s.length) { let end = Math.min(s.length, i + CHUNK); if (end < s.length) { const c = s.charCodeAt(end - 1); if (c >= 0xD800 && c <= 0xDBFF) end--; } out.push(s.slice(i, end)); i = end; } return out; }
+  const getLastSig = () => { const x = localStorage.getItem(LASTSIG_KEY); return x == null ? null : +x; };
+  const setLastSig = s => { try { localStorage.setItem(LASTSIG_KEY, String(s)); } catch (e) {} };
+  const getHS = () => { try { return JSON.parse(localStorage.getItem(HS_KEY) || 'null'); } catch { return null; } };
+  const setHS = m => { try { localStorage.setItem(HS_KEY, JSON.stringify(m)); } catch (e) {} };
+
+  function localState() {
+    const v = {}; for (const k of SMALL) { const x = localStorage.getItem(k); if (x != null) v[k] = x; }
+    return { v, h: localStorage.getItem(HIST) || '' };
+  }
+  const stateSig = st => hash(SMALL.map(k => st.v[k] == null ? '\u0000' : st.v[k]).join('\u0001') + '\u0001' + st.h);
+  const isEmpty = st => Object.keys(st.v).length === 0 && !st.h;
+
+  /* ===== 스타일/버튼/모달 ===== */
+  const css = document.createElement('style');
+  css.textContent = `
+  #syncBtn{position:relative}
+  #syncBtn svg{width:20px;height:20px;display:block}
+  #syncBtn.on{color:var(--accent,#2f6df0)}
+  #syncBtn.on::after{content:'';position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;
+    background:#3fbf6f;border:2px solid var(--panel,#fff)}
+  #syncBtn.floating{position:fixed;right:16px;bottom:16px;z-index:9999;padding:9px 14px;border-radius:999px;
+    border:1px solid var(--border,#dde2ea);background:var(--panel,#fff);color:var(--text,#41454f);
+    font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.10)}
+  #syncMask{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:rgba(10,12,20,.45)}
+  #syncMask.show{display:flex}
+  #syncCard{width:min(340px,92vw);background:var(--panel,#fff);color:var(--text,#41454f);border:1px solid var(--border,#dde2ea);
+    border-radius:16px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  #syncCard h3{margin:0 0 4px;font-size:16px;color:var(--text-strong,#1a1d24)}
+  #syncCard p{margin:0 0 14px;font-size:12px;color:var(--text-dim,#858a99);line-height:1.55}
+  #syncCard input{width:100%;box-sizing:border-box;margin-bottom:9px;padding:10px 12px;border-radius:10px;
+    border:1px solid var(--border,#dde2ea);background:var(--bg,#f1f3f7);color:var(--text-strong,#1a1d24);font:inherit;font-size:13px}
+  #syncCard .row{display:flex;gap:8px;margin-top:6px}
+  #syncCard button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border,#dde2ea);background:var(--panel,#fff);
+    color:var(--text,#41454f);font:inherit;font-size:13px;font-weight:600;cursor:pointer;line-height:1.3}
+  #syncCard button small{font-weight:400;opacity:.75;font-size:11px}
+  #syncCard button.primary{background:var(--accent,#2f6df0);border-color:var(--accent,#2f6df0);color:#fff}
+  #syncCard .link{background:none;border:none;color:var(--accent,#2f6df0);font-size:12px;cursor:pointer;padding:4px;flex:none}
+  #syncErr{color:#e2466b;font-size:12px;min-height:16px;margin:2px 0 0}
+  `;
+  document.head.appendChild(css);
+
+  const btn = document.createElement('button');
+  btn.id = 'syncBtn'; btn.type = 'button'; btn.title = '로그인 / 클라우드 동기화';
+  btn.setAttribute('aria-label', '클라우드 동기화');
+  const CLOUD_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .4-8.98 6 6 0 0 0-11.64-1.3A4 4 0 0 0 6.5 16.9"/><path d="M12 13v7"/><path d="m9 16 3-3 3 3"/></svg>';
+  const hdr = document.querySelector('.header-actions');
+  if (hdr) { btn.className = 'icon'; btn.innerHTML = CLOUD_SVG; hdr.appendChild(btn); }
+  else { btn.className = 'floating'; btn.innerHTML = '<span class="lbl">로그인</span>'; document.body.appendChild(btn); }
+  const setLabel = t => { btn.title = '클라우드 동기화 · ' + t; const l = btn.querySelector('.lbl'); if (l) l.textContent = t; };
+
+  const mask = document.createElement('div');
+  mask.id = 'syncMask'; mask.innerHTML = '<div id="syncCard"></div>';
+  document.body.appendChild(mask);
+  const card = mask.querySelector('#syncCard');
+  const closeModal = () => mask.classList.remove('show');
+  mask.addEventListener('click', e => { if (e.target === mask) closeModal(); });
+
+  const toast = m => { const t = document.getElementById('toast'); if (t) { t.textContent = m; t.classList.add('show'); clearTimeout(t._st); t._st = setTimeout(() => t.classList.remove('show'), 1900); } else console.log('[sync]', m); };
+
+  const friendly = code => {
+    if (/invalid-email/.test(code)) return '이메일 형식이 올바르지 않아요.';
+    if (/missing-password|weak-password/.test(code)) return '비밀번호는 6자 이상이어야 해요.';
+    if (/email-already-in-use/.test(code)) return '이미 가입된 이메일이에요. 로그인해 주세요.';
+    if (/invalid-credential|wrong-password|user-not-found/.test(code)) return '이메일 또는 비밀번호가 맞지 않아요.';
+    if (/too-many-requests/.test(code)) return '시도가 많아요. 잠시 후 다시 해주세요.';
+    if (/network/.test(code)) return '네트워크 연결을 확인해 주세요.';
+    return '오류: ' + code;
+  };
+
+  function openLogin() {
+    let signup = false;
+    const submit = async () => {
+      const email = card.querySelector('#syEmail').value.trim();
+      const pw = card.querySelector('#syPw').value;
+      const err = card.querySelector('#syncErr');
+      if (!email || !pw) { err.textContent = '이메일과 비밀번호를 입력해주세요.'; return; }
+      err.textContent = '처리 중…';
+      try {
+        if (signup) await createUserWithEmailAndPassword(auth, email, pw);
+        else await signInWithEmailAndPassword(auth, email, pw);
+        closeModal();
+      } catch (ex) { err.textContent = friendly(ex.code || ex.message || ''); }
+    };
+    const render = () => {
+      card.innerHTML =
+        '<h3>' + (signup ? '회원가입' : '로그인') + '</h3>' +
+        '<p>로그인하면 카드 설정과 히스토리가 클라우드에 저장돼 다른 기기에서도 같은 계정으로 볼 수 있어요. 로그인 안 해도 이 기기에선 그대로 쓸 수 있어요.</p>' +
+        '<input id="syEmail" type="email" placeholder="이메일" autocomplete="username">' +
+        '<input id="syPw" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password">' +
+        '<p id="syncErr"></p>' +
+        '<div class="row"><button id="syCancel">취소</button><button id="syGo" class="primary">' + (signup ? '가입하기' : '로그인') + '</button></div>' +
+        '<div class="row"><button class="link" id="syToggle">' + (signup ? '이미 계정이 있어요 → 로그인' : '계정이 없어요 → 회원가입') + '</button></div>';
+      card.querySelector('#syCancel').onclick = closeModal;
+      card.querySelector('#syToggle').onclick = () => { signup = !signup; render(); };
+      card.querySelector('#syGo').onclick = submit;
+      card.querySelector('#syPw').onkeydown = e => { if (e.key === 'Enter') submit(); };
+    };
+    render();
+    mask.classList.add('show');
+    setTimeout(() => card.querySelector('#syEmail') && card.querySelector('#syEmail').focus(), 50);
+  }
+
+  function openAccount(email) {
+    const home = () => {
+      card.innerHTML =
+        '<h3>클라우드 동기화 켜짐</h3>' +
+        '<p>' + (email || '') + '<br>카드 설정·히스토리가 자동 저장돼요. 직접 맞추려면 아래 버튼을 쓰세요.</p>' +
+        '<div class="row"><button id="sySyncNow" class="primary">이 기기 → 클라우드 (올리기)</button></div>' +
+        '<div class="row"><button id="syPullNow">클라우드 → 이 기기 (받기)</button></div>' +
+        '<div class="row"><button id="syLogout">로그아웃</button></div>' +
+        '<div class="row"><button class="link" id="syClose2">닫기</button></div>';
+      card.querySelector('#syClose2').onclick = closeModal;
+      card.querySelector('#sySyncNow').onclick = async () => { closeModal(); toast('전체 동기화 중…'); await pushAll(true); toast('동기화됐어요'); };
+      card.querySelector('#syPullNow').onclick = confirmPull;
+      card.querySelector('#syLogout').onclick = async () => { closeModal(); await signOut(auth); };
+    };
+    const confirmPull = () => {
+      card.innerHTML =
+        '<h3>클라우드에서 불러올까요?</h3>' +
+        '<p>클라우드에 저장된 내용으로 <b>이 기기의 현재 카드·히스토리를 덮어써요.</b> 이 기기에만 있는 변경은 사라질 수 있어요.</p>' +
+        '<div class="row"><button id="syPullGo" class="primary">불러오기 <small>(이 기기 덮어씀)</small></button></div>' +
+        '<div class="row"><button id="syPullCancel">취소</button></div>';
+      card.querySelector('#syPullCancel').onclick = home;
+      card.querySelector('#syPullGo').onclick = async () => { closeModal(); toast('불러오는 중…'); await pull(); };
+    };
+    home();
+    mask.classList.add('show');
+  }
+
+  /* ===== 동기화 ===== */
+  let user = null, pulling = false, pushing = false, pushTimer = null, pollTimer = null, lastFail = 0;
+  const mainDoc = () => doc(db, 'users', user.uid, COL_MAIN, 'main');
+  const histDoc = id => doc(db, 'users', user.uid, COL_HIST, id);
+
+  async function pushAll(force) {
+    if (!user || pushing) return;
+    pushing = true;
+    try {
+      const st = localState();
+      const sg = stateSig(st);
+      const hs = getHS();
+      let hn;
+      if (!force && hs && hs.len === st.h.length) {
+        hn = hs.n || 0;                                  // 히스토리 변동 없음
+      } else {
+        const chunks = st.h ? chunkStr(st.h) : [];
+        let prevN = hs ? (hs.n || 0) : 0;
+        if (force) { try { const m0 = await getDoc(mainDoc()); if (m0.exists() && typeof m0.data().hn === 'number') prevN = Math.max(prevN, m0.data().hn); } catch (e) {} }
+        let batch = writeBatch(db), ops = 0, bytes = 0;
+        const flush = async () => { if (ops >= 200 || bytes > 4000000) { await batch.commit(); batch = writeBatch(db); ops = 0; bytes = 0; } };
+        for (let i = 0; i < chunks.length; i++) { batch.set(histDoc(String(i)), { d: chunks[i] }); ops++; bytes += chunks[i].length * 3; await flush(); }
+        for (let i = chunks.length; i < prevN; i++) { batch.delete(histDoc(String(i))); ops++; await flush(); }   // 남는 옛 조각 정리
+        if (ops) await batch.commit();
+        hn = chunks.length;
+        setHS({ len: st.h.length, n: hn });
+      }
+      await setDoc(mainDoc(), { v: st.v, hn, sig: sg });
+      setLastSig(sg);
+    } catch (e) { console.warn('[sync] push 실패', e); const t = Date.now(); if (t - lastFail > 30000) { lastFail = t; toast('동기화 지연 — 잠시 후 자동으로 다시 시도해요'); } }
+    finally { pushing = false; }
+  }
+
+  async function pull() {
+    pulling = true;
+    try {
+      const m = await getDoc(mainDoc());
+      if (m.exists()) {
+        const v = m.data().v || {};
+        for (const k of SMALL) { if (v[k] != null) localStorage.setItem(k, v[k]); else localStorage.removeItem(k); }
+        const hn = m.data().hn || 0;
+        if (hn > 0) {
+          const snap = await getDocs(collection(db, 'users', user.uid, COL_HIST));
+          const cm = {}; snap.forEach(d => { if (/^\d+$/.test(d.id)) cm[+d.id] = d.data().d || ''; });
+          const parts = []; for (let i = 0; i < hn; i++) parts.push(cm[i] || '');
+          const joined = parts.join('');
+          localStorage.setItem(HIST, joined); setHS({ len: joined.length, n: hn });
+        } else { localStorage.removeItem(HIST); setHS({ len: 0, n: 0 }); }
+        setLastSig(m.data().sig);
+      }
+    } finally { pulling = false; }
+    location.reload();
+  }
+
+  const schedulePush = () => { clearTimeout(pushTimer); pushTimer = setTimeout(() => pushAll(false), 1500); };
+  function startWatch() { clearInterval(pollTimer); pollTimer = setInterval(() => { if (!user || pulling || pushing) return; if (stateSig(localState()) !== getLastSig()) schedulePush(); }, 5000); }
+  function stopWatch() { clearInterval(pollTimer); pollTimer = null; }
+
+  const _set = localStorage.setItem.bind(localStorage);
+  localStorage.setItem = function (k, v) { _set(k, v); try { if ((SMALL.includes(k) || k === HIST) && user && !pulling) schedulePush(); } catch (e) {} };
+  const _rm = localStorage.removeItem.bind(localStorage);
+  localStorage.removeItem = function (k) { _rm(k); try { if ((SMALL.includes(k) || k === HIST) && user && !pulling) schedulePush(); } catch (e) {} };
+  window.addEventListener('pagehide', () => { if (user && pushTimer) { clearTimeout(pushTimer); pushAll(false); } });
+
+  async function firstSync() {
+    let m; try { m = await getDoc(mainDoc()); } catch (e) { startWatch(); return; }
+    const st = localState();
+    const localSig = stateSig(st);
+    const cloudExists = m.exists();
+    // 구버전(데이터만, sig 없음) 클라우드 → 새 형식으로 업그레이드(히스토리 포함)
+    if (cloudExists && m.data().sig == null) { if (!isEmpty(st)) { toast('동기화 업그레이드 중…'); await pushAll(true); toast('동기화 켜짐'); } startWatch(); return; }
+    const cloudSig = cloudExists ? m.data().sig : null;
+    const lastSig = getLastSig();
+    if (!cloudExists) { if (!isEmpty(st)) { toast('클라우드에 백업 중…'); await pushAll(true); toast('클라우드 동기화 켜짐'); } setLastSig(localSig); startWatch(); return; }
+    if (cloudSig === localSig) { setLastSig(cloudSig); startWatch(); return; }                 // 이미 같음
+    if (isEmpty(st) || localSig === lastSig) { toast('클라우드 불러오는 중…'); await pull(); return; }   // 이 기기는 그대로·비었음 → 받기
+    if (cloudSig === lastSig) { toast('클라우드에 백업 중…'); await pushAll(false); startWatch(); return; }  // 이 기기만 바뀜 → 올리기
+    // 마지막 동기화 이후 양쪽 다 바뀜 → 진짜 충돌일 때만 물어봄
+    card.innerHTML =
+      '<h3>데이터가 양쪽에서 바뀌었어요</h3>' +
+      '<p>이 기기와 클라우드 양쪽이 마지막 동기화 이후 각각 바뀌었어요. 어느 쪽으로 맞출까요? <b>(고른 쪽이 남고 다른 쪽은 덮어써져요.)</b></p>' +
+      '<div class="row"><button id="syPull" class="primary">클라우드 불러오기 <small>(이 기기 덮어씀)</small></button></div>' +
+      '<div class="row"><button id="syPush">이 기기 올리기 <small>(클라우드 덮어씀)</small></button></div>';
+    mask.classList.add('show');
+    card.querySelector('#syPull').onclick = async () => { closeModal(); toast('불러오는 중…'); await pull(); };
+    card.querySelector('#syPush').onclick = async () => { closeModal(); toast('올리는 중…'); await pushAll(true); toast('클라우드에 올렸어요'); startWatch(); };
+  }
+
+  btn.onclick = () => { if (user) openAccount(user.email); else openLogin(); };
+
+  onAuthStateChanged(auth, async u => {
+    user = u;
+    if (u) { btn.classList.add('on'); setLabel(u.email ? u.email.split('@')[0] : '동기화 켜짐'); await firstSync(); }
+    else { btn.classList.remove('on'); setLabel('로그인'); stopWatch(); }
+  });
+})();
+</script>
+</body>
+</html>
