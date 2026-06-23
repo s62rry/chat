@@ -541,17 +541,21 @@
   .hl-excerpt:hover { opacity: 0.88; }
   /* 형광펜 — 칠한 텍스트 */
   mark.hl {
-    border-radius: 3px; padding: 0.05em 0.12em;
-    background: #fff3a8; color: inherit;
+    border-radius: 2px;
+    padding: 0 0.1em;
+    /* 글자보다 살짝 낮은 높이 — 위아래 여백 생기게 */
+    box-shadow: 0 -0.05em 0 0.55em #fff3a8 inset;
+    background: transparent;
+    color: inherit;
   }
-  mark.hl.hl-yellow { background: #fff3a8; }
-  mark.hl.hl-green  { background: #b6f0c4; }
-  mark.hl.hl-pink   { background: #ffc4dd; }
-  mark.hl.hl-blue   { background: #bcdcff; }
-  [data-theme="dark"] mark.hl.hl-yellow { background: #6b5d1a; color: #fff; }
-  [data-theme="dark"] mark.hl.hl-green  { background: #1f5a36; color: #fff; }
-  [data-theme="dark"] mark.hl.hl-pink   { background: #6e2348; color: #fff; }
-  [data-theme="dark"] mark.hl.hl-blue   { background: #1f456e; color: #fff; }
+  mark.hl.hl-yellow { box-shadow: 0 -0.05em 0 0.55em #fff3a8 inset; }
+  mark.hl.hl-green  { box-shadow: 0 -0.05em 0 0.55em #b6f0c4 inset; }
+  mark.hl.hl-pink   { box-shadow: 0 -0.05em 0 0.55em #ffc4dd inset; }
+  mark.hl.hl-blue   { box-shadow: 0 -0.05em 0 0.55em #bcdcff inset; }
+  [data-theme="dark"] mark.hl.hl-yellow { box-shadow: 0 -0.05em 0 0.55em #6b5d1a inset; color: #fff; }
+  [data-theme="dark"] mark.hl.hl-green  { box-shadow: 0 -0.05em 0 0.55em #1f5a36 inset; color: #fff; }
+  [data-theme="dark"] mark.hl.hl-pink   { box-shadow: 0 -0.05em 0 0.55em #6e2348 inset; color: #fff; }
+  [data-theme="dark"] mark.hl.hl-blue   { box-shadow: 0 -0.05em 0 0.55em #1f456e inset; color: #fff; }
   /* 형광펜 색 고르는 팔레트 */
   .hl-palette {
     position: absolute; z-index: 900;
@@ -3216,9 +3220,10 @@ function showHlPalette(x, y, tid, selText) {
   ex.addEventListener("click", () => {
     const text = selText.trim();
     if (!text) return;
-    // localStorage로 발췌메이커에 텍스트 전달
-    try { localStorage.setItem("qc:incoming", JSON.stringify({ text, ts: Date.now() })); } catch(e) {}
-    // 새 탭으로 발췌메이커 열기
+    // 현재 활성 채팅방 이름을 캐릭터명으로 전달
+    const chat = getActive();
+    const charName = (chat && chat.title) || '';
+    try { localStorage.setItem("qc:incoming", JSON.stringify({ text, charName, ts: Date.now() })); } catch(e) {}
     window.open("https://s62rry.github.io/chat/card_maker.html", "qc_maker");
     closeHlPalette();
     window.getSelection().removeAllRanges();
