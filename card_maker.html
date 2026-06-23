@@ -2331,9 +2331,8 @@
   // getClientRects 는 이미 scaleX 가 적용된 화면 실제 위치를 주므로
   // card 직속 div 에 그대로 쓰면 화면과 정확히 일치한다.
   function measureHighlights() {
-    // card-inner 기준으로 위치를 잼 — card padding 영향 없이 글자 영역 기준
-    const cardInner = card.querySelector('.card-inner');
-    const baseRect = (cardInner || card).getBoundingClientRect();
+    // card 기준으로 위치를 잼
+    const baseRect = card.getBoundingClientRect();
     const marks = quoteText.querySelectorAll('mark.qhl');
     const rects = [];
     marks.forEach(mk => {
@@ -2384,22 +2383,25 @@
           mk.style.backgroundImage = 'none';
         });
         if (hlRects.length === 0) return;
-        // band를 card-inner 직속에 삽입 — measureHighlights와 같은 기준점
-        const ccardInner = ccard.querySelector('.card-inner') || ccard;
-        // card-inner가 position:relative여야 절대배치 기준이 됨
-        ccardInner.style.position = 'relative';
+        // band를 card 직속에, card-inner(z-index:1) 바로 아래에 삽입
+        // card-inner 앞에 삽입 → DOM 순서상 card-inner 아래에 깔림
+        const ccardInner = ccard.querySelector('.card-inner');
         hlRects.forEach(r => {
           const band = clonedDoc.createElement('div');
-          band.style.position = 'absolute';
-          band.style.left = r.x + 'px';
-          band.style.top = r.y + 'px';
-          band.style.width = r.w + 'px';
-          band.style.height = r.h + 'px';
-          band.style.background = hlColor;
-          band.style.borderRadius = '2px';
-          band.style.zIndex = '0';
-          band.style.pointerEvents = 'none';
-          ccardInner.appendChild(band);
+          band.style.cssText = [
+            'position:absolute',
+            'left:' + r.x + 'px',
+            'top:' + r.y + 'px',
+            'width:' + r.w + 'px',
+            'height:' + r.h + 'px',
+            'background:' + hlColor,
+            'border-radius:2px',
+            'z-index:0',
+            'pointer-events:none'
+          ].join(';');
+          // card-inner 앞에 삽입해서 글자 아래에 깔리게
+          if (ccardInner) ccard.insertBefore(band, ccardInner);
+          else ccard.appendChild(band);
         });
       }
     };
