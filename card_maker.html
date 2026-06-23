@@ -734,6 +734,14 @@
           <span class="hl-swatches" id="hlSwatches"><!-- JS --></span>
         </span>
       </div>
+      <div class="format-help" style="margin-top:5px;">
+        <span class="fh-tip" style="color:var(--text-dim);">글씨색: 범위 선택 후 색 선택</span>
+        <span style="display:flex;align-items:center;gap:5px;">
+          <input type="color" id="textColorPick" value="#e74c3c" style="width:22px;height:22px;padding:0;border:none;border-radius:4px;cursor:pointer;background:none;">
+          <button class="mini-btn" id="applyTextColor" type="button">글씨색 적용</button>
+          <button class="mini-btn" id="removeTextColor" type="button">글씨색 제거</button>
+        </span>
+      </div>
       <div class="multi-help">
         줄에 <b>---</b> 만 입력해 구분하면 여러 장의 카드로 나뉘어요.
         <button class="mini-btn" id="insertSepBtn" type="button">--- 넣기</button>
@@ -1701,6 +1709,33 @@
     if (curPage < pages.length - 1) { curPage++; renderCard(); }
   });
   // 구분선 넣기 버튼 — 현재 커서 위치에 --- 줄 삽입
+  // 글씨색 범위 적용
+  $('applyTextColor').addEventListener('click', () => {
+    const ta = $('quoteInput');
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    if (s === e) { alert('색을 바꿀 텍스트를 먼저 선택하세요.'); return; }
+    const color = $('textColorPick').value;
+    const selected = ta.value.slice(s, e);
+    const wrapped = '{' + color + '|' + selected + '}';
+    ta.value = ta.value.slice(0, s) + wrapped + ta.value.slice(e);
+    ta.selectionStart = s;
+    ta.selectionEnd = s + wrapped.length;
+    ta.dispatchEvent(new Event('input'));
+    ta.focus();
+  });
+  // 글씨색 제거 — {#xxx|...} 마크업 벗기기
+  $('removeTextColor').addEventListener('click', () => {
+    const ta = $('quoteInput');
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const sel = ta.value.slice(s, e);
+    const cleaned = sel.replace(/{#[0-9a-fA-F]{3,6}|([^}]+)}/g, '$1');
+    if (cleaned === sel) { alert('선택 범위에 글씨색 마크업이 없어요.'); return; }
+    ta.value = ta.value.slice(0, s) + cleaned + ta.value.slice(e);
+    ta.selectionStart = s;
+    ta.selectionEnd = s + cleaned.length;
+    ta.dispatchEvent(new Event('input'));
+    ta.focus();
+  });
   $('insertSepBtn').addEventListener('click', () => {
     const ta = $('quoteInput');
     const v = ta.value;
@@ -2118,38 +2153,44 @@
   }
   applyTheme(localStorage.getItem(THEME_KEY) || 'light');
 
-  // 로그 보관함에서 발췌 버튼으로 보낸 텍스트 자동 수신
+  // 로그 보관함에서 발췌 버튼으로 보낸 텍스트 + 캐릭터명 자동 수신
+  function applyIncoming(payload) {
+    try {
+      const { text, charName, ts } = payload;
+      if (Date.now() - ts > 5 * 60 * 1000) return;
+      localStorage.removeItem('qc:incoming');
+      if (!text) return;
+      // 발췌 문구 입력
+      const ta = $('quoteInput');
+      ta.value = text;
+      ta.dispatchEvent(new Event('input'));
+      // 캐릭터명 자동 입력 + 제작자 연동
+      if (charName) {
+        const charInput = $('charInput');
+        charInput.value = charName;
+        charInput.dispatchEvent(new Event('input'));
+        // data.pairs에서 이 캐릭터의 제작자 찾아서 자동 입력
+        const pair = data.pairs.find(p => p.char === charName);
+        if (pair && pair.maker) {
+          const makerInput = $('makerInput');
+          makerInput.value = pair.maker;
+          makerInput.dispatchEvent(new Event('input'));
+        }
+      }
+      ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      ta.focus();
+    } catch(e) {}
+  }
   (function checkIncoming() {
     try {
       const raw = localStorage.getItem('qc:incoming');
       if (!raw) return;
-      const { text, ts } = JSON.parse(raw);
-      // 5분 이내 데이터만 처리 (오래된 거 무시)
-      if (Date.now() - ts > 5 * 60 * 1000) { localStorage.removeItem('qc:incoming'); return; }
-      localStorage.removeItem('qc:incoming');
-      if (!text) return;
-      const ta = $('quoteInput');
-      ta.value = text;
-      ta.dispatchEvent(new Event('input'));
-      // quoteInput으로 스크롤
-      ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      ta.focus();
+      applyIncoming(JSON.parse(raw));
     } catch(e) {}
   })();
-  // storage 이벤트로 실시간 감지 (같은 브라우저 다른 탭)
   window.addEventListener('storage', e => {
     if (e.key !== 'qc:incoming' || !e.newValue) return;
-    try {
-      const { text, ts } = JSON.parse(e.newValue);
-      if (Date.now() - ts > 5 * 60 * 1000) return;
-      localStorage.removeItem('qc:incoming');
-      if (!text) return;
-      const ta = $('quoteInput');
-      ta.value = text;
-      ta.dispatchEvent(new Event('input'));
-      ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      ta.focus();
-    } catch(e) {}
+    try { applyIncoming(JSON.parse(e.newValue)); } catch(e) {}
   });
   $('themeBtn').addEventListener('click', () => {
     const next = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
