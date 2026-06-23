@@ -429,7 +429,7 @@
     color: inherit;
     background-color: var(--hl-color);
     background-image: none;
-    padding: 0.08em 0.15em;
+    padding: 0.1em 0.15em;
   }
 
   /* 미리보기 드래그 서식 툴바 */
@@ -2424,6 +2424,7 @@
           band.style.width = r.w + 'px';
           band.style.height = r.h + 'px';
           band.style.background = hlColor;
+          band.style.borderRadius = '3px';
           band.style.zIndex = '0';
           band.style.pointerEvents = 'none';
           ccard.appendChild(band);
