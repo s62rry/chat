@@ -1106,8 +1106,71 @@
     showToast('HTML 파일을 다운로드했습니다');
   });
 
+  // ===== 외부 이미지를 base64 data URL 로 인라인화 =====
+  // 캡처(html2canvas) 는 다른 도메인 이미지의 픽셀을 직접 읽지 못해(CORS) PNG 에서 빠진다.
+  // 캡처 직전에 외부 이미지를 fetch → data URL 로 바꿔두면 '동일 출처' 가 되어 정상 포함된다.
+  // 직접 fetch 가 CORS 로 막히는 호스트는 공개 CORS 프록시로 폴백한다.
+  const CORS_PROXIES = [
+    u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
+    u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+    u => 'https://thingproxy.freeboard.io/fetch/' + u
+  ];
+
+  function blobToDataURL(blob) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+  }
+
+  async function fetchAsDataURL(url) {
+    // 1) 직접 시도 (CORS 헤더를 주는 호스트는 이걸로 끝)
+    try {
+      const r = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+      if (r.ok) return await blobToDataURL(await r.blob());
+    } catch (_) {}
+    // 2) 프록시 폴백
+    for (const make of CORS_PROXIES) {
+      try {
+        const r = await fetch(make(url), { cache: 'force-cache' });
+        if (r.ok) {
+          const b = await r.blob();
+          if (b.size > 0) return await blobToDataURL(b);
+        }
+      } catch (_) {}
+    }
+    return null; // 전부 실패 → 원본 유지
+  }
+
+  // 외부 이미지를 모두 인라인화하고, 캡처 후 되돌릴 복원 함수를 반환
+  async function inlineExternalImages(doc) {
+    const restores = [];
+    const imgs = Array.from(doc.querySelectorAll('img'));
+    await Promise.all(imgs.map(async img => {
+      const src = img.getAttribute('src') || '';
+      // data:/blob: 및 같은 출처 이미지는 그대로 둠
+      if (!src || src.startsWith('data:') || src.startsWith('blob:')) return;
+      let abs;
+      try { abs = new URL(src, doc.baseURI).href; } catch (_) { return; }
+      if (abs.startsWith(location.origin)) return; // 같은 출처면 변환 불필요
+      const dataUrl = await fetchAsDataURL(abs);
+      if (dataUrl) {
+        restores.push([img, src]);
+        img.setAttribute('src', dataUrl);
+        img.removeAttribute('srcset'); // srcset 이 있으면 data URL 을 덮어쓸 수 있어 제거
+      }
+    }));
+    // 바꾼 이미지가 새 src 로 디코드될 때까지 대기
+    await Promise.all(restores.map(([img]) =>
+      img.decode ? img.decode().catch(() => {}) : Promise.resolve()
+    ));
+    return () => restores.forEach(([img, src]) => img.setAttribute('src', src));
+  }
+
   // PNG 다운로드
-  document.getElementById('pngBtn').addEventListener('click', () => {
+  document.getElementById('pngBtn').addEventListener('click', async () => {
     const doc = preview.contentDocument;
     const win = preview.contentWindow;
     if (!doc || !doc.body) { showToast('미리보기를 불러올 수 없습니다'); return; }
@@ -1118,28 +1181,38 @@
     const prevY = win ? win.scrollY : 0;
     if (win) win.scrollTo(0, 0);
 
-    html2canvas(doc.body, {
-      backgroundColor: '#ffffff',
-      scale: 2,
-      width: doc.body.scrollWidth,
-      height: doc.body.scrollHeight,
-      windowWidth: doc.body.scrollWidth,
-      windowHeight: doc.body.scrollHeight,
-      scrollX: 0,
-      scrollY: 0,
-      x: 0,
-      y: 0
-    }).then(canvas => {
-      if (win) win.scrollTo(prevX, prevY); // 캡처 후 원래 스크롤 위치 복원
+    let restore = () => {};
+    try {
+      // 외부 이미지를 먼저 인라인화 (이게 핵심)
+      restore = await inlineExternalImages(doc);
+
+      const canvas = await html2canvas(doc.body, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,        // CORS 허용 이미지 직접 사용
+        allowTaint: false,    // 오염되면 toDataURL 이 막히므로 false 유지
+        imageTimeout: 15000,
+        width: doc.body.scrollWidth,
+        height: doc.body.scrollHeight,
+        windowWidth: doc.body.scrollWidth,
+        windowHeight: doc.body.scrollHeight,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0
+      });
+
       const a = document.createElement('a');
       a.href = canvas.toDataURL('image/png');
       a.download = 'preview.png';
       a.click();
       showToast('PNG 이미지를 다운로드했습니다');
-    }).catch(() => {
-      if (win) win.scrollTo(prevX, prevY);
+    } catch (e) {
       showToast('PNG 생성에 실패했습니다');
-    });
+    } finally {
+      restore();                              // 원본 이미지 src 복원
+      if (win) win.scrollTo(prevX, prevY);    // 원래 스크롤 위치 복원
+    }
   });
 
   // ===== 새 문서 / 초기화 =====
