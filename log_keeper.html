@@ -529,6 +529,15 @@
   .turn-tool.del:hover { background: #4a2230; color: #ff9ab0; }
   [data-theme="light"] .turn-tool.del:hover { background: #fdeaee; color: #e0556b; }
   .turn-body { padding: 4.83em; font-size: 14.5px; }
+  .hl-excerpt {
+    display: flex; align-items: center; gap: 5px;
+    padding: 0 10px; height: 28px;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 6px;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .hl-excerpt:hover { opacity: 0.88; }
   /* 형광펜 — 칠한 텍스트 */
   mark.hl {
     border-radius: 3px; padding: 0.05em 0.12em;
@@ -3198,6 +3207,22 @@ function showHlPalette(x, y, tid, selText) {
   er.title = "형광펜 지우기";
   er.addEventListener("click", () => { removeHighlight(tid, selText); closeHlPalette(); });
   pal.appendChild(er);
+  const ex = document.createElement("button");
+  ex.className = "hl-excerpt";
+  ex.textContent = "✂ 발췌";
+  ex.title = "발췌 이미지 메이커로 보내기";
+  ex.addEventListener("click", () => {
+    const text = selText.trim();
+    if (!text) return;
+    const chat = getActive();
+    const charName = (chat && chat.title) || '';
+    try { localStorage.setItem("qc:incoming", JSON.stringify({ text, charName, ts: Date.now() })); } catch(e) {}
+    window.open("https://s62rry.github.io/chat/card_maker.html", "qc_maker");
+    closeHlPalette();
+    window.getSelection().removeAllRanges();
+    toast("발췌 이미지 메이커로 보냈어요!");
+  });
+  pal.appendChild(ex);
   document.body.appendChild(pal);
   // 화면 밖으로 안 나가게 위치 보정
   const pw = pal.offsetWidth, ph = pal.offsetHeight;
