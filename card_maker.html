@@ -927,6 +927,19 @@
     <small>quote card</small>
   </div>
   <div class="header-actions">
+    <button class="icon" id="dataExport" title="설정·목록을 파일로 내보내기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v11"/><polyline points="8 10 12 14 16 10"/>
+        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+      </svg>
+    </button>
+    <button class="icon" id="dataImportBtn" title="백업 파일에서 불러오기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 14V3"/><polyline points="8 7 12 3 16 7"/>
+        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+      </svg>
+    </button>
+    <input type="file" id="dataImport" accept="application/json,.json" style="display:none;">
     <button class="icon" id="resetBtn" title="전체 초기화">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 12a9 9 0 1 1 3 6.7L3 16"/>
@@ -973,6 +986,18 @@
       <div class="fmt-bar">
         <button class="fmt-btn" id="indentBtn" type="button" title="커서가 있는 문단(또는 선택한 문단들)을 들여씀">들여쓰기</button>
         <button class="fmt-btn" id="quoteBtn" type="button" data-pop="quotePop" title="인용부호 모양을 골라 감쌈 (Ctrl+Q 는 마지막 모양)">인용부호 <span class="pop-caret">▾</span></button>
+        <span class="fmt-gap"></span>
+        <button class="fmt-btn" type="button" data-pop="tidyPop" title="붙여넣은 글 다듬기">정리 <span class="pop-caret">▾</span></button>
+      </div>
+      <div class="fmt-pop" id="tidyPop">
+        <div class="fmt-bar" style="margin:0;">
+          <button class="fmt-btn" id="tidySpace" type="button">빈 줄 · 공백 정리</button>
+          <button class="fmt-btn" id="tidyClear" type="button">적용된 서식 지우기</button>
+        </div>
+        <div class="hint" style="margin-top:6px;">
+          <b>빈 줄 · 공백 정리</b> — 줄 끝 공백을 없애고, 연달아 비어 있는 줄을 하나로 줄입니다.<br>
+          <b>적용된 서식 지우기</b> — 굵게·기울임·형광펜·글씨색을 모두 없애고 글자만 남깁니다. 범위를 선택해 두면 그 부분만, 선택하지 않으면 전체가 대상입니다.
+        </div>
       </div>
       <!-- 글자 단위 — 범위를 선택하고 누르면 걸리고, 다시 누르면 벗겨짐 -->
       <div class="fmt-bar" style="margin-top:0;">
@@ -1312,6 +1337,20 @@
           <span class="slider-val" id="creditSizeVal">15px</span>
         </div>
       </div>
+      <div class="row">
+        <div class="col-swatch">
+          <label class="field-label">외곽선 색</label>
+          <input type="color" class="swatch-input" id="strokeColor" value="#000000">
+        </div>
+        <div>
+          <label class="field-label">글자 외곽선</label>
+          <div class="slider-row">
+            <input type="range" id="strokeRange" min="0" max="6" step="0.5" value="0">
+            <span class="slider-val" id="strokeVal">0px</span>
+          </div>
+        </div>
+      </div>
+
       <div class="field-group opt-group" id="shadowOpts" style="display:none;">
         <label class="field-label">글자 그림자</label>
         <div class="row">
@@ -1382,19 +1421,6 @@
         <div class="slider-row">
           <input type="range" id="offsetXRange" min="-200" max="200" value="0">
           <span class="slider-val" id="offsetXVal">0px</span>
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label class="field-label">테두리 굵기</label>
-          <div class="slider-row">
-            <input type="range" id="borderRange" min="0" max="16" value="0">
-            <span class="slider-val" id="borderVal">0px</span>
-          </div>
-        </div>
-        <div class="col-swatch">
-          <label class="field-label">테두리 색</label>
-          <input type="color" class="swatch-input" id="borderColor" value="#1a1d24">
         </div>
       </div>
       <div class="field-group" style="margin-top:9px;">
@@ -1475,14 +1501,35 @@
         </div>
       </div>
 
-      <div class="field-group" style="margin-top:13px;">
-        <label class="field-label">배경 밝기 보정</label>
-        <div class="slider-row">
-          <input type="range" id="dimRange" min="-80" max="80" value="35">
-          <span class="slider-val" id="dimVal">어둡게 35%</span>
+      <div class="row" style="margin-top:13px;">
+        <div class="col-swatch">
+          <label class="field-label">막 색</label>
+          <input type="color" class="swatch-input" id="dimColor" value="#000000">
         </div>
-        <div class="hint">왼쪽으로 밀면 배경 위에 흰 막(밝게), 오른쪽으로 밀면 검은 막(어둡게)을 덮어 글자가 잘 보이게 합니다.</div>
+        <div>
+          <label class="field-label">막 진하기</label>
+          <div class="slider-row">
+            <input type="range" id="dimRange" min="-80" max="80" value="35">
+            <span class="slider-val" id="dimVal">35%</span>
+          </div>
+        </div>
       </div>
+      <div class="hint">배경 위에 고른 색의 막을 덮어 글자가 잘 보이게 합니다. 왼쪽으로 밀면 흰 막이 덮여 밝아집니다.</div>
+
+      <div class="row">
+        <div>
+          <label class="field-label">테두리 굵기</label>
+          <div class="slider-row">
+            <input type="range" id="borderRange" min="0" max="16" value="0">
+            <span class="slider-val" id="borderVal">0px</span>
+          </div>
+        </div>
+        <div class="col-swatch">
+          <label class="field-label">테두리 색</label>
+          <input type="color" class="swatch-input" id="borderColor" value="#1a1d24">
+        </div>
+      </div>
+
     </div>
 
     <!-- 꾸미기 -->
@@ -1603,21 +1650,46 @@
       </div>
     </div>
 
+    <!-- 저장 / 미리보기 -->
+    <div class="section">
+      <div class="section-title">저장</div>
+      <div class="field-group">
+        <label class="field-label">저장 형식</label>
+        <div class="seg" id="fmtSeg">
+          <button data-fmt2="png" class="active">PNG</button>
+          <button data-fmt2="jpg">JPG</button>
+          <button data-fmt2="webp">WebP</button>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="field-label">저장 가로 크기</label>
+          <div class="slider-row">
+            <input type="range" id="outWidthRange" min="600" max="2400" step="20" value="1360">
+            <span class="slider-val" id="outWidthVal">1360px</span>
+          </div>
+        </div>
+        <div id="qualityBox" style="display:none;">
+          <label class="field-label">품질</label>
+          <div class="slider-row">
+            <input type="range" id="qualityRange" min="40" max="100" value="92">
+            <span class="slider-val" id="qualityVal">92%</span>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- 색 테마 프리셋 -->
     <div class="section">
-      <div class="section-title">색 테마</div>
+      <div class="section-title">색 테마 &amp; 프리셋</div>
       <div class="preset-grid" id="presetGrid"></div>
-      <div class="hint">자주 쓰는 배경색·글자색 조합을 한 번에 적용합니다.</div>
-    </div>
+      <div class="hint">기본 테마는 색만 바꿉니다. <b>+ 저장</b>으로 직접 저장한 것은 글씨체·여백·꾸미기까지 <b>지금 설정 전체</b>가 담기고, 누르면 그대로 되돌아옵니다. 더블클릭하면 삭제됩니다.</div>
 
-    <!-- 설정 프리셋 -->
+          </div>
+
+    <!-- 데이터 백업 -->
     <div class="section">
-      <div class="section-title">
-        설정 프리셋
-        <button class="mini-btn" id="setupSave" title="지금 설정을 이름 붙여 저장">지금 설정 저장</button>
-      </div>
-      <div class="btn-grid" id="setupList" style="grid-template-columns:1fr 1fr;"></div>
-      <div class="hint">글씨체·색·여백·비율 같은 설정만 저장합니다(문구와 출처는 저장하지 않아요). 누르면 적용되고, 더블클릭하면 삭제됩니다.</div>
+      <div class="section-title">데이터 백업</div>
+      <div class="hint">글씨체·설정 프리셋·색 테마·히스토리·제작자와 캐릭터 목록이 모두 이 브라우저에만 저장돼요. 브라우저 저장소를 지우면 사라지니 가끔 파일로 내보내 두세요.<br>내보내기·불러오기 버튼은 <b>화면 오른쪽 위</b>에 있습니다. 불러오면 지금 내용을 덮어씁니다.</div>
     </div>
 
     <!-- 히스토리 -->
@@ -1702,6 +1774,21 @@
       <button id="resetCancel">취소</button>
       <button id="resetSoft">설정만 초기화</button>
       <button class="primary" id="resetHard" style="background:#e0556b; border-color:#e0556b;">전체 초기화</button>
+    </div>
+  </div>
+</div>
+
+<!-- 공용 입력·확인 창 (브라우저 기본 창 대신) -->
+<div class="overlay" id="askOverlay">
+  <div class="modal">
+    <div class="modal-head" id="askTitle">확인</div>
+    <div class="modal-body">
+      <p id="askMsg" style="font-size:12.5px; line-height:1.6; color:var(--text);"></p>
+      <input type="text" id="askInput" maxlength="40" autocomplete="off" style="margin-top:11px;">
+    </div>
+    <div class="modal-foot">
+      <button id="askCancel">취소</button>
+      <button class="primary" id="askOk">확인</button>
     </div>
   </div>
 </div>
@@ -1795,6 +1882,21 @@
     if (!data.fonts) data.fonts = [];
     if (!data.fontScales) data.fontScales = {};
     if (!data.presets) data.presets = [];
+    // 예전 '설정 프리셋'(setups)은 색 테마로 합쳐졌으므로 옮겨 담는다
+    if (Array.isArray(data.setups) && data.setups.length) {
+      data.setups.forEach(it => {
+        if (!it || !it.name || data.presets.some(p => p.name === it.name)) return;
+        const sl = (it.settings && it.settings.sliders) || {};
+        data.presets.push({
+          name: it.name,
+          text: sl.textColor || '#ffffff',
+          accent: sl.accentColor || '#ffffff',
+          bg: sl.bgColor || '#1a1d29',
+          settings: it.settings
+        });
+      });
+      data.setups = [];
+    }
     // 기본 데이터 채움 — 새로 추가된 제작자·캐릭터는 기존 사용자에게도 들어간다
     const added = applySeed();
     if (!hadSave || added) saveData();
@@ -1843,6 +1945,50 @@
   const creditText = document.getElementById('creditText');
 
   // ============ 토스트 ============
+  // ===== 공용 입력·확인 창 =====
+  // 브라우저 기본 prompt/confirm 은 모양을 맞출 수 없어서 직접 만든 창을 쓴다.
+  let askDone = null;
+  function openAsk(opt) {
+    const ov = document.getElementById('askOverlay');
+    document.getElementById('askTitle').textContent = opt.title || '확인';
+    document.getElementById('askMsg').innerHTML = opt.message || '';
+    document.getElementById('askMsg').style.display = opt.message ? '' : 'none';
+    const inp = document.getElementById('askInput');
+    inp.style.display = opt.input ? '' : 'none';
+    inp.value = opt.value || '';
+    document.getElementById('askOk').textContent = opt.okText || '확인';
+    ov.classList.add('show');
+    if (opt.input) setTimeout(() => { inp.focus(); inp.select(); }, 30);
+    return new Promise(res => { askDone = res; });
+  }
+  function closeAsk(result) {
+    document.getElementById('askOverlay').classList.remove('show');
+    const fn = askDone;
+    askDone = null;
+    if (fn) fn(result);
+  }
+  // 이름을 물어보는 창 — 취소하면 null
+  function askText(title, value, okText) {
+    return openAsk({ title: title, input: true, value: value, okText: okText });
+  }
+  // 예/아니오를 물어보는 창 — 취소하면 false
+  function askConfirm(title, message, okText) {
+    return openAsk({ title: title, message: message, okText: okText })
+      .then(v => v !== null);
+  }
+  document.getElementById('askOk').addEventListener('click', () => {
+    const inp = document.getElementById('askInput');
+    closeAsk(inp.style.display === 'none' ? true : inp.value);
+  });
+  document.getElementById('askCancel').addEventListener('click', () => closeAsk(null));
+  document.getElementById('askOverlay').addEventListener('click', ev => {
+    if (ev.target.id === 'askOverlay') closeAsk(null);
+  });
+  document.getElementById('askInput').addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); document.getElementById('askOk').click(); }
+    if (ev.key === 'Escape') closeAsk(null);
+  });
+
   function toast(msg) {
     const t = $('toast');
     t.textContent = msg;
@@ -1958,6 +2104,7 @@
     bgMode: 'color',
     bgImageData: '',
     transBg: false,        // 저장할 때 배경을 빼고 글자만 남길지
+    outFormat: 'png',      // 저장 형식
     pattern: 'none',       // 배경 패턴 종류
     corner: 'none',        // 모서리 장식 종류
     panel: false,          // 문구 뒤 반투명 판
@@ -2187,27 +2334,44 @@
     const add = document.createElement('div');
     add.className = 'preset preset-add';
     add.textContent = '+ 저장';
-    add.title = '현재 배경·글자색을 새 테마로 저장';
+    add.title = '지금 설정을 통째로 저장 (색·글씨체·여백·꾸미기 모두)';
     add.addEventListener('click', saveCurrentPreset);
     grid.appendChild(add);
   }
   // 현재 배경/색 설정을 사용자 테마로 저장
-  function saveCurrentPreset() {
-    const name = (prompt('저장할 테마 이름을 입력하세요', '내 테마') || '').trim();
+  async function saveCurrentPreset() {
+    const raw = await askText('색 테마 저장', '내 테마', '저장');
+    const name = (raw || '').trim();
     if (!name) return;
     const p = { name, text: $('textColor').value, accent: $('accentColor').value };
     if (state.bgMode === 'gradient') {
       p.grad = [$('gradColor1').value, $('gradColor2').value];
     } else {
-      // 단색·이미지 모드 모두 단색 배경값으로 저장
+      // 단색·이미지 모드 모두 단색 배경값으로 저장 (칩 미리보기용)
       p.bg = $('bgColor').value;
     }
-    data.presets.push(p);
+    // 색뿐 아니라 지금의 모든 설정(글씨체·여백·꾸미기 등)을 함께 담는다.
+    // 기본 내장 테마에는 settings 가 없어서 예전처럼 색만 바뀐다.
+    p.settings = captureSettings();
+    let list = [p].concat(data.presets.filter(x => x.name !== name));
+    // 배경 이미지가 크면 저장 용량을 넘길 수 있어 그때만 이미지를 뺀다
+    let note = '';
+    if (JSON.stringify(list).length > 3000000) {
+      p.settings = Object.assign({}, p.settings, { bgImageData: '' });
+      note = ' (배경 이미지는 용량이 커서 제외했어요)';
+    }
+    data.presets = list.slice(0, 40);
     saveData();
     renderPresetGrid();
-    toast('테마 "' + name + '" 저장됨');
+    toast('"' + name + '" 저장됨' + note);
   }
   function applyPreset(p) {
+    // 직접 저장한 테마에는 전체 설정이 들어 있다 → 통째로 되돌린다
+    if (p.settings) {
+      restoreSettings(p.settings);
+      toast('"' + p.name + '" 적용됨');
+      return;
+    }
     $('textColor').value = p.text;
     $('accentColor').value = p.accent;
     if (p.grad) {
@@ -2450,6 +2614,9 @@
     { tag: '*',   open: '<em>',               close: '</em>',          cls: 'tk-i' }
   ];
   const BOLD_MARK = '__';   // 새로 만들 때 쓰는 굵게 표식
+  // 서식에 쓰이는 기호들. 글자 그대로 쓰고 싶을 땐 앞에 \\ 를 붙인다.
+  // (원문에 있던 *동작* 이 기울임으로 먹히는 걸 막기 위함)
+  const ESCAPABLE = '\\*_={}';
   // 중괄호 표식 두 종류
   //   {#rrggbb|글씨}   → 글씨색
   //   {=#rrggbb|글씨}  → 형광펜 (구간마다 색을 따로 가질 수 있게)
@@ -2473,6 +2640,8 @@
   function findClose(s, tag, from) {
     let i = from;
     while (i < s.length) {
+      // \X 로 감싼 글자는 표식이 아니므로 통째로 건너뛴다
+      if (s[i] === '\\' && ESCAPABLE.indexOf(s[i + 1]) !== -1) { i += 2; continue; }
       // 자기보다 긴 별표 표식은 통째로 건너뛴다 ('**' 가 '***' 의 앞 두 개를
       // 짝으로 오인하는 것 방지)
       if (tag !== '***' && s.startsWith('***', i)) { i += 3; continue; }
@@ -2487,6 +2656,8 @@
     let depth = 1;
     let i = from;
     while (i < s.length) {
+      // \{ \} 처럼 글자로 쓴 중괄호는 세지 않는다
+      if (s[i] === '\\' && ESCAPABLE.indexOf(s[i + 1]) !== -1) { i += 2; continue; }
       if (s[i] === '{' && COLOR_OPEN.test(s.slice(i))) { depth++; i++; continue; }
       if (s[i] === '}') { depth--; if (depth === 0) return i; i++; continue; }
       i++;
@@ -2499,6 +2670,12 @@
     let out = '';
     let i = 0;
     while (i < s.length) {
+      // \X — 뒤 글자를 서식이 아닌 글자 그대로
+      if (s[i] === '\\' && ESCAPABLE.indexOf(s[i + 1]) !== -1) {
+        out += escapeHtml(s[i + 1]);
+        i += 2;
+        continue;
+      }
       // 줄 첫머리의 탭 = 그 문단만 들여쓰기 (탭 개수만큼)
       if ((i === 0 || s[i - 1] === '\n') && s[i] === '\t') {
         let n = 0;
@@ -2541,6 +2718,12 @@
     let out = '';
     let i = 0;
     while (i < s.length) {
+      // \X — 표식은 흐리게, 뒤 글자는 그대로
+      if (s[i] === '\\' && ESCAPABLE.indexOf(s[i + 1]) !== -1) {
+        out += '<span class="tk-mark">\\</span>' + escapeHtml(s[i + 1]);
+        i += 2;
+        continue;
+      }
       // 줄 시작의 --- 구분선
       if (i === 0 || s[i - 1] === '\n') {
         const lm = SEP_LINE.exec(s.slice(i));
@@ -2606,6 +2789,13 @@
     (function walk(s, base, attr) {
       let i = 0;
       while (i < s.length) {
+        // \X — 뒤 글자를 서식이 아닌 글자로 담는다
+        if (s[i] === '\\' && ESCAPABLE.indexOf(s[i + 1]) !== -1) {
+          out.push({ ch: s[i + 1], raw: base + i + 1, b: !!attr.b, em: !!attr.em,
+                     hl: attr.hl || null, col: attr.col || null });
+          i += 2;
+          continue;
+        }
         if (s[i] === '{') {
           const cm = COLOR_OPEN.exec(s.slice(i));
           if (cm) {
@@ -2653,7 +2843,12 @@
         else if (c.b && !active.b) lvl = 'b';
         else if (c.em && !active.em) lvl = 'em';
         else if (c.col && active.col !== c.col) lvl = 'col';
-        if (!lvl) { out += c.ch; i++; continue; }
+        if (!lvl) {
+          // 서식 기호는 \ 를 붙여 글자 그대로 남긴다 (다시 읽어도 결과가 같도록)
+          out += (ESCAPABLE.indexOf(c.ch) !== -1 ? '\\' : '') + c.ch;
+          i++;
+          continue;
+        }
         // 색을 가진 서식(형광펜·글씨색)은 같은 색이 이어지는 만큼만 묶는다
         const byVal = (lvl === 'col' || lvl === 'hl');
         const same = (x) => (byVal ? x[lvl] === c[lvl] : !!x[lvl]);
@@ -2815,6 +3010,26 @@
     updatePageNav();
   }
   $('quoteInput').addEventListener('input', renderCard);
+  // 저장 형식
+  document.querySelectorAll('#fmtSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#fmtSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.outFormat = btn.dataset.fmt2;
+      // PNG 는 품질 개념이 없어서 숨긴다
+      $('qualityBox').style.display = state.outFormat === 'png' ? 'none' : '';
+      if (state.outFormat === 'jpg' && state.transBg) {
+        toast('JPG 는 투명 배경을 담을 수 없어요');
+      }
+    });
+  });
+  ['outWidthRange','qualityRange'].forEach(id => {
+    $(id).addEventListener('input', () => {
+      $('outWidthVal').textContent = $('outWidthRange').value + 'px';
+      $('qualityVal').textContent = $('qualityRange').value + '%';
+    });
+  });
+
   // 투명 배경 토글
   $('transBgToggle').addEventListener('click', () => {
     state.transBg = !state.transBg;
@@ -3065,6 +3280,7 @@
     const r = RATIOS[state.ratio];
     card.style.width = '100%';
     card.style.maxWidth = r.w + 'px';
+    card.style.width = '100%';
     card.style.height = 'auto';
     card.style.aspectRatio = r.w + ' / ' + r.h;
 
@@ -3096,6 +3312,19 @@
     quoteText.style.transformOrigin = origin;
     quoteText.style.transform = 'scaleX(' + (scale / 100) + ')';
 
+    // 글자 외곽선 — text-stroke 는 저장본에서 제대로 안 나오는 경우가 있어서
+    // 그림자를 여덟 방향으로 겹쳐 테두리처럼 만든다 (저장본에서도 동일하게 나옴)
+    const stW = parseFloat($('strokeRange').value) || 0;
+    $('strokeVal').textContent = stW + 'px';
+    const strokeParts = [];
+    if (stW > 0) {
+      const sc2 = $('strokeColor').value;
+      const d = stW, dd = (stW * 0.7).toFixed(2);
+      [[d,0],[-d,0],[0,d],[0,-d],[dd,dd],[-dd,dd],[dd,-dd],[-dd,-dd]].forEach(o => {
+        strokeParts.push(o[0] + 'px ' + o[1] + 'px 0 ' + sc2);
+      });
+    }
+
     // 글자 그림자 — 켜져 있으면 세부 값으로 만든다
     let shadowCss = 'none';
     if (state.shadow) {
@@ -3108,6 +3337,9 @@
       $('shAlphaVal').textContent = Math.round(sa * 100) + '%';
     }
     $('shadowOpts').style.display = state.shadow ? '' : 'none';
+    // 외곽선을 먼저, 그림자를 뒤에 두어야 그림자가 외곽선 바깥에 깔린다
+    const allShadow = strokeParts.concat(shadowCss === 'none' ? [] : [shadowCss]);
+    shadowCss = allShadow.length ? allShadow.join(', ') : 'none';
     quoteText.style.textShadow = shadowCss;
     charName.style.textShadow = shadowCss;
     makerName.style.textShadow = shadowCss;
@@ -3190,7 +3422,7 @@
   }
   ['sizeRange','textColor','accentColor','lineHeightRange','letterRange','scaleRange',
    'gapRange','padRange','creditSizeRange','radiusRange','offsetRange','offsetXRange',
-   'borderRange','borderColor',
+   'borderRange','borderColor','strokeRange','strokeColor',
    'patternSizeRange','patternOpacityRange','patternColor','vignetteRange',
    'panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
    'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
@@ -3248,6 +3480,30 @@
     commitQuoteEdit(v.slice(0, ls) + out + v.slice(le), ls, ls + out.length);
   }
   bindFmtBtn($('indentBtn'), toggleIndent);
+
+  // 붙여넣은 글 다듬기
+  bindFmtBtn($('tidySpace'), () => {
+    const ta = $('quoteInput');
+    const v = ta.value
+      .replace(/[ \t]+$/gm, '')      // 줄 끝 공백
+      .replace(/\n{3,}/g, '\n\n')    // 빈 줄이 여러 개면 하나로
+      .replace(/^\s+|\s+$/g, '');    // 글 앞뒤 공백
+    fmtTarget = 'quoteInput';
+    commitQuoteEdit(v, v.length, v.length);
+    closePops();
+    toast('빈 줄과 공백을 정리했어요');
+  });
+  // 적용된 서식 지우기 — 선택한 부분(없으면 전체)의 굵게·기울임·형광펜·글씨색 제거
+  bindFmtBtn($('tidyClear'), () => {
+    const ta = $('quoteInput');
+    fmtTarget = 'quoteInput';
+    if (ta.selectionStart === ta.selectionEnd) ta.setSelectionRange(0, ta.value.length);
+    editSelection(sel => {
+      sel.forEach(c => { c.b = false; c.em = false; c.hl = null; c.col = null; });
+    });
+    closePops();
+    toast('서식을 모두 지웠어요');
+  });
 
   // 인용부호 — 선택한 부분을 고른 모양으로 감싼다.
   // 이미 그 부호로 감싸져 있으면(안쪽이든 바깥쪽이든) 벗긴다.
@@ -3380,6 +3636,25 @@
       renderCard();   // 가운뎃점 표시 여부를 다시 계산
     });
   });
+
+  // 슬라이더·색 기본값 — 전체 초기화와 '항목별 되돌리기' 가 함께 쓴다
+  const SLIDER_DEFAULTS = {
+      sizeRange: 22, textColor: '#ffffff', accentColor: '#ffffff',
+      lineHeightRange: 1.75, letterRange: -0.2, scaleRange: 100,
+      gapRange: 26, padRange: 56, creditSizeRange: 15, radiusRange: 0,
+      bgColor: '#1a1d29', gradColor1: '#2f6df0', gradColor2: '#1a1d4e',
+      dimRange: 35, dimColor: '#000000', bgSizeRange: 100, bgPosXRange: 50, bgPosYRange: 50, bgBlurRange: 0,
+      offsetRange: 0, offsetXRange: 0, indentRange: 2, sepWidthRange: 30,
+      padTopRange: 56, padBottomRange: 56, padLeftRange: 56, padRightRange: 56,
+      hlPadRange: 1, borderRange: 0, borderColor: '#1a1d24',
+      strokeRange: 0, strokeColor: '#000000',
+      patternSizeRange: 16, patternOpacityRange: 12, patternColor: '#000000',
+      vignetteRange: 0, vignetteColor: '#000000',
+      panelColor: '#000000', panelOpacityRange: 35,
+      panelPadRange: 22, panelRadiusRange: 8, cornerColor: '#ffffff',
+      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1,
+      shX: 0, shY: 2, shBlur: 8, shColor: '#000000', shAlpha: 45
+    };
 
   // ============ 꾸미기 (패턴 / 비네트 / 판 / 모서리) ============
   // 패턴과 비네트는 CSS 그라데이션 대신 캔버스로 그린 이미지를 쓴다.
@@ -3591,10 +3866,12 @@
   // ============ 배경 ============
   function applyBackground() {
     // dim: 음수면 흰 막(밝게), 양수면 검은 막(어둡게)
+    // 양수면 고른 '막 색' 을 덮고, 음수면 흰 막을 덮어 밝게 만든다.
+    // 막 색을 검정으로 두면 예전과 똑같이 어두워진다.
     const dim = parseInt($('dimRange').value, 10);
     if (dim >= 0) {
-      cardOverlay.style.background = 'rgba(0,0,0,' + (dim / 100) + ')';
-      $('dimVal').textContent = dim === 0 ? '없음' : ('어둡게 ' + dim + '%');
+      cardOverlay.style.background = hexToRgba($('dimColor').value, dim / 100);
+      $('dimVal').textContent = dim === 0 ? '없음' : (dim + '%');
     } else {
       cardOverlay.style.background = 'rgba(255,255,255,' + (-dim / 100) + ')';
       $('dimVal').textContent = '밝게 ' + (-dim) + '%';
@@ -3630,7 +3907,7 @@
     cardBg.style.transform = blur ? 'scale(1.08)' : 'none';
     $('bgBlurVal').textContent = $('bgBlurRange').value + 'px';
   }
-  ['bgColor','dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange']
+  ['bgColor','dimColor','dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange']
     .forEach(id => $(id).addEventListener('input', applyBackground));
   ['gradColor1','gradColor2'].forEach(id => {
     $(id).addEventListener('input', () => { renderGradGrid(); applyBackground(); });
@@ -3719,23 +3996,7 @@
     $('quoteInput').value = '';
     $('makerInput').value = '';
     $('charInput').value = '';
-    // 슬라이더·색 기본값
-    const defaults = {
-      sizeRange: 22, textColor: '#ffffff', accentColor: '#ffffff',
-      lineHeightRange: 1.75, letterRange: -0.2, scaleRange: 100,
-      gapRange: 26, padRange: 56, creditSizeRange: 15, radiusRange: 0,
-      bgColor: '#1a1d29', gradColor1: '#2f6df0', gradColor2: '#1a1d4e',
-      dimRange: 35, bgSizeRange: 100, bgPosXRange: 50, bgPosYRange: 50, bgBlurRange: 0,
-      offsetRange: 0, offsetXRange: 0, indentRange: 2, sepWidthRange: 30,
-      padTopRange: 56, padBottomRange: 56, padLeftRange: 56, padRightRange: 56,
-      hlPadRange: 1, borderRange: 0, borderColor: '#1a1d24',
-      patternSizeRange: 16, patternOpacityRange: 12, patternColor: '#000000',
-      vignetteRange: 0, vignetteColor: '#000000',
-      panelColor: '#000000', panelOpacityRange: 35,
-      panelPadRange: 22, panelRadiusRange: 8, cornerColor: '#ffffff',
-      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1,
-      shX: 0, shY: 2, shBlur: 8, shColor: '#000000', shAlpha: 45
-    };
+    const defaults = SLIDER_DEFAULTS;
     Object.keys(defaults).forEach(id => { if ($(id)) $(id).value = defaults[id]; });
     // state 기본값
     state.fontFamily = BUILTIN_FONTS[0].family;
@@ -4042,8 +4303,9 @@
     // 화면 카드 너비에 맞춰 scale 을 정함 — 카드가 작게 보여도
     // 결과 이미지는 충분한 해상도(목표 너비 ~1360px)가 되도록.
     const shownW = card.getBoundingClientRect().width || 540;
-    // 헤더는 트위터 규격(1500×500)에 맞추고, 나머지는 넉넉한 해상도로
-    const TARGET_W = state.ratio === 'header' ? 1500 : 1360;
+    // 헤더는 트위터 규격(1500×500) 고정, 나머지는 지정한 가로 크기로
+    const TARGET_W = state.ratio === 'header'
+      ? 1500 : (parseInt($('outWidthRange').value, 10) || 1360);
     let scale = TARGET_W / shownW;
     // 헤더는 규격 크기가 중요해서 2배 하한을 두지 않음
     scale = state.ratio === 'header'
@@ -4188,6 +4450,24 @@
     });
   }
 
+  // 고른 형식으로 데이터 URL 만들기 (JPG 는 투명을 담을 수 없어 흰 배경을 깐다)
+  function canvasToURL(canvas) {
+    const f = state.outFormat;
+    if (f === 'png') return canvas.toDataURL('image/png');
+    const q = (parseInt($('qualityRange').value, 10) || 92) / 100;
+    if (f === 'webp') return canvas.toDataURL('image/webp', q);
+    const flat = document.createElement('canvas');
+    flat.width = canvas.width; flat.height = canvas.height;
+    const fx = flat.getContext('2d');
+    fx.fillStyle = '#ffffff';
+    fx.fillRect(0, 0, flat.width, flat.height);
+    fx.drawImage(canvas, 0, 0);
+    return flat.toDataURL('image/jpeg', q);
+  }
+  function outExt() {
+    return state.outFormat === 'jpg' ? 'jpg' : state.outFormat;
+  }
+
   function saveImage() {
     const pages = getPages();
     if (pages.length <= 1) {
@@ -4195,8 +4475,8 @@
       toast('이미지 생성 중...');
       renderCardCanvas().then(canvas => {
         const a = document.createElement('a');
-        a.href = canvas.toDataURL('image/png');
-        a.download = 'quote-card.png';
+        a.href = canvasToURL(canvas);
+        a.download = 'quote-card.' + outExt();
         a.click();
         toast('이미지를 저장했습니다');
         addHistory();
@@ -4214,8 +4494,8 @@
       }
       renderPageCanvas(i).then(canvas => {
         const a = document.createElement('a');
-        a.href = canvas.toDataURL('image/png');
-        a.download = 'quote-card-' + (i + 1) + '.png';
+        a.href = canvasToURL(canvas);
+        a.download = 'quote-card-' + (i + 1) + '.' + outExt();
         a.click();
         i++;
         // 브라우저가 연속 다운로드를 막지 않도록 약간 텀
@@ -4262,8 +4542,8 @@
           y += c.height;
         });
         const a = document.createElement('a');
-        a.href = out.toDataURL('image/png');
-        a.download = 'quote-card-all.png';
+        a.href = canvasToURL(out);
+        a.download = 'quote-card-all.' + outExt();
         a.click();
         toast(pages.length + '장을 한 장으로 저장했습니다');
         addHistory();
@@ -4329,8 +4609,8 @@
   function captureSettings() {
     const ids = ['sizeRange','textColor','accentColor','lineHeightRange',
       'letterRange','scaleRange','gapRange','padRange','creditSizeRange',
-      'radiusRange','fontScaleRange','bgColor','gradColor1','gradColor2',
-      'borderRange','borderColor',
+      'radiusRange','fontScaleRange','bgColor','dimColor','gradColor1','gradColor2',
+      'borderRange','borderColor','strokeRange','strokeColor',
       'patternSizeRange','patternOpacityRange','patternColor','vignetteRange',
       'panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
       'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
@@ -4521,58 +4801,6 @@
     applyBackground();
     renderCard();
   }
-  // ============ 설정 프리셋 ============
-  // 히스토리는 '카드 한 장'을 통째로 기록하지만, 프리셋은 설정만 저장한다.
-  // captureSettings / restoreSettings 를 그대로 재사용.
-  const SETUP_MAX = 40;
-  function renderSetupList() {
-    const wrap = $('setupList');
-    wrap.innerHTML = '';
-    const list = data.setups || [];
-    if (!list.length) {
-      const e = document.createElement('div');
-      e.className = 'hint';
-      e.style.gridColumn = '1 / -1';
-      e.style.margin = '0';
-      e.textContent = '저장된 설정이 없어요';
-      wrap.appendChild(e);
-      return;
-    }
-    list.forEach((it, i) => {
-      const btn = document.createElement('button');
-      btn.textContent = it.name;
-      btn.title = '누르면 적용 · 더블클릭하면 삭제';
-      btn.addEventListener('click', () => {
-        restoreSettings(it.settings);
-        toast('"' + it.name + '" 적용됨');
-      });
-      btn.addEventListener('dblclick', () => {
-        data.setups.splice(i, 1);
-        saveData();
-        renderSetupList();
-        toast('"' + it.name + '" 삭제됨');
-      });
-      wrap.appendChild(btn);
-    });
-  }
-  $('setupSave').addEventListener('click', () => {
-    const nm = (prompt('설정 이름', '설정 ' + (((data.setups || []).length) + 1)) || '').trim();
-    if (!nm) return;
-    const entry = { name: nm.slice(0, 16), settings: captureSettings() };
-    const list = [entry].concat((data.setups || []).filter(x => x.name !== entry.name));
-    // 배경 이미지가 크면 저장 용량을 넘길 수 있어 그때만 이미지를 뺀다
-    let note = '';
-    if (JSON.stringify(list).length > 3000000) {
-      entry.settings = Object.assign({}, entry.settings, { bgImageData: '' });
-      note = ' (배경 이미지는 용량이 커서 제외했어요)';
-    }
-    data.setups = list.slice(0, SETUP_MAX);
-    saveData();
-    renderSetupList();
-    toast('"' + entry.name + '" 저장됨' + note);
-  });
-  renderSetupList();
-
   function renderHistory() {
     const wrap = $('historyList');
     wrap.innerHTML = '';
@@ -4664,6 +4892,88 @@
   document.addEventListener('click', closeCtx);
   document.addEventListener('scroll', closeCtx, true);
   window.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtx(); });
+
+  // ============ 데이터 백업 ============
+  // 이 도구의 모든 저장 내용은 브라우저 저장소에만 있다. 통째로 파일로 빼고
+  // 다시 넣을 수 있게 해서, 브라우저를 지우거나 다른 컴퓨터로 옮겨도 유지되게.
+  // 저장소 키 목록 — 아래에서 선언되는 상수도 있어 문자열로 직접 적는다
+  const BACKUP_KEYS = [
+    'quotecard:data',       // 글씨체·프리셋·색 테마·제작자/캐릭터 목록
+    'quotecard:history',    // 히스토리
+    'quotecard:draft',      // 임시 저장된 문구
+    'quotecard:collapsed',  // 접어둔 영역
+    'quotecard:theme'       // 밝기 테마
+  ];
+  $('dataExport').addEventListener('click', () => {
+    const dump = { _tool: 'quote-card', _at: new Date().toISOString(), store: {} };
+    BACKUP_KEYS.forEach(k => {
+      try {
+        const v = localStorage.getItem(k);
+        if (v !== null) dump.store[k] = v;
+      } catch (e) {}
+    });
+    const blob = new Blob([JSON.stringify(dump)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    a.download = 'quote-card-backup-' +
+      d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('설정을 파일로 내보냈어요');
+  });
+  $('dataImportBtn').addEventListener('click', () => $('dataImport').click());
+  $('dataImport').addEventListener('change', ev => {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      let dump;
+      try { dump = JSON.parse(fr.result); } catch (e) { dump = null; }
+      if (!dump || dump._tool !== 'quote-card' || !dump.store) {
+        toast('이 도구의 백업 파일이 아니에요');
+        ev.target.value = '';
+        return;
+      }
+      askConfirm('백업 불러오기',
+        '지금 저장된 글씨체·프리셋·히스토리·목록을 <b>모두 덮어씁니다.</b><br>계속할까요?',
+        '덮어쓰기').then(okToGo => {
+        if (!okToGo) { ev.target.value = ''; return; }
+        applyBackup(dump);
+      });
+    };
+    fr.readAsText(file);
+  });
+  function applyBackup(dump) {
+    try {
+      Object.keys(dump.store).forEach(k => {
+        if (BACKUP_KEYS.indexOf(k) !== -1) localStorage.setItem(k, dump.store[k]);
+      });
+    } catch (e) {
+      toast('저장 공간이 부족해 일부만 복원됐어요');
+    }
+    location.reload();
+  }
+
+  // ============ 항목별 기본값 되돌리기 ============
+  // 라벨을 더블클릭하면 그 칸의 슬라이더·색만 기본값으로 되돌린다.
+  document.querySelectorAll('.field-label').forEach(label => {
+    const box = label.parentElement;
+    if (!box) return;
+    const inputs = [...box.querySelectorAll('input[type="range"], input[type="color"]')]
+      .filter(el => el.id && SLIDER_DEFAULTS[el.id] !== undefined);
+    if (!inputs.length) return;
+    label.title = (label.title ? label.title + ' · ' : '') + '더블클릭하면 기본값으로';
+    label.style.cursor = 'pointer';
+    label.addEventListener('dblclick', () => {
+      inputs.forEach(el => {
+        el.value = SLIDER_DEFAULTS[el.id];
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      toast('기본값으로 되돌렸어요');
+    });
+  });
 
   // ============ 슬라이더 값 위치 정리 ============
   // 값을 슬라이더 오른쪽에 두면, 짧은 값('0')일 때 자기 슬라이더보다
