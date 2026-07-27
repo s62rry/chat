@@ -1281,28 +1281,12 @@
         </div>
       </div>
       <div class="field-group">
-        <label class="field-label" style="display:flex;align-items:center;">
-          카드 여백
-          <button class="mini-btn" id="padSplitToggle" type="button"
-                  title="위·아래·왼쪽·오른쪽을 따로 조절">4방향 따로</button>
-        </label>
-        <div class="slider-row" id="padSingleRow">
-          <input type="range" id="padRange" min="0" max="200" value="56">
-          <span class="slider-val" id="padVal">56px</span>
-        </div>
-        <div id="padSplitRows" style="display:none;">
-          <div class="slider-row"><span class="pad-lb">위</span>
-            <input type="range" id="padTopRange" min="0" max="200" value="56">
-            <span class="slider-val" id="padTopVal">56px</span></div>
-          <div class="slider-row"><span class="pad-lb">아래</span>
-            <input type="range" id="padBottomRange" min="0" max="200" value="56">
-            <span class="slider-val" id="padBottomVal">56px</span></div>
-          <div class="slider-row"><span class="pad-lb">왼쪽</span>
-            <input type="range" id="padLeftRange" min="0" max="200" value="56">
-            <span class="slider-val" id="padLeftVal">56px</span></div>
-          <div class="slider-row"><span class="pad-lb">오른쪽</span>
-            <input type="range" id="padRightRange" min="0" max="200" value="56">
-            <span class="slider-val" id="padRightVal">56px</span></div>
+        <label class="field-label">강조선 모양</label>
+        <div class="seg" id="sepStyleSeg">
+          <button data-sep="solid" class="active">실선</button>
+          <button data-sep="dash">점선</button>
+          <button data-sep="dot">도트</button>
+          <button data-sep="double">이중선</button>
         </div>
       </div>
       <div class="row">
@@ -1319,15 +1303,6 @@
             <input type="range" id="sepThickRange" min="1" max="10" value="1">
             <span class="slider-val" id="sepThickVal">1px</span>
           </div>
-        </div>
-      </div>
-      <div class="field-group">
-        <label class="field-label">강조선 모양</label>
-        <div class="seg" id="sepStyleSeg">
-          <button data-sep="solid" class="active">실선</button>
-          <button data-sep="dash">점선</button>
-          <button data-sep="dot">도트</button>
-          <button data-sep="double">이중선</button>
         </div>
       </div>
       <div class="field-group">
@@ -1421,6 +1396,31 @@
         <div class="slider-row">
           <input type="range" id="offsetXRange" min="-200" max="200" value="0">
           <span class="slider-val" id="offsetXVal">0px</span>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label" style="display:flex;align-items:center;">
+          카드 여백
+          <button class="mini-btn" id="padSplitToggle" type="button"
+                  title="위·아래·왼쪽·오른쪽을 따로 조절">4방향 따로</button>
+        </label>
+        <div class="slider-row" id="padSingleRow">
+          <input type="range" id="padRange" min="0" max="200" value="56">
+          <span class="slider-val" id="padVal">56px</span>
+        </div>
+        <div id="padSplitRows" style="display:none;">
+          <div class="slider-row"><span class="pad-lb">위</span>
+            <input type="range" id="padTopRange" min="0" max="200" value="56">
+            <span class="slider-val" id="padTopVal">56px</span></div>
+          <div class="slider-row"><span class="pad-lb">아래</span>
+            <input type="range" id="padBottomRange" min="0" max="200" value="56">
+            <span class="slider-val" id="padBottomVal">56px</span></div>
+          <div class="slider-row"><span class="pad-lb">왼쪽</span>
+            <input type="range" id="padLeftRange" min="0" max="200" value="56">
+            <span class="slider-val" id="padLeftVal">56px</span></div>
+          <div class="slider-row"><span class="pad-lb">오른쪽</span>
+            <input type="range" id="padRightRange" min="0" max="200" value="56">
+            <span class="slider-val" id="padRightVal">56px</span></div>
         </div>
       </div>
       <div class="field-group" style="margin-top:9px;">
