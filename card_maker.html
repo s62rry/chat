@@ -187,9 +187,17 @@
     color: var(--text-dim);
     margin-bottom: 4px;
   }
-  .row { display: flex; gap: 7px; margin-bottom: 9px; }
-  .row > * { flex: 1; }
+  .row { display: flex; gap: 14px; margin-bottom: 9px; }
+  .row > * { flex: 1; min-width: 0; }
+  /* 색 스와치 칸은 제 폭만 쓰고, 남는 자리는 같은 줄 슬라이더가 가져간다 */
+  .row > .col-swatch { flex: 0 0 auto; }
   .field-group { margin-bottom: 9px; }
+  /* 토글을 켰을 때만 나타나는 옵션 묶음 — 위 내용과 선으로 구분 */
+  .opt-group {
+    margin-top: 12px;
+    padding-top: 11px;
+    border-top: 1px solid var(--border);
+  }
 
   input[type="text"], textarea, select {
     width: 100%;
@@ -358,11 +366,33 @@
   input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
   input[type="color"]::-webkit-color-swatch { border: none; border-radius: 5px; }
   input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
-  .slider-row { display: flex; align-items: center; gap: 10px; }
-  .slider-val {
-    font-size: 11.5px; color: var(--text-dim);
-    min-width: 46px; text-align: right; font-variant-numeric: tabular-nums;
+  .slider-row { display: flex; align-items: center; gap: 8px; }
+  /* 옵션 줄의 색 선택 — 같은 줄 슬라이더(높이 14px)와 높이를 맞춘다.
+     기본 색 입력은 칸을 꽉 채우고 높이도 30px 이라 혼자 덩치가 커 보인다. */
+  input[type="color"].swatch-input {
+    display: block;
+    width: 52px; height: 14px;
+    min-height: 0; padding: 0;
+    border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer; flex-shrink: 0;
+    -webkit-appearance: none; appearance: none; background: var(--field);
   }
+  input[type="color"].swatch-input::-webkit-color-swatch-wrapper { padding: 1px; }
+  input[type="color"].swatch-input::-webkit-color-swatch { border: none; border-radius: 2px; }
+  input[type="color"].swatch-input:hover { border-color: var(--accent); }
+  .slider-val {
+    flex-shrink: 0;
+    font-size: 11.5px; color: var(--text-dim);
+    min-width: 40px; text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  /* 값이 라벨 줄로 올라간 경우 — 라벨은 왼쪽, 값은 오른쪽 끝 */
+  .field-label.has-val {
+    display: flex; align-items: baseline;
+    justify-content: space-between; gap: 8px;
+  }
+  .field-label.has-val .slider-val { min-width: 0; }
+  .slider-row > input[type="range"] { flex: 1; min-width: 0; }
   .file-btn { display: block; width: 100%; text-align: center; }
   .file-btn { justify-content: center; }
   .hint { font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
@@ -457,6 +487,20 @@
      줄바꿈돼도 각 줄 조각이 알아서 칠해진다. */
   /* 문단 들여쓰기 — 줄 첫머리의 탭 하나가 이 칸 하나가 된다 */
   #card .qindent { display: inline-block; }
+
+  /* 카드 위에 겹치는 장식 레이어들 — 배경 위, 글자 아래 */
+  #cardPattern, #cardVignette, #cardPanel, #cardCorners, #cardBorder {
+    position: absolute;
+    pointer-events: none;
+  }
+  #cardPattern, #cardVignette, #cardCorners, #cardBorder { inset: 0; }
+  /* 테두리는 카드 요소에 직접 걸지 않고 위에 덧그린다.
+     카드에 border 를 주면 저장할 때 배경이 끝나는 자리에 이음새가 생기고,
+     여백·좌표 기준(테두리 안/밖)도 어긋나기 때문. */
+  #cardBorder { box-sizing: border-box; }
+  #cardPattern { background-repeat: repeat; }
+  #cardVignette { background-size: 100% 100%; background-repeat: no-repeat; }
+  #cardCorners .corner { position: absolute; box-sizing: border-box; }
 
   #card mark.qhl {
     color: inherit;
@@ -1191,17 +1235,17 @@
         </div>
       </div>
       <div class="field-group">
-        <label class="field-label">들여쓰기 폭</label>
-        <div class="slider-row">
-          <input type="range" id="indentRange" min="0.5" max="5" step="0.5" value="2">
-          <span class="slider-val" id="indentVal">2em</span>
-        </div>
-      </div>
-      <div class="field-group">
         <label class="field-label">장평 (가로 폭)</label>
         <div class="slider-row">
           <input type="range" id="scaleRange" min="70" max="130" value="100">
           <span class="slider-val" id="scaleVal">100%</span>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">들여쓰기 폭</label>
+        <div class="slider-row">
+          <input type="range" id="indentRange" min="0.5" max="5" step="0.5" value="2">
+          <span class="slider-val" id="indentVal">2em</span>
         </div>
       </div>
       <div class="field-group">
@@ -1236,11 +1280,29 @@
             <span class="slider-val" id="padRightVal">56px</span></div>
         </div>
       </div>
+      <div class="row">
+        <div>
+          <label class="field-label">강조선 길이</label>
+          <div class="slider-row">
+            <input type="range" id="sepWidthRange" min="0" max="240" value="30">
+            <span class="slider-val" id="sepWidthVal">30px</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">강조선 굵기</label>
+          <div class="slider-row">
+            <input type="range" id="sepThickRange" min="1" max="10" value="1">
+            <span class="slider-val" id="sepThickVal">1px</span>
+          </div>
+        </div>
+      </div>
       <div class="field-group">
-        <label class="field-label">강조선 길이</label>
-        <div class="slider-row">
-          <input type="range" id="sepWidthRange" min="0" max="240" value="30">
-          <span class="slider-val" id="sepWidthVal">30px</span>
+        <label class="field-label">강조선 모양</label>
+        <div class="seg" id="sepStyleSeg">
+          <button data-sep="solid" class="active">실선</button>
+          <button data-sep="dash">점선</button>
+          <button data-sep="dot">도트</button>
+          <button data-sep="double">이중선</button>
         </div>
       </div>
       <div class="field-group">
@@ -1248,6 +1310,45 @@
         <div class="slider-row">
           <input type="range" id="creditSizeRange" min="9" max="28" value="15">
           <span class="slider-val" id="creditSizeVal">15px</span>
+        </div>
+      </div>
+      <div class="field-group opt-group" id="shadowOpts" style="display:none;">
+        <label class="field-label">글자 그림자</label>
+        <div class="row">
+          <div class="col-swatch">
+            <label class="field-label">그림자 색</label>
+            <input type="color" class="swatch-input" id="shColor" value="#000000">
+          </div>
+          <div>
+            <label class="field-label">가로</label>
+            <div class="slider-row">
+              <input type="range" id="shX" min="-12" max="12" value="0">
+              <span class="slider-val" id="shXVal">0</span>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">세로</label>
+            <div class="slider-row">
+              <input type="range" id="shY" min="-12" max="12" value="2">
+              <span class="slider-val" id="shYVal">2</span>
+            </div>
+          </div>
+        </div>
+        <div class="row" style="margin-bottom:0;">
+          <div>
+            <label class="field-label">번짐</label>
+            <div class="slider-row">
+              <input type="range" id="shBlur" min="0" max="30" value="8">
+              <span class="slider-val" id="shBlurVal">8</span>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">진하기</label>
+            <div class="slider-row">
+              <input type="range" id="shAlpha" min="0" max="100" value="45">
+              <span class="slider-val" id="shAlphaVal">45%</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1291,9 +1392,9 @@
             <span class="slider-val" id="borderVal">0px</span>
           </div>
         </div>
-        <div>
+        <div class="col-swatch">
           <label class="field-label">테두리 색</label>
-          <input type="color" id="borderColor" value="#1a1d24">
+          <input type="color" class="swatch-input" id="borderColor" value="#1a1d24">
         </div>
       </div>
       <div class="field-group" style="margin-top:9px;">
@@ -1384,6 +1485,124 @@
       </div>
     </div>
 
+    <!-- 꾸미기 -->
+    <div class="section">
+      <div class="section-title">꾸미기</div>
+
+      <div class="field-group">
+        <label class="field-label">배경 패턴</label>
+        <div class="seg" id="patternSeg">
+          <button data-pat="none" class="active">없음</button>
+          <button data-pat="grid">격자</button>
+          <button data-pat="dot">점</button>
+          <button data-pat="diag">사선</button>
+          <button data-pat="paper">종이결</button>
+        </div>
+      </div>
+      <div class="row" id="patternOpts" style="display:none;">
+        <div class="col-swatch">
+          <label class="field-label">패턴 색</label>
+          <input type="color" class="swatch-input" id="patternColor" value="#000000">
+        </div>
+        <div>
+          <label class="field-label">크기</label>
+          <div class="slider-row">
+            <input type="range" id="patternSizeRange" min="4" max="48" value="16">
+            <span class="slider-val" id="patternSizeVal">16px</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">진하기</label>
+          <div class="slider-row">
+            <input type="range" id="patternOpacityRange" min="2" max="60" value="12">
+            <span class="slider-val" id="patternOpacityVal">12%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label class="field-label">비네트 (가장자리)</label>
+          <div class="slider-row">
+            <input type="range" id="vignetteRange" min="0" max="80" value="0">
+            <span class="slider-val" id="vignetteVal">0%</span>
+          </div>
+        </div>
+        <div class="col-swatch">
+          <label class="field-label">비네트 색</label>
+          <input type="color" class="swatch-input" id="vignetteColor" value="#000000">
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" style="display:flex;align-items:center;">
+          문구 뒤 판
+          <button class="mini-btn" id="panelToggle" type="button" title="문구 덩어리 뒤에 반투명 판 깔기">켜기</button>
+        </label>
+        <div id="panelOpts" style="display:none;">
+          <div class="row">
+            <div class="col-swatch">
+              <label class="field-label">판 색</label>
+              <input type="color" class="swatch-input" id="panelColor" value="#000000">
+            </div>
+            <div>
+              <label class="field-label">불투명도</label>
+              <div class="slider-row">
+                <input type="range" id="panelOpacityRange" min="0" max="100" value="35">
+                <span class="slider-val" id="panelOpacityVal">35%</span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label class="field-label">판 여백</label>
+              <div class="slider-row">
+                <input type="range" id="panelPadRange" min="0" max="80" value="22">
+                <span class="slider-val" id="panelPadVal">22px</span>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">판 둥글기</label>
+              <div class="slider-row">
+                <input type="range" id="panelRadiusRange" min="0" max="40" value="8">
+                <span class="slider-val" id="panelRadiusVal">8px</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">모서리 장식</label>
+        <div class="seg" id="cornerSeg">
+          <button data-corner="none" class="active">없음</button>
+          <button data-corner="bracket">꺾쇠</button>
+          <button data-corner="cross">십자</button>
+          <button data-corner="dot">점</button>
+        </div>
+      </div>
+      <div class="row" id="cornerOpts" style="display:none;">
+        <div class="col-swatch">
+          <label class="field-label">장식 색</label>
+          <input type="color" class="swatch-input" id="cornerColor" value="#ffffff">
+        </div>
+        <div>
+          <label class="field-label">크기</label>
+          <div class="slider-row">
+            <input type="range" id="cornerSizeRange" min="6" max="60" value="18">
+            <span class="slider-val" id="cornerSizeVal">18px</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">안쪽 여백</label>
+          <div class="slider-row">
+            <input type="range" id="cornerInsetRange" min="0" max="80" value="18">
+            <span class="slider-val" id="cornerInsetVal">18px</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 색 테마 프리셋 -->
     <div class="section">
       <div class="section-title">색 테마</div>
@@ -1419,6 +1638,11 @@
       <div id="card">
         <div id="cardBg"></div>
         <div id="cardOverlay"></div>
+        <div id="cardPattern"></div>
+        <div id="cardVignette"></div>
+        <div id="cardPanel"></div>
+        <div id="cardCorners"></div>
+        <div id="cardBorder"></div>
         <div class="card-inner">
           <div id="quoteText">문구를 입력하면 여기에 표시됩니다.</div>
           <div class="card-sep" id="cardSep"></div>
@@ -1734,6 +1958,10 @@
     bgMode: 'color',
     bgImageData: '',
     transBg: false,        // 저장할 때 배경을 빼고 글자만 남길지
+    pattern: 'none',       // 배경 패턴 종류
+    corner: 'none',        // 모서리 장식 종류
+    panel: false,          // 문구 뒤 반투명 판
+    sepStyle: 'solid',     // 강조선 모양
     hlColor: '#ffe17d',
     lastHl: '#ffe17d',     // 마지막으로 쓴 형광펜 색
     lastCol: '#e74c3c',    // 마지막으로 쓴 글씨색
@@ -2550,6 +2778,7 @@
   function renderCard() {
     syncMirror();          // 입력창 서식 강조 레이어 갱신
     saveDraft();           // 쓰던 내용 자동 보관 (0.4초 묶음)
+    setTimeout(applyPanel, 0);   // 글자 배치가 끝난 뒤 판 크기를 맞춘다
     const pages = getPages();
     if (curPage >= pages.length) curPage = pages.length - 1;
     if (curPage < 0) curPage = 0;
@@ -2826,9 +3055,11 @@
     }
     card.style.textAlign = state.align;
     card.style.borderRadius = radius + 'px';
-    // 카드 테두리
+    // 카드 테두리 — 덧그리는 레이어에 적용 (카드 크기·여백에 영향 없음)
     const bw = parseInt($('borderRange').value, 10) || 0;
-    card.style.border = bw > 0 ? (bw + 'px solid ' + $('borderColor').value) : '0';
+    const cardBorder = $('cardBorder');
+    cardBorder.style.border = bw > 0 ? (bw + 'px solid ' + $('borderColor').value) : '0';
+    cardBorder.style.borderRadius = radius + 'px';
     $('borderVal').textContent = bw + 'px';
     // 카드 비율 — 너비는 가변(최대치 제한), 높이는 비율로 자동
     const r = RATIOS[state.ratio];
@@ -2865,8 +3096,18 @@
     quoteText.style.transformOrigin = origin;
     quoteText.style.transform = 'scaleX(' + (scale / 100) + ')';
 
-    // 글자 그림자 on/off
-    const shadowCss = state.shadow ? '0 2px 8px rgba(0,0,0,0.45)' : 'none';
+    // 글자 그림자 — 켜져 있으면 세부 값으로 만든다
+    let shadowCss = 'none';
+    if (state.shadow) {
+      const sx = $('shX').value, sy = $('shY').value, sb = $('shBlur').value;
+      const sa = parseInt($('shAlpha').value, 10) / 100;
+      shadowCss = sx + 'px ' + sy + 'px ' + sb + 'px ' + hexToRgba($('shColor').value, sa);
+      $('shXVal').textContent = sx;
+      $('shYVal').textContent = sy;
+      $('shBlurVal').textContent = sb;
+      $('shAlphaVal').textContent = Math.round(sa * 100) + '%';
+    }
+    $('shadowOpts').style.display = state.shadow ? '' : 'none';
     quoteText.style.textShadow = shadowCss;
     charName.style.textShadow = shadowCss;
     makerName.style.textShadow = shadowCss;
@@ -2882,7 +3123,28 @@
     // 한 줄로 늘어놓을 때는 두 이름 크기를 같게 (2줄일 때만 제작자를 작게)
     makerName.style.fontSize =
       (creditSize * (state.creditLine === 1 ? 1 : 0.8) * fontScale) + 'px';
-    cardSep.style.background = accentCol;
+    // 강조선 모양 — 점선·도트·이중선은 그라데이션으로 그린다
+    // (border-style 은 저장본에서 모양이 달라질 수 있어서)
+    const sepT = Math.max(1, parseInt($('sepThickRange').value, 10) || 1);
+    $('sepThickVal').textContent = sepT + 'px';
+    cardSep.style.height = sepT + 'px';
+    if (state.sepStyle === 'dash') {
+      cardSep.style.background =
+        'repeating-linear-gradient(90deg,' + accentCol + ' 0 ' + (sepT * 5) + 'px,' +
+        'transparent ' + (sepT * 5) + 'px ' + (sepT * 9) + 'px)';
+    } else if (state.sepStyle === 'dot') {
+      cardSep.style.background =
+        'repeating-linear-gradient(90deg,' + accentCol + ' 0 ' + sepT + 'px,' +
+        'transparent ' + sepT + 'px ' + (sepT * 3) + 'px)';
+    } else if (state.sepStyle === 'double') {
+      const line = Math.max(1, Math.round(sepT / 3));
+      cardSep.style.height = (line * 3) + 'px';
+      cardSep.style.background =
+        'linear-gradient(' + accentCol + ' 0 ' + line + 'px, transparent ' + line + 'px ' +
+        (line * 2) + 'px, ' + accentCol + ' ' + (line * 2) + 'px ' + (line * 3) + 'px)';
+    } else {
+      cardSep.style.background = accentCol;
+    }
     cardSep.style.marginTop = gap + 'px';
 
     // 강조선 길이
@@ -2907,6 +3169,8 @@
     // 문구 덩어리의 세로 위치 + 미세조정
     card.style.justifyContent = state.vAlign === 'top' ? 'flex-start'
                               : (state.vAlign === 'bottom' ? 'flex-end' : 'center');
+    // 글자 크기·여백·비율이 바뀌면 문구 덩어리 크기도 달라지므로 판을 다시 잡는다
+    setTimeout(applyPanel, 0);
     const off = parseInt($('offsetRange').value, 10) || 0;
     const offX = parseInt($('offsetXRange').value, 10) || 0;
     cardInner.style.top = off + 'px';
@@ -2927,6 +3191,10 @@
   ['sizeRange','textColor','accentColor','lineHeightRange','letterRange','scaleRange',
    'gapRange','padRange','creditSizeRange','radiusRange','offsetRange','offsetXRange',
    'borderRange','borderColor',
+   'patternSizeRange','patternOpacityRange','patternColor','vignetteRange',
+   'panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
+   'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
+   'shX','shY','shBlur','shColor','shAlpha',
    'indentRange','sepWidthRange',
    'padTopRange','padBottomRange','padLeftRange','padRightRange']
     .forEach(id => $(id).addEventListener('input', applyStyle));
@@ -3074,6 +3342,16 @@
     applyStyle();
   });
 
+  // 강조선 모양
+  document.querySelectorAll('#sepStyleSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#sepStyleSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.sepStyle = btn.dataset.sep;
+      applyStyle();
+    });
+  });
+
   // 세로 배치 버튼
   document.querySelectorAll('#vAlignSeg button').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3101,6 +3379,213 @@
       applyStyle();
       renderCard();   // 가운뎃점 표시 여부를 다시 계산
     });
+  });
+
+  // ============ 꾸미기 (패턴 / 비네트 / 판 / 모서리) ============
+  // 패턴과 비네트는 CSS 그라데이션 대신 캔버스로 그린 이미지를 쓴다.
+  // html2canvas 가 그라데이션을 완벽히 그리지 못하는 경우가 있어서,
+  // 이미지로 만들어 두면 화면과 저장본이 항상 똑같이 나온다.
+  function hexToRgba(hex, a) {
+    const h = (hex || '#000000').replace('#', '');
+    const n = parseInt(h.length === 3 ? h.replace(/./g, c => c + c) : h, 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+
+  // 패턴 타일 한 장을 만들어 data URL 로
+  function makePatternURL(kind, hex, size, alpha) {
+    const S = Math.max(4, size);
+    const cv = document.createElement('canvas');
+    cv.width = S; cv.height = S;
+    const g = cv.getContext && cv.getContext('2d');
+    if (!g) return '';          // 캔버스를 못 쓰는 환경이면 패턴 없이 진행
+    const col = hexToRgba(hex, alpha);
+    g.strokeStyle = col;
+    g.fillStyle = col;
+    if (kind === 'grid') {
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(0.5, 0); g.lineTo(0.5, S);
+      g.moveTo(0, 0.5); g.lineTo(S, 0.5);
+      g.stroke();
+    } else if (kind === 'dot') {
+      const r = Math.max(1, Math.round(S / 10));
+      g.beginPath();
+      g.arc(S / 2, S / 2, r, 0, Math.PI * 2);
+      g.fill();
+    } else if (kind === 'diag') {
+      // 45도 선. x+y 가 0, S, 2S 인 세 줄을 그으면 타일을 이어붙였을 때
+      // 끊김 없는 대각 줄무늬가 된다. (가운데 한 줄만 그으면 모서리가 빈다)
+      g.lineWidth = 1;
+      g.lineCap = 'square';
+      g.beginPath();
+      g.moveTo(-2, 2);         g.lineTo(2, -2);
+      g.moveTo(0, S);          g.lineTo(S, 0);
+      g.moveTo(S - 2, S + 2);  g.lineTo(S + 2, S - 2);
+      g.stroke();
+    } else if (kind === 'paper') {
+      // 종이결 — 미세한 잡티
+      const img = g.createImageData(S, S);
+      const h = (hex || '#000000').replace('#', '');
+      const n = parseInt(h.length === 3 ? h.replace(/./g, c => c + c) : h, 16);
+      for (let i = 0; i < img.data.length; i += 4) {
+        img.data[i] = (n >> 16) & 255;
+        img.data[i + 1] = (n >> 8) & 255;
+        img.data[i + 2] = n & 255;
+        img.data[i + 3] = Math.random() < 0.5 ? 0 : Math.round(alpha * 255 * Math.random());
+      }
+      g.putImageData(img, 0, 0);
+    }
+    return cv.toDataURL('image/png');
+  }
+
+  // 비네트 이미지 (가운데 투명 → 가장자리 어둡게)
+  function makeVignetteURL(strength, hex) {
+    const S = 256;
+    const cv = document.createElement('canvas');
+    cv.width = S; cv.height = S;
+    const g = cv.getContext && cv.getContext('2d');
+    if (!g) return '';
+    const grad = g.createRadialGradient(S / 2, S / 2, S * 0.28, S / 2, S / 2, S * 0.72);
+    grad.addColorStop(0, hexToRgba(hex, 0));
+    grad.addColorStop(1, hexToRgba(hex, strength));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, S, S);
+    return cv.toDataURL('image/png');
+  }
+
+  let patternCache = '';   // 같은 설정이면 다시 그리지 않기 위한 키
+  function applyDecor() {
+    const pat = $('cardPattern'), vig = $('cardVignette');
+    const corners = $('cardCorners');
+
+    // ── 배경 패턴 ──
+    const pKind = state.pattern;
+    if (pKind === 'none') {
+      pat.style.backgroundImage = 'none';
+    } else {
+      const size = parseInt($('patternSizeRange').value, 10);
+      const alpha = parseInt($('patternOpacityRange').value, 10) / 100;
+      const hex = $('patternColor').value;
+      const key = [pKind, size, alpha, hex].join('|');
+      if (key !== patternCache) {
+        const url = makePatternURL(pKind, hex, size, alpha);
+        pat.style.backgroundImage = url ? 'url(' + url + ')' : 'none';
+        pat.style.backgroundSize = size + 'px ' + size + 'px';
+        patternCache = key;
+      }
+      $('patternSizeVal').textContent = size + 'px';
+      $('patternOpacityVal').textContent = Math.round(alpha * 100) + '%';
+    }
+    $('patternOpts').style.display = pKind === 'none' ? 'none' : '';
+
+    // ── 비네트 ──
+    const vs = parseInt($('vignetteRange').value, 10);
+    $('vignetteVal').textContent = vs + '%';
+    const vurl = vs > 0 ? makeVignetteURL(vs / 100, $('vignetteColor').value) : '';
+    vig.style.backgroundImage = vurl ? 'url(' + vurl + ')' : 'none';
+
+    // ── 모서리 장식 ──
+    $('cornerOpts').style.display = state.corner === 'none' ? 'none' : '';
+    corners.innerHTML = '';
+    if (state.corner !== 'none') {
+      const sz = parseInt($('cornerSizeRange').value, 10);
+      const ins = parseInt($('cornerInsetRange').value, 10);
+      const col = $('cornerColor').value;
+      $('cornerSizeVal').textContent = sz + 'px';
+      $('cornerInsetVal').textContent = ins + 'px';
+      const thick = Math.max(1, Math.round(sz / 12));
+      // [세로위치, 가로위치] 네 모서리
+      [['top', 'left'], ['top', 'right'], ['bottom', 'left'], ['bottom', 'right']].forEach(pos => {
+        const mk = (css) => {
+          const el = document.createElement('div');
+          el.className = 'corner';
+          el.style.cssText = css;
+          corners.appendChild(el);
+        };
+        const v = pos[0] + ':' + ins + 'px;', h = pos[1] + ':' + ins + 'px;';
+        if (state.corner === 'bracket') {
+          mk(v + h + 'width:' + sz + 'px;height:' + sz + 'px;' +
+             'border-' + pos[0] + ':' + thick + 'px solid ' + col + ';' +
+             'border-' + pos[1] + ':' + thick + 'px solid ' + col + ';');
+        } else if (state.corner === 'cross') {
+          // 가로 막대 + 세로 막대
+          mk(pos[0] + ':' + (ins + sz / 2 - thick / 2) + 'px;' + h +
+             'width:' + sz + 'px;height:' + thick + 'px;background:' + col + ';');
+          mk(v + pos[1] + ':' + (ins + sz / 2 - thick / 2) + 'px;' +
+             'width:' + thick + 'px;height:' + sz + 'px;background:' + col + ';');
+        } else if (state.corner === 'dot') {
+          const d = Math.max(2, Math.round(sz / 3));
+          mk(v + h + 'width:' + d + 'px;height:' + d + 'px;background:' + col + ';');
+        }
+      });
+    }
+  }
+
+  // 문구 뒤 반투명 판 — card-inner 의 실제 위치에 맞춰 크기를 잡는다
+  function applyPanel() {
+    const panel = $('cardPanel');
+    if (!state.panel) { panel.style.display = 'none'; return; }
+    const pad = parseInt($('panelPadRange').value, 10);
+    const op = parseInt($('panelOpacityRange').value, 10) / 100;
+    const rad = parseInt($('panelRadiusRange').value, 10);
+    $('panelPadVal').textContent = pad + 'px';
+    $('panelOpacityVal').textContent = Math.round(op * 100) + '%';
+    $('panelRadiusVal').textContent = rad + 'px';
+    const cr = card.getBoundingClientRect();
+    const ir = cardInner.getBoundingClientRect();
+    // 판은 카드의 '테두리 안쪽'을 기준으로 놓이므로 테두리 굵기를 빼야 한다.
+    // 카드가 확대·축소되어 보이는 경우에도 맞도록 비율로 나눠 보정한다.
+    const cs = getComputedStyle(card);
+    const sc = card.offsetWidth ? (cr.width / card.offsetWidth) : 1;
+    const bl = parseFloat(cs.borderLeftWidth) || 0;
+    const bt = parseFloat(cs.borderTopWidth) || 0;
+    const x = (ir.left - cr.left) / (sc || 1) - bl;
+    const y = (ir.top - cr.top) / (sc || 1) - bt;
+    const w = ir.width / (sc || 1);
+    const h = ir.height / (sc || 1);
+    panel.style.display = '';
+    panel.style.left = (x - pad) + 'px';
+    panel.style.top = (y - pad) + 'px';
+    panel.style.width = (w + pad * 2) + 'px';
+    panel.style.height = (h + pad * 2) + 'px';
+    panel.style.background = hexToRgba($('panelColor').value, op);
+    panel.style.borderRadius = rad + 'px';
+  }
+
+  // 패턴 / 모서리 종류 버튼
+  document.querySelectorAll('#patternSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#patternSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.pattern = btn.dataset.pat;
+      patternCache = '';
+      applyDecor();
+    });
+  });
+  document.querySelectorAll('#cornerSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#cornerSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.corner = btn.dataset.corner;
+      applyDecor();
+    });
+  });
+  $('panelToggle').addEventListener('click', () => {
+    state.panel = !state.panel;
+    $('panelToggle').classList.toggle('on', state.panel);
+    $('panelToggle').textContent = state.panel ? '끄기' : '켜기';
+    $('panelOpts').style.display = state.panel ? '' : 'none';
+    applyPanel();
+  });
+  ['patternColor','patternSizeRange','patternOpacityRange','vignetteRange','vignetteColor',
+   'cornerColor','cornerSizeRange','cornerInsetRange'].forEach(id => {
+    $(id).addEventListener('input', () => { patternCache = ''; applyDecor(); });
+  });
+  ['panelColor','panelOpacityRange','panelPadRange','panelRadiusRange'].forEach(id => {
+    $(id).addEventListener('input', applyPanel);
+  });
+  ['shX','shY','shBlur','shColor','shAlpha'].forEach(id => {
+    $(id).addEventListener('input', applyStyle);
   });
 
   // ============ 배경 ============
@@ -3243,7 +3728,13 @@
       dimRange: 35, bgSizeRange: 100, bgPosXRange: 50, bgPosYRange: 50, bgBlurRange: 0,
       offsetRange: 0, offsetXRange: 0, indentRange: 2, sepWidthRange: 30,
       padTopRange: 56, padBottomRange: 56, padLeftRange: 56, padRightRange: 56,
-      hlPadRange: 1, borderRange: 0, borderColor: '#1a1d24'
+      hlPadRange: 1, borderRange: 0, borderColor: '#1a1d24',
+      patternSizeRange: 16, patternOpacityRange: 12, patternColor: '#000000',
+      vignetteRange: 0, vignetteColor: '#000000',
+      panelColor: '#000000', panelOpacityRange: 35,
+      panelPadRange: 22, panelRadiusRange: 8, cornerColor: '#ffffff',
+      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1,
+      shX: 0, shY: 2, shBlur: 8, shColor: '#000000', shAlpha: 45
     };
     Object.keys(defaults).forEach(id => { if ($(id)) $(id).value = defaults[id]; });
     // state 기본값
@@ -3260,6 +3751,13 @@
     state.charBold = true;
     state.creditSep = '\u00B7';
     $('creditSepInput').value = '\u00B7';
+    state.pattern = 'none';
+    state.corner = 'none';
+    state.panel = false;
+    state.sepStyle = 'solid';
+    $('panelToggle').classList.remove('on');
+    $('panelToggle').textContent = '켜기';
+    $('panelOpts').style.display = 'none';
     state.wordBreak = 'keep-all';
     state.quoteStyle = 0;
     state.showCredit = true;
@@ -3283,6 +3781,11 @@
     $('bgImagePanel').style.display = 'none';
     setActive('.qs-seg button', b => b.dataset.qs === '0');
     setActive('#charBoldSeg button', b => b.dataset.cbold === '1');
+    setActive('#patternSeg button', b => b.dataset.pat === 'none');
+    setActive('#cornerSeg button', b => b.dataset.corner === 'none');
+    setActive('#sepStyleSeg button', b => b.dataset.sep === 'solid');
+    patternCache = '';
+    applyDecor();
     $('creditToggle').classList.add('on');
     $('shadowToggle').classList.remove('on');
     renderFontGrid();
@@ -3499,6 +4002,12 @@
   // card 직속 div 에 그대로 쓰면 화면과 정확히 일치한다.
   function measureHighlights() {
     const baseRect = card.getBoundingClientRect();
+    // 띠는 카드의 '테두리 안쪽'에 놓이므로 테두리 굵기만큼 빼야 위치가 맞는다.
+    // (카드가 확대·축소되어 보이는 경우에도 맞도록 비율로도 보정)
+    const cs = getComputedStyle(card);
+    const sc = card.offsetWidth ? (baseRect.width / card.offsetWidth) : 1;
+    const bl = parseFloat(cs.borderLeftWidth) || 0;
+    const bt = parseFloat(cs.borderTopWidth) || 0;
     // 화면에서 준 위아래 여백만큼 저장할 때도 띠를 넓힌다
     const extra = parseInt($('hlPadRange').value, 10) || 0;
     // 문구뿐 아니라 출처(제작자·캐릭터) 안의 형광펜도 함께 측정한다
@@ -3517,10 +4026,11 @@
       for (let i = 0; i < list.length; i++) {
         const r = list[i];
         rects.push({
-          x: r.left - baseRect.left,
-          y: r.top - baseRect.top + leading * 0.5 - extra,  // leading 절반만 보정
-          w: r.width,
-          h: r.height - leading * 0.5 + extra * 2,          // 높이도 절반만 줄임
+          x: (r.left - baseRect.left) / (sc || 1) - bl,
+          y: (r.top - baseRect.top) / (sc || 1) - bt
+             + leading * 0.5 - extra,                       // leading 절반만 보정
+          w: r.width / (sc || 1),
+          h: r.height / (sc || 1) - leading * 0.5 + extra * 2,   // 높이도 절반만 줄임
           col: col
         });
       }
@@ -3821,6 +4331,10 @@
       'letterRange','scaleRange','gapRange','padRange','creditSizeRange',
       'radiusRange','fontScaleRange','bgColor','gradColor1','gradColor2',
       'borderRange','borderColor',
+      'patternSizeRange','patternOpacityRange','patternColor','vignetteRange',
+      'panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
+      'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
+      'shX','shY','shBlur','shColor','shAlpha',
       'dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange',
       'offsetRange','offsetXRange','indentRange','sepWidthRange',
       'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange'];
@@ -3845,7 +4359,11 @@
       creditAlign: state.creditAlign,
       creditLine: state.creditLine,
       charBold: state.charBold,
-      creditSep: state.creditSep
+      creditSep: state.creditSep,
+      pattern: state.pattern,
+      corner: state.corner,
+      panel: state.panel,
+      sepStyle: state.sepStyle
     };
   }
 
@@ -3956,6 +4474,10 @@
     state.charBold = s.charBold !== false;
     state.creditSep = (s.creditSep !== undefined) ? s.creditSep : '\u00B7';
     $('creditSepInput').value = state.creditSep;
+    state.pattern = s.pattern || 'none';
+    state.corner = s.corner || 'none';
+    state.panel = !!s.panel;
+    state.sepStyle = s.sepStyle || 'solid';
     if (s.wordBreak) state.wordBreak = s.wordBreak;
     state.quoteStyle = s.quoteStyle || 0;
     state.showCredit = s.showCredit !== false;
@@ -3982,6 +4504,14 @@
     $('bgGradPanel').style.display = state.bgMode === 'gradient' ? '' : 'none';
     $('bgImagePanel').style.display = state.bgMode === 'image' ? '' : 'none';
     setActive('#charBoldSeg button', b => b.dataset.cbold === (state.charBold ? '1' : '0'));
+    setActive('#patternSeg button', b => b.dataset.pat === state.pattern);
+    setActive('#cornerSeg button', b => b.dataset.corner === state.corner);
+    setActive('#sepStyleSeg button', b => b.dataset.sep === state.sepStyle);
+    $('panelToggle').classList.toggle('on', state.panel);
+    $('panelToggle').textContent = state.panel ? '끄기' : '켜기';
+    $('panelOpts').style.display = state.panel ? '' : 'none';
+    patternCache = '';
+    applyDecor();
     $('creditToggle').classList.toggle('on', state.showCredit);
     $('shadowToggle').classList.toggle('on', state.shadow);
     renderFontGrid();
@@ -4135,6 +4665,19 @@
   document.addEventListener('scroll', closeCtx, true);
   window.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtx(); });
 
+  // ============ 슬라이더 값 위치 정리 ============
+  // 값을 슬라이더 오른쪽에 두면, 짧은 값('0')일 때 자기 슬라이더보다
+  // 옆 칸에 더 가까워 보인다. 그렇다고 왼쪽에 붙이면 오른쪽 끝이 안 맞는다.
+  // 그래서 값을 라벨 줄 오른쪽 끝으로 옮긴다. (id 는 그대로라 기존 코드 영향 없음)
+  document.querySelectorAll('.slider-row').forEach(row => {
+    const val = row.querySelector('.slider-val');
+    const label = row.previousElementSibling;
+    if (!val || !label) return;
+    if (!label.classList.contains('field-label')) return;
+    label.classList.add('has-val');
+    label.appendChild(val);
+  });
+
   // ============ 영역 접기 ============
   // 제목을 누르면 그 영역이 접힌다. 접힌 목록은 다음에 열 때도 유지.
   const COLLAPSE_KEY = 'quotecard:collapsed';
@@ -4172,6 +4715,7 @@
 
   // ============ 초기화 ============
   loadDraft();   // 지난번에 쓰던 문구·출처 복원
+  applyDecor();
   $('fontScaleRange').value = getFontScale(state.fontFamily);
   renderFontGrid();
   renderGradGrid();
