@@ -315,6 +315,32 @@
     transition: border-color 0.13s ease, transform 0.1s ease;
   }
   .preset:hover { transform: scale(1.05); }
+  /* 캐릭터에 연결된 테마 — 이름표와 강조 테두리 */
+  .preset { position: relative; }
+  .preset-tag {
+    position: absolute; top: 2px; right: 3px;
+    max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 8px; line-height: 1.2; opacity: 0.75;
+    padding: 1px 3px; border-radius: 3px;
+    background: rgba(0,0,0,0.28);
+  }
+  .preset.preset-match { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* 프리셋 그룹 제목 — 그리드 한 줄을 통째로 차지해 구분선 역할 */
+  .preset-group {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 7px;
+    margin: 4px 0 1px;
+    font-size: 9.5px; font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  .preset-group::after {
+    content: ''; flex: 1; height: 1px;
+    background: var(--border);
+  }
+  .preset-group:empty { margin: 2px 0 0; }
+  .preset-group:empty::after { content: ''; }
   .preset-add {
     background: var(--field) !important;
     color: var(--text-dim) !important;
@@ -1111,6 +1137,7 @@
       </div>
       <div class="hint">위 두 칸에서 범위를 선택하고 누르면 그 칸에 서식이 걸립니다.</div>
 
+
       <div class="row">
         <div>
           <label class="field-label">출처 위치</label>
@@ -1565,6 +1592,13 @@
             <span class="slider-val" id="patternOpacityVal">12%</span>
           </div>
         </div>
+        <div>
+          <label class="field-label">회전</label>
+          <div class="slider-row">
+            <input type="range" id="patternAngleRange" min="0" max="180" step="5" value="0">
+            <span class="slider-val" id="patternAngleVal">0°</span>
+          </div>
+        </div>
       </div>
 
       <div class="row">
@@ -1682,7 +1716,7 @@
     <div class="section">
       <div class="section-title">색 테마 &amp; 프리셋</div>
       <div class="preset-grid" id="presetGrid"></div>
-      <div class="hint">기본 테마는 색만 바꿉니다. <b>+ 저장</b>으로 직접 저장한 것은 글씨체·여백·꾸미기까지 <b>지금 설정 전체</b>가 담기고, 누르면 그대로 되돌아옵니다. 더블클릭하면 삭제됩니다.</div>
+      <div class="hint">기본 테마는 색만 바꿉니다. <b>+ 저장</b>으로 직접 저장한 것은 글씨체·여백·꾸미기까지 <b>지금 설정 전체</b>가 담기고, 누르면 그대로 되돌아옵니다. 캐릭터 전용으로 저장하면 <b>제작자·캐릭터 이름까지</b> 함께 되살아납니다. 더블클릭하면 삭제됩니다.</div>
 
           </div>
 
@@ -1785,6 +1819,10 @@
     <div class="modal-body">
       <p id="askMsg" style="font-size:12.5px; line-height:1.6; color:var(--text);"></p>
       <input type="text" id="askInput" maxlength="40" autocomplete="off" style="margin-top:11px;">
+      <label id="askCheckWrap" style="display:none; align-items:center; gap:7px; margin-top:11px; font-size:12px; color:var(--text-dim); cursor:pointer;">
+        <input type="checkbox" id="askCheck" style="width:auto;">
+        <span id="askCheckLabel"></span>
+      </label>
     </div>
     <div class="modal-foot">
       <button id="askCancel">취소</button>
@@ -1956,6 +1994,11 @@
     const inp = document.getElementById('askInput');
     inp.style.display = opt.input ? '' : 'none';
     inp.value = opt.value || '';
+    const cw = document.getElementById('askCheckWrap');
+    const ck = document.getElementById('askCheck');
+    cw.style.display = opt.checkbox ? 'flex' : 'none';
+    document.getElementById('askCheckLabel').textContent = opt.checkbox || '';
+    ck.checked = !!opt.checkboxDefault;
     document.getElementById('askOk').textContent = opt.okText || '확인';
     ov.classList.add('show');
     if (opt.input) setTimeout(() => { inp.focus(); inp.select(); }, 30);
@@ -1968,8 +2011,9 @@
     if (fn) fn(result);
   }
   // 이름을 물어보는 창 — 취소하면 null
-  function askText(title, value, okText) {
-    return openAsk({ title: title, input: true, value: value, okText: okText });
+  function askText(title, value, okText, checkboxLabel, checkboxDefault) {
+    return openAsk({ title: title, input: true, value: value, okText: okText,
+                      checkbox: checkboxLabel, checkboxDefault: checkboxDefault });
   }
   // 예/아니오를 물어보는 창 — 취소하면 false
   function askConfirm(title, message, okText) {
@@ -1978,7 +2022,14 @@
   }
   document.getElementById('askOk').addEventListener('click', () => {
     const inp = document.getElementById('askInput');
-    closeAsk(inp.style.display === 'none' ? true : inp.value);
+    const cw = document.getElementById('askCheckWrap');
+    if (inp.style.display === 'none') { closeAsk(true); return; }
+    // 체크박스가 있는 창이면 {value, checked} 로, 없으면 문자열 그대로 돌려준다
+    if (cw.style.display !== 'none') {
+      closeAsk({ value: inp.value, checked: document.getElementById('askCheck').checked });
+    } else {
+      closeAsk(inp.value);
+    }
   });
   document.getElementById('askCancel').addEventListener('click', () => closeAsk(null));
   document.getElementById('askOverlay').addEventListener('click', ev => {
@@ -2308,7 +2359,30 @@
   function renderPresetGrid() {
     const grid = $('presetGrid');
     grid.innerHTML = '';
-    allPresets().forEach((p, i) => {
+    const curChar = plainName(charInput.value);
+
+    // 그룹으로 나눈다: 기본 테마 / 내 테마(공용) / 캐릭터 테마
+    const builtin = PRESETS.map((p, i) => ({ p: p, i: i }));
+    const mineAll = (data.presets || []).map((p, k) => ({ p: p, i: PRESETS.length + k }));
+    const common = mineAll.filter(x => !x.p.char);
+    const chars = mineAll.filter(x => x.p.char);
+    // 지금 캐릭터의 테마를 캐릭터 그룹 맨 앞으로
+    chars.sort((a, b) => {
+      const am = curChar && a.p.char === curChar, bm = curChar && b.p.char === curChar;
+      if (am !== bm) return am ? -1 : 1;
+      return 0;
+    });
+
+    // 그룹 제목 (그리드 한 줄을 통째로 차지)
+    function header(text) {
+      const h = document.createElement('div');
+      h.className = 'preset-group';
+      h.textContent = text;
+      grid.appendChild(h);
+    }
+
+    function chipFor(entry) {
+      const p = entry.p, i = entry.i;
       const chip = document.createElement('div');
       chip.className = 'preset';
       const bgCss = p.grad
@@ -2318,19 +2392,35 @@
       chip.style.color = p.text;
       chip.textContent = p.name;
       const isCustom = i >= PRESETS.length;
-      chip.title = isCustom ? (p.name + ' — 클릭 적용 / 더블클릭 삭제') : (p.name + ' 테마 적용');
+      if (p.char) {
+        const tag = document.createElement('span');
+        tag.className = 'preset-tag';
+        tag.textContent = p.char;
+        chip.appendChild(tag);
+        if (p.char === curChar) chip.classList.add('preset-match');
+      }
+      chip.title = isCustom
+        ? (p.name + (p.char ? ' — "' + p.char + '" 전용 (제작자·캐릭터 이름까지 되살아납니다)' : '')
+           + ' — 클릭 적용 / 더블클릭 삭제')
+        : (p.name + ' 테마 적용');
       chip.addEventListener('click', () => applyPreset(p));
       if (isCustom) {
         chip.addEventListener('dblclick', () => {
-          data.presets.splice(i - PRESETS.length, 1);
+          data.presets = data.presets.filter(x => x !== p);
           saveData();
           renderPresetGrid();
-          toast('테마 "' + p.name + '" 삭제됨');
+                toast('테마 "' + p.name + '" 삭제됨');
         });
       }
       grid.appendChild(chip);
-    });
+    }
+
+    builtin.forEach(chipFor);
+    if (common.length) { header('내 테마'); common.forEach(chipFor); }
+    if (chars.length) { header('캐릭터 테마'); chars.forEach(chipFor); }
+
     // "현재 설정 저장" 칩
+    if (common.length || chars.length) header('');
     const add = document.createElement('div');
     add.className = 'preset preset-add';
     add.textContent = '+ 저장';
@@ -2338,12 +2428,24 @@
     add.addEventListener('click', saveCurrentPreset);
     grid.appendChild(add);
   }
+
   // 현재 배경/색 설정을 사용자 테마로 저장
   async function saveCurrentPreset() {
-    const raw = await askText('색 테마 저장', '내 테마', '저장');
-    const name = (raw || '').trim();
+    // 캐릭터 칸에 이름이 있으면 그 캐릭터 전용으로 저장할지 물어본다
+    const curChar = plainName(charInput.value);
+    const raw = curChar
+      ? await askText('색 테마 저장', curChar + ' 테마', '저장',
+                       '"' + curChar + '" 캐릭터 전용으로 저장', true)
+      : await askText('색 테마 저장', '내 테마', '저장');
+    const linked = curChar && raw && typeof raw === 'object' && raw.checked;
+    const name = ((raw && typeof raw === 'object' ? raw.value : raw) || '').trim();
     if (!name) return;
     const p = { name, text: $('textColor').value, accent: $('accentColor').value };
+    if (linked) {
+      p.char = curChar;                    // 목록에서 찾을 때 쓰는 이름(글자만)
+      p.charRaw = charInput.value;          // 서식까지 그대로 되살리기 위한 원문
+      p.makerRaw = makerInput.value;        // 제작자도 함께
+    }
     if (state.bgMode === 'gradient') {
       p.grad = [$('gradColor1').value, $('gradColor2').value];
     } else {
@@ -2354,6 +2456,7 @@
     // 기본 내장 테마에는 settings 가 없어서 예전처럼 색만 바뀐다.
     p.settings = captureSettings();
     let list = [p].concat(data.presets.filter(x => x.name !== name));
+    const note0 = p.char ? ('"' + p.char + '" 전용 테마로 ') : '';
     // 배경 이미지가 크면 저장 용량을 넘길 수 있어 그때만 이미지를 뺀다
     let note = '';
     if (JSON.stringify(list).length > 3000000) {
@@ -2363,12 +2466,20 @@
     data.presets = list.slice(0, 40);
     saveData();
     renderPresetGrid();
-    toast('"' + name + '" 저장됨' + note);
+    toast(note0 + '"' + name + '" 저장됨' + note);
   }
   function applyPreset(p) {
     // 직접 저장한 테마에는 전체 설정이 들어 있다 → 통째로 되돌린다
     if (p.settings) {
       restoreSettings(p.settings);
+      // 캐릭터 전용 테마면 제작자·캐릭터 이름도 저장해둔 그대로 되살린다
+      if (p.char) {
+        if (p.charRaw !== undefined) charInput.value = p.charRaw;
+        else charInput.value = p.char;
+        if (p.makerRaw !== undefined) makerInput.value = p.makerRaw;
+        renderCard();
+            renderPresetGrid();
+      }
       toast('"' + p.name + '" 적용됨');
       return;
     }
@@ -2480,6 +2591,7 @@
         if (it.maker) makerInput.value = it.maker;
         closeMenus();
         renderCard();
+            renderPresetGrid();
       });
       row.querySelector('.ci-del').addEventListener('click', e => {
         e.stopPropagation();
@@ -2574,8 +2686,16 @@
   function onCharInput() {
     renderCard();
     buildCharMenu();
+    refreshPresetOrder();   // 이 캐릭터의 테마를 앞으로 정렬
     makerMenu.classList.remove('show');
     charMenu.classList.add('show');
+  }
+  // 캐릭터가 바뀌면 그 캐릭터의 테마가 앞으로 오도록 칩을 다시 그린다
+  // (타이핑 중에는 너무 자주 부르지 않게 묶음)
+  let presetOrderTimer = null;
+  function refreshPresetOrder() {
+    clearTimeout(presetOrderTimer);
+    presetOrderTimer = setTimeout(renderPresetGrid, 150);
   }
   // input 과 compositionupdate 둘 다 처리 — 한글 조합 중(ㅍ 등)에도 검색되게.
   // compositionupdate 시점엔 value 가 아직 갱신 전이라 다음 틱에 실행.
@@ -3004,7 +3124,7 @@
       (state.creditLine === 1 && cShown && mShown) ? '' : 'none';
 
     // 출처 표시 on/off
-    cardSep.style.display = state.showCredit ? '' : 'none';
+    cardSep.style.display = state.showCredit ? 'flex' : 'none';
     cardCredit.style.display = state.showCredit ? '' : 'none';
 
     updatePageNav();
@@ -3355,27 +3475,44 @@
     // 한 줄로 늘어놓을 때는 두 이름 크기를 같게 (2줄일 때만 제작자를 작게)
     makerName.style.fontSize =
       (creditSize * (state.creditLine === 1 ? 1 : 0.8) * fontScale) + 'px';
-    // 강조선 모양 — 점선·도트·이중선은 그라데이션으로 그린다
-    // (border-style 은 저장본에서 모양이 달라질 수 있어서)
+    // 강조선 모양 — 점선·도트·이중선을 그라데이션으로 그리면
+    // html2canvas 가 저장본에서 이를 못 그려 선이 사라진다.
+    // 그래서 조각을 '실제 div' 로 깔아 저장본에서도 똑같이 나오게 한다.
     const sepT = Math.max(1, parseInt($('sepThickRange').value, 10) || 1);
+    const sepLen = parseInt($('sepWidthRange').value, 10) || 0;
     $('sepThickVal').textContent = sepT + 'px';
+    cardSep.innerHTML = '';
+    cardSep.style.background = 'none';
     cardSep.style.height = sepT + 'px';
-    if (state.sepStyle === 'dash') {
-      cardSep.style.background =
-        'repeating-linear-gradient(90deg,' + accentCol + ' 0 ' + (sepT * 5) + 'px,' +
-        'transparent ' + (sepT * 5) + 'px ' + (sepT * 9) + 'px)';
-    } else if (state.sepStyle === 'dot') {
-      cardSep.style.background =
-        'repeating-linear-gradient(90deg,' + accentCol + ' 0 ' + sepT + 'px,' +
-        'transparent ' + sepT + 'px ' + (sepT * 3) + 'px)';
+    cardSep.style.display = state.showCredit ? 'flex' : 'none';
+    cardSep.style.alignItems = 'flex-start';
+    cardSep.style.overflow = 'hidden';
+    const piece = (css) => {
+      const el = document.createElement('div');
+      el.style.cssText = 'flex:0 0 auto;background:' + accentCol + ';' + css;
+      cardSep.appendChild(el);
+    };
+    if (state.sepStyle === 'dash' || state.sepStyle === 'dot') {
+      // 조각 길이와 사이 간격
+      const len = state.sepStyle === 'dash' ? sepT * 5 : sepT;
+      const gapPx = state.sepStyle === 'dash' ? sepT * 4 : sepT * 2;
+      const step = len + gapPx;
+      const n = Math.max(1, Math.ceil((sepLen + gapPx) / step));
+      cardSep.style.flexDirection = 'row';
+      for (let k = 0; k < n; k++) {
+        piece('width:' + len + 'px;height:' + sepT + 'px;' +
+              (k < n - 1 ? 'margin-right:' + gapPx + 'px;' : ''));
+      }
     } else if (state.sepStyle === 'double') {
       const line = Math.max(1, Math.round(sepT / 3));
       cardSep.style.height = (line * 3) + 'px';
-      cardSep.style.background =
-        'linear-gradient(' + accentCol + ' 0 ' + line + 'px, transparent ' + line + 'px ' +
-        (line * 2) + 'px, ' + accentCol + ' ' + (line * 2) + 'px ' + (line * 3) + 'px)';
+      cardSep.style.flexDirection = 'column';
+      piece('width:100%;height:' + line + 'px;');
+      piece('width:100%;height:' + line + 'px;background:transparent;');
+      piece('width:100%;height:' + line + 'px;');
     } else {
-      cardSep.style.background = accentCol;
+      cardSep.style.flexDirection = 'row';
+      piece('width:100%;height:' + sepT + 'px;');
     }
     cardSep.style.marginTop = gap + 'px';
 
@@ -3423,7 +3560,7 @@
   ['sizeRange','textColor','accentColor','lineHeightRange','letterRange','scaleRange',
    'gapRange','padRange','creditSizeRange','radiusRange','offsetRange','offsetXRange',
    'borderRange','borderColor','strokeRange','strokeColor',
-   'patternSizeRange','patternOpacityRange','patternColor','vignetteRange',
+   'patternSizeRange','patternOpacityRange','patternAngleRange','patternColor','vignetteRange',
    'panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
    'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
    'shX','shY','shBlur','shColor','shAlpha',
@@ -3577,6 +3714,8 @@
       btn.classList.add('active');
       state.ratio = btn.dataset.ratio;
       applyRatioTune(state.ratio);
+      patternCache = '';   // 회전 패턴은 카드 비율에 맞춰 다시 그려야 한다
+      applyDecor();
       applyStyle();
     });
   });
@@ -3648,7 +3787,8 @@
       padTopRange: 56, padBottomRange: 56, padLeftRange: 56, padRightRange: 56,
       hlPadRange: 1, borderRange: 0, borderColor: '#1a1d24',
       strokeRange: 0, strokeColor: '#000000',
-      patternSizeRange: 16, patternOpacityRange: 12, patternColor: '#000000',
+      patternSizeRange: 16, patternOpacityRange: 12, patternAngleRange: 0,
+      patternColor: '#000000',
       vignetteRange: 0, vignetteColor: '#000000',
       panelColor: '#000000', panelOpacityRange: 35,
       panelPadRange: 22, panelRadiusRange: 8, cornerColor: '#ffffff',
@@ -3666,13 +3806,45 @@
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
 
-  // 패턴 타일 한 장을 만들어 data URL 로
+  // 패턴을 카드 크기 캔버스에 회전시켜 그린 뒤 이미지로 (반복 이음새 없음).
+  // 저장할 때 확대되므로 여유 있게 크게 그린다.
+  function makeRotatedPatternURL(kind, hex, size, alpha, angle, W, H) {
+    const S = Math.max(4, size);
+    // 타일 한 장을 만들고
+    const tile = document.createElement('canvas');
+    tile.width = S; tile.height = S;
+    const tg = tile.getContext && tile.getContext('2d');
+    if (!tg) return '';
+    drawTile(tg, kind, hex, S, alpha);
+    // 카드 크기 캔버스에 회전시켜 채운다
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const g = cv.getContext && cv.getContext('2d');
+    if (!g) return '';
+    const pat = g.createPattern(tile, 'repeat');
+    if (!pat) return '';
+    // 회전해도 카드 전체가 덮이도록 대각선 길이만큼 넓게 칠한다
+    const diag = Math.ceil(Math.sqrt(W * W + H * H));
+    g.translate(W / 2, H / 2);
+    g.rotate((angle || 0) * Math.PI / 180);
+    g.fillStyle = pat;
+    g.fillRect(-diag / 2, -diag / 2, diag, diag);
+    return cv.toDataURL('image/png');
+  }
+
+  // 패턴 타일 한 장을 만들어 data URL 로 (회전이 없을 때 반복해서 씀)
   function makePatternURL(kind, hex, size, alpha) {
     const S = Math.max(4, size);
     const cv = document.createElement('canvas');
     cv.width = S; cv.height = S;
     const g = cv.getContext && cv.getContext('2d');
     if (!g) return '';          // 캔버스를 못 쓰는 환경이면 패턴 없이 진행
+    drawTile(g, kind, hex, S, alpha);
+    return cv.toDataURL('image/png');
+  }
+
+  // 타일 한 장을 실제로 그리는 부분 (회전 버전과 공용)
+  function drawTile(g, kind, hex, S, alpha) {
     const col = hexToRgba(hex, alpha);
     g.strokeStyle = col;
     g.fillStyle = col;
@@ -3710,7 +3882,6 @@
       }
       g.putImageData(img, 0, 0);
     }
-    return cv.toDataURL('image/png');
   }
 
   // 비네트 이미지 (가운데 투명 → 가장자리 어둡게)
@@ -3741,15 +3912,30 @@
       const size = parseInt($('patternSizeRange').value, 10);
       const alpha = parseInt($('patternOpacityRange').value, 10) / 100;
       const hex = $('patternColor').value;
-      const key = [pKind, size, alpha, hex].join('|');
+      const angle = parseInt($('patternAngleRange').value, 10) || 0;
+      const r0 = RATIOS[state.ratio] || RATIOS.square;
+      const key = [pKind, size, alpha, hex, angle, r0.w, r0.h].join('|');
       if (key !== patternCache) {
-        const url = makePatternURL(pKind, hex, size, alpha);
-        pat.style.backgroundImage = url ? 'url(' + url + ')' : 'none';
-        pat.style.backgroundSize = size + 'px ' + size + 'px';
+        if (angle === 0) {
+          // 회전이 없으면 작은 타일을 반복해서 쓰는 게 가볍고 또렷하다
+          const url = makePatternURL(pKind, hex, size, alpha);
+          pat.style.backgroundImage = url ? 'url(' + url + ')' : 'none';
+          pat.style.backgroundSize = size + 'px ' + size + 'px';
+          pat.style.backgroundRepeat = 'repeat';
+        } else {
+          // 회전이 있으면 카드 크기 캔버스에 굽는다 (저장할 때 확대되니 3배로)
+          const SS = 3;
+          const url = makeRotatedPatternURL(pKind, hex, size, alpha, angle,
+                                            r0.w * SS, r0.h * SS);
+          pat.style.backgroundImage = url ? 'url(' + url + ')' : 'none';
+          pat.style.backgroundSize = '100% 100%';
+          pat.style.backgroundRepeat = 'no-repeat';
+        }
         patternCache = key;
       }
       $('patternSizeVal').textContent = size + 'px';
       $('patternOpacityVal').textContent = Math.round(alpha * 100) + '%';
+      $('patternAngleVal').textContent = angle + '\u00B0';
     }
     $('patternOpts').style.display = pKind === 'none' ? 'none' : '';
 
@@ -3852,7 +4038,8 @@
     $('panelOpts').style.display = state.panel ? '' : 'none';
     applyPanel();
   });
-  ['patternColor','patternSizeRange','patternOpacityRange','vignetteRange','vignetteColor',
+  ['patternColor','patternSizeRange','patternOpacityRange','patternAngleRange',
+   'vignetteRange','vignetteColor',
    'cornerColor','cornerSizeRange','cornerInsetRange'].forEach(id => {
     $(id).addEventListener('input', () => { patternCache = ''; applyDecor(); });
   });
@@ -4611,7 +4798,7 @@
       'letterRange','scaleRange','gapRange','padRange','creditSizeRange',
       'radiusRange','fontScaleRange','bgColor','dimColor','gradColor1','gradColor2',
       'borderRange','borderColor','strokeRange','strokeColor',
-      'patternSizeRange','patternOpacityRange','patternColor','vignetteRange',
+      'patternSizeRange','patternOpacityRange','patternAngleRange','patternColor','vignetteRange',
       'panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
       'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
       'shX','shY','shBlur','shColor','shAlpha',
@@ -4850,6 +5037,7 @@
         $('quoteInput').value = h.text;
         if (h.maker) makerInput.value = h.maker;
         if (h.char) charInput.value = h.char;
+        setTimeout(() => renderPresetGrid(), 0);
         curPage = 0;
         // 저장된 설정이 있으면 함께 복원
         if (h.settings) restoreSettings(h.settings);
