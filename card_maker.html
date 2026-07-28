@@ -280,9 +280,12 @@
   }
   .btn-grid button.active:hover { color: #fff; }
 
-  /* 나란히 놓인 두 번째 버튼부터는 오른쪽으로 밀지 않는다.
+  /* 나란히 놓인 두 번째 버튼부터는 오른쪽으로 밀지 않고 3px 만 띄운다.
      margin-left:auto 가 버튼마다 걸려서 사이가 벌어지던 문제. */
-  .mini-btn + .mini-btn { margin-left: 0 !important; }
+  .mini-btn + .mini-btn { margin-left: 3px !important; }
+  /* 부모에 flex gap 이 있으면 3px 에 더해져 더 벌어지므로, 버튼 사이에는 gap 을 없앤다 */
+  /* 글과 첫 버튼 사이는 auto 마진이 밀어줘서 자연히 벌어진다 */
+  .multi-help .mini-btn:first-of-type { margin-left: auto; }
   .mini-btn {
     margin-left: auto;
     padding: 3px 8px; font-size: 11px; font-weight: 500;
@@ -513,6 +516,31 @@
      줄바꿈돼도 각 줄 조각이 알아서 칠해진다. */
   /* 문단 들여쓰기 — 줄 첫머리의 탭 하나가 이 칸 하나가 된다 */
   #card .qindent { display: inline-block; }
+  /* 문단 블록 — 끌어서 배치의 단위 */
+  #card .qblock { white-space: pre-wrap; }
+  body.drag-place #card .qblock,
+  body.drag-place #card .card-credit,
+  body.drag-place #card .card-sep,
+  body.drag-place #cardTitle {
+    cursor: move;
+    outline: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+    outline-offset: 3px;
+  }
+  /* 강조선은 가늘어서 잡기 어렵다 — 모드가 켜지면 위아래 6px 씩 잡는 영역을 넓힌다 */
+  body.drag-place #card .card-sep { position: relative; }
+  body.drag-place #card .card-sep::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    top: -6px; bottom: -6px;
+  }
+
+  /* 클릭으로 선택한 블록 — 정렬 대상 */
+  body.drag-place #card .blk-sel {
+    outline: 2px solid var(--accent);
+  }
+  /* 문구 위 제목 줄 */
+  #cardTitle { white-space: pre-wrap; overflow-wrap: break-word; }
 
   /* 카드 위에 겹치는 장식 레이어들 — 배경 위, 글자 아래 */
   #cardPattern, #cardVignette, #cardPanel, #cardCorners, #cardBorder {
@@ -520,13 +548,32 @@
     pointer-events: none;
   }
   #cardPattern, #cardVignette, #cardCorners, #cardBorder { inset: 0; }
+  /* 말풍선 꼬리 (돌린 사각형을 담는 클리핑 틀) */
+  #cardPanel { box-sizing: border-box; }
+  .panel-tail {
+    position: absolute;
+    pointer-events: none;
+  }
   /* 테두리는 카드 요소에 직접 걸지 않고 위에 덧그린다.
      카드에 border 를 주면 저장할 때 배경이 끝나는 자리에 이음새가 생기고,
      여백·좌표 기준(테두리 안/밖)도 어긋나기 때문. */
   #cardBorder { box-sizing: border-box; }
+  /* 카드 안에 얹는 이미지 (캐릭터 아이콘 등) */
+  #cardIcon {
+    position: absolute;
+    object-fit: cover;
+    cursor: grab;
+    touch-action: none;      /* 모바일에서 끌 때 화면 스크롤 방지 */
+    user-select: none;
+  }
+  #cardIcon:active { cursor: grabbing; }
   #cardPattern { background-repeat: repeat; }
   #cardVignette { background-size: 100% 100%; background-repeat: no-repeat; }
   #cardCorners .corner { position: absolute; box-sizing: border-box; }
+
+  /* 형광펜 둥근끝 — 높이의 절반까지 자동으로 굴려 알약 모양이 된다 */
+  #card mark.qhl.hl-round { border-radius: 999px; }
+  .tk-h.hl-round { border-radius: 999px; }
 
   #card mark.qhl {
     color: inherit;
@@ -561,7 +608,7 @@
   /* 여러 장 안내 */
   .multi-help {
     display: flex; align-items: center;
-    gap: 8px; flex-wrap: wrap;
+    row-gap: 8px; column-gap: 0; flex-wrap: wrap;   /* 버튼 사이는 margin 3px 로만 */
     margin-top: 7px;
     font-size: 11px;
     color: var(--text-dim);
@@ -1003,6 +1050,45 @@
     <div class="section">
       <div class="section-title">
         발췌 문구
+        <button class="mini-btn" id="titleBtn" type="button" data-pop="titlePop"
+                title="문구 위에 얹을 제목 줄">제목 <span class="pop-caret">▾</span></button>
+      </div>
+      <div class="fmt-pop" id="titlePop">
+        <div class="row">
+          <div style="flex:2;">
+            <label class="field-label">제목 줄</label>
+            <input type="text" id="titleInput" maxlength="60" autocomplete="off"
+                   placeholder="비워두면 안 나옵니다 — 서식도 쓸 수 있어요">
+          </div>
+          <div class="col-swatch">
+            <label class="field-label">색</label>
+            <input type="color" class="swatch-input" id="titleColor" value="#ffffff"
+                   style="height:30px;width:44px;">
+          </div>
+        </div>
+        <div class="row" style="margin-bottom:0;">
+          <div>
+            <label class="field-label">크기</label>
+            <div class="slider-row">
+              <input type="range" id="titleSizeRange" min="8" max="40" value="13">
+              <span class="slider-val" id="titleSizeVal">13px</span>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">아래 간격</label>
+            <div class="slider-row">
+              <input type="range" id="titleGapRange" min="0" max="80" value="18">
+              <span class="slider-val" id="titleGapVal">18px</span>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">자간</label>
+            <div class="slider-row">
+              <input type="range" id="titleLetterRange" min="-2" max="12" step="0.5" value="2">
+              <span class="slider-val" id="titleLetterVal">2px</span>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="ta-wrap">
         <textarea id="quoteInput" placeholder="이미지로 만들 문구를 입력하세요" spellcheck="false"></textarea>
@@ -1051,6 +1137,15 @@
         <div class="pop-recent pal-recent-wrap">
           <span class="fh-tip">최근</span>
           <span class="hl-swatches pal-recent"><!-- JS --></span>
+        </div>
+        <div class="pop-extra">
+          <span class="fh-tip">모양</span>
+          <div class="seg hl-shape-seg" style="flex:1;">
+            <button data-hls="fill" class="active">채우기</button>
+            <button data-hls="round">둥근끝</button>
+            <button data-hls="half">반칠</button>
+            <button data-hls="under">밑줄</button>
+          </div>
         </div>
         <div class="pop-extra">
           <span class="fh-tip">높이</span>
@@ -1121,6 +1216,15 @@
         <div class="pop-recent pal-recent-wrap">
           <span class="fh-tip">최근</span>
           <span class="hl-swatches pal-recent"><!-- JS --></span>
+        </div>
+        <div class="pop-extra">
+          <span class="fh-tip">모양</span>
+          <div class="seg hl-shape-seg" style="flex:1;">
+            <button data-hls="fill" class="active">채우기</button>
+            <button data-hls="round">둥근끝</button>
+            <button data-hls="half">반칠</button>
+            <button data-hls="under">밑줄</button>
+          </div>
         </div>
         <div class="pop-extra">
           <span class="fh-tip">높이</span>
@@ -1256,6 +1360,13 @@
           </div>
         </div>
         <div>
+          <label class="field-label">글 방향</label>
+          <div class="seg" id="writeSeg">
+            <button data-vert="0" class="active">가로</button>
+            <button data-vert="1">세로</button>
+          </div>
+        </div>
+        <div>
           <label class="field-label">줄바꿈 단위</label>
           <div class="seg" id="breakSeg">
             <button data-break="keep-all" class="active" title="단어가 통째로 다음 줄로 넘어감">단어</button>
@@ -1306,7 +1417,27 @@
           <input type="range" id="gapRange" min="6" max="60" value="26">
           <span class="slider-val" id="gapVal">26px</span>
         </div>
+      <div class="field-group">
+        <label class="field-label">출처 글자 크기</label>
+        <div class="slider-row">
+          <input type="range" id="creditSizeRange" min="9" max="28" value="15">
+          <span class="slider-val" id="creditSizeVal">15px</span>
+        </div>
       </div>
+      <div class="row">
+        <div class="col-swatch">
+          <label class="field-label">외곽선 색</label>
+          <input type="color" class="swatch-input" id="strokeColor" value="#000000">
+        </div>
+        <div>
+          <label class="field-label">글자 외곽선</label>
+          <div class="slider-row">
+            <input type="range" id="strokeRange" min="0" max="6" step="0.5" value="0">
+            <span class="slider-val" id="strokeVal">0px</span>
+          </div>
+        </div>
+      </div>
+
       <div class="field-group">
         <label class="field-label">강조선 모양</label>
         <div class="seg" id="sepStyleSeg">
@@ -1332,27 +1463,7 @@
           </div>
         </div>
       </div>
-      <div class="field-group">
-        <label class="field-label">출처 글자 크기</label>
-        <div class="slider-row">
-          <input type="range" id="creditSizeRange" min="9" max="28" value="15">
-          <span class="slider-val" id="creditSizeVal">15px</span>
-        </div>
       </div>
-      <div class="row">
-        <div class="col-swatch">
-          <label class="field-label">외곽선 색</label>
-          <input type="color" class="swatch-input" id="strokeColor" value="#000000">
-        </div>
-        <div>
-          <label class="field-label">글자 외곽선</label>
-          <div class="slider-row">
-            <input type="range" id="strokeRange" min="0" max="6" step="0.5" value="0">
-            <span class="slider-val" id="strokeVal">0px</span>
-          </div>
-        </div>
-      </div>
-
       <div class="field-group opt-group" id="shadowOpts" style="display:none;">
         <label class="field-label">글자 그림자</label>
         <div class="row">
@@ -1403,6 +1514,27 @@
         <button data-ratio="wide">16:9</button>
         <button data-ratio="header" title="트위터 헤더 1500×500">3:1</button>
       </div>
+      <div class="field-group" style="margin-top:14px;">
+        <label class="field-label" style="display:flex;align-items:center;">
+          미리보기 드래그 배치
+          <button class="mini-btn" id="dragPlaceToggle" type="button"
+                  title="미리보기의 문단·출처·제목을 마우스로 끌어 옮깁니다">켜기</button>
+          <button class="mini-btn" id="blockOffReset" type="button"
+                  title="밀어둔 배치를 모두 원래 자리로">되돌리기</button>
+        </label>
+        <div class="hint">켜면 미리보기에서 문단·출처·제목을 직접 끌 수 있어요. 원래 자리에서 밀어내는 방식이라 줄바꿈은 그대로 유지됩니다. 클릭하면 선택되고, 여러 개 선택해 정렬할 수 있어요.</div>
+        <div class="row" id="alignRow" style="display:none; margin-top:8px; margin-bottom:0;">
+          <div>
+            <label class="field-label">선택한 것 정렬</label>
+            <div class="seg" id="alignSeg">
+              <button data-al="left" type="button">왼쪽</button>
+              <button data-al="center" type="button">가운데</button>
+              <button data-al="right" type="button">오른쪽</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="field-group" style="margin-top:9px;">
         <label class="field-label">세로 배치</label>
         <div class="seg" id="vAlignSeg">
@@ -1528,6 +1660,15 @@
         </div>
       </div>
 
+      <div class="field-group" id="pageBgRow" style="display:none;">
+        <label class="field-label" style="display:flex;align-items:center;">
+          <span id="pageBgLabel">이 장의 배경</span>
+          <button class="mini-btn" id="pageBgSave" type="button" title="지금 배경을 이 장에만 저장">이 장에 저장</button>
+          <button class="mini-btn" id="pageBgClear" type="button" title="이 장의 배경을 지우고 공통 배경 사용">지우기</button>
+        </label>
+        <div class="hint" id="pageBgHint" style="margin-top:5px;"></div>
+      </div>
+
       <div class="row" style="margin-top:13px;">
         <div class="col-swatch">
           <label class="field-label">막 색</label>
@@ -1562,6 +1703,69 @@
     <!-- 꾸미기 -->
     <div class="section">
       <div class="section-title">꾸미기</div>
+
+      <div class="field-group">
+        <label class="field-label" style="display:flex;align-items:center;">
+          카드 안 이미지
+          <button class="mini-btn" id="iconPick" type="button" title="아이콘이나 장식 이미지 올리기">이미지 올리기</button>
+          <button class="mini-btn" id="iconClear" type="button" title="올린 이미지 제거">지우기</button>
+        </label>
+        <input type="file" id="iconFile" accept="image/*" style="display:none;">
+      </div>
+      <div id="iconOpts" style="display:none;">
+        <div class="row">
+          <div>
+            <label class="field-label">크기</label>
+            <div class="slider-row">
+              <input type="range" id="iconSizeRange" min="16" max="400" value="96">
+              <span class="slider-val" id="iconSizeVal">96px</span>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">둥글기</label>
+            <div class="slider-row">
+              <input type="range" id="iconRadiusRange" min="0" max="50" value="50">
+              <span class="slider-val" id="iconRadiusVal">50%</span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label class="field-label">가로 위치</label>
+            <div class="slider-row">
+              <input type="range" id="iconXRange" min="0" max="100" value="50">
+              <span class="slider-val" id="iconXVal">50%</span>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">세로 위치</label>
+            <div class="slider-row">
+              <input type="range" id="iconYRange" min="0" max="100" value="12">
+              <span class="slider-val" id="iconYVal">12%</span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label class="field-label">투명도</label>
+            <div class="slider-row">
+              <input type="range" id="iconOpacityRange" min="10" max="100" value="100">
+              <span class="slider-val" id="iconOpacityVal">100%</span>
+            </div>
+          </div>
+          <div class="col-swatch">
+            <label class="field-label">테두리 색</label>
+            <input type="color" class="swatch-input" id="iconBorderColor" value="#ffffff">
+          </div>
+          <div>
+            <label class="field-label">테두리</label>
+            <div class="slider-row">
+              <input type="range" id="iconBorderRange" min="0" max="12" value="0">
+              <span class="slider-val" id="iconBorderVal">0px</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="field-group">
         <label class="field-label">배경 패턴</label>
@@ -1635,6 +1839,19 @@
             </div>
           </div>
           <div class="row">
+            <div class="col-swatch">
+              <label class="field-label">테두리 색</label>
+              <input type="color" class="swatch-input" id="panelBorderColor" value="#ffffff">
+            </div>
+            <div>
+              <label class="field-label">테두리</label>
+              <div class="slider-row">
+                <input type="range" id="panelBorderRange" min="0" max="10" value="0">
+                <span class="slider-val" id="panelBorderVal">0px</span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
             <div>
               <label class="field-label">판 여백</label>
               <div class="slider-row">
@@ -1647,6 +1864,18 @@
               <div class="slider-row">
                 <input type="range" id="panelRadiusRange" min="0" max="40" value="8">
                 <span class="slider-val" id="panelRadiusVal">8px</span>
+              </div>
+            </div>
+          </div>
+          <div class="row" style="margin-bottom:0;">
+            <div>
+              <label class="field-label">꼬리</label>
+              <div class="seg" id="panelTailSeg">
+                <button data-tail="none" class="active">없음</button>
+                <button data-tail="bl">↙</button>
+                <button data-tail="br">↘</button>
+                <button data-tail="tl">↖</button>
+                <button data-tail="tr">↗</button>
               </div>
             </div>
           </div>
@@ -1720,12 +1949,6 @@
 
           </div>
 
-    <!-- 데이터 백업 -->
-    <div class="section">
-      <div class="section-title">데이터 백업</div>
-      <div class="hint">글씨체·설정 프리셋·색 테마·히스토리·제작자와 캐릭터 목록이 모두 이 브라우저에만 저장돼요. 브라우저 저장소를 지우면 사라지니 가끔 파일로 내보내 두세요.<br>내보내기·불러오기 버튼은 <b>화면 오른쪽 위</b>에 있습니다. 불러오면 지금 내용을 덮어씁니다.</div>
-    </div>
-
     <!-- 히스토리 -->
     <div class="section">
       <div class="section-title">
@@ -1748,8 +1971,10 @@
         <div id="cardVignette"></div>
         <div id="cardPanel"></div>
         <div id="cardCorners"></div>
+        <img id="cardIcon" alt="" style="display:none;">
         <div id="cardBorder"></div>
         <div class="card-inner">
+          <div id="cardTitle" style="display:none;"></div>
           <div id="quoteText">문구를 입력하면 여기에 표시됩니다.</div>
           <div class="card-sep" id="cardSep"></div>
           <div class="card-credit">
@@ -2159,8 +2384,15 @@
     pattern: 'none',       // 배경 패턴 종류
     corner: 'none',        // 모서리 장식 종류
     panel: false,          // 문구 뒤 반투명 판
+    panelTail: 'none',     // 말풍선 꼬리 방향
     sepStyle: 'solid',     // 강조선 모양
     hlColor: '#ffe17d',
+    hlShape: 'fill',       // 형광펜 모양 (채우기 / 밑줄 / 반칠 / 둥근끝)
+    vertical: false,       // 세로쓰기 (위→아래, 오른쪽→왼쪽)
+    iconData: '',          // 카드 안에 얹는 이미지 (data URL)
+    pageBg: {},            // 장(페이지)별 배경 덮어쓰기 { 장번호: {...} }
+    dragPlace: false,      // 끌어서 배치 모드
+    blockOff: {},          // 블록별 밀어둔 거리 { 'p장_q문단' | 'p장_credit' | 'p장_title': {x,y} }
     lastHl: '#ffe17d',     // 마지막으로 쓴 형광펜 색
     lastCol: '#e74c3c',    // 마지막으로 쓴 글씨색
     padSplit: false,       // 여백을 4방향 따로 조절할지
@@ -2737,6 +2969,24 @@
   // 서식에 쓰이는 기호들. 글자 그대로 쓰고 싶을 땐 앞에 \\ 를 붙인다.
   // (원문에 있던 *동작* 이 기울임으로 먹히는 걸 막기 위함)
   const ESCAPABLE = '\\*_={}';
+  // 형광펜 모양 — 글자 높이에 대한 띠 두께 비율.
+  // 'fill'/'round' 는 글자 전체를 덮고, 'under'/'half' 는 아래쪽만 칠한다.
+  const HL_FRACTION = { under: 0.14, half: 0.45 };
+
+  // 형광펜 한 구간에 넣을 인라인 스타일 (화면용).
+  // 저장할 때는 이 배경을 숨기고 측정한 자리에 직접 띠를 그린다.
+  function hlInlineStyle(col) {
+    const frac = HL_FRACTION[state.hlShape];
+    if (!frac) {
+      // 전체 칠하기 — 둥근끝은 CSS 클래스로 모서리를 굴린다
+      return 'background-color:' + col;
+    }
+    // 아래쪽만 칠하기 — em 단위라 글자 크기에 자동으로 비례한다
+    return 'background-color:transparent;background-image:linear-gradient(' + col + ',' + col + ')'
+         + ';background-size:100% ' + frac + 'em;background-position:0 100%'
+         + ';background-repeat:no-repeat';
+  }
+
   // 중괄호 표식 두 종류
   //   {#rrggbb|글씨}   → 글씨색
   //   {=#rrggbb|글씨}  → 형광펜 (구간마다 색을 따로 가질 수 있게)
@@ -2812,8 +3062,9 @@
             const body = parseInline(s.slice(from, close));
             // data-hl 은 이미지로 뽑을 때 형광펜 띠 색을 읽는 데 쓴다
             out += (cm[1] === '=')
-              ? '<mark class="qhl" data-hl="' + cm[2] + '" style="background-color:'
-                + cm[2] + '">' + body + '</mark>'
+              ? '<mark class="qhl' + (state.hlShape === 'round' ? ' hl-round' : '')
+                + '" data-hl="' + cm[2] + '" style="'
+                + hlInlineStyle(cm[2]) + '">' + body + '</mark>'
               : '<span style="color:' + cm[2] + '">' + body + '</span>';
             i = close + 1;
             continue;
@@ -2861,7 +3112,8 @@
           if (close !== -1) {
             const inner = mirrorInline(s.slice(from, close));
             const styled = (cm[1] === '=')
-              ? '<span class="tk-h" style="background-color:' + cm[2] + '">' + inner + '</span>'
+              ? '<span class="tk-h' + (state.hlShape === 'round' ? ' hl-round' : '')
+                + '" style="' + hlInlineStyle(cm[2]) + '">' + inner + '</span>'
               : '<span style="color:' + cm[2] + '">' + inner + '</span>';
             out += '<span class="tk-mark">' + escapeHtml(cm[0]) + '</span>'
                  + styled
@@ -3093,6 +3345,8 @@
   function renderCard() {
     syncMirror();          // 입력창 서식 강조 레이어 갱신
     saveDraft();           // 쓰던 내용 자동 보관 (0.4초 묶음)
+    // 장이 바뀌거나 --- 로 나뉜 장 수가 달라지면 배경도 다시 정해야 한다
+    setTimeout(applyPageBg, 0);
     setTimeout(applyPanel, 0);   // 글자 배치가 끝난 뒤 판 크기를 맞춘다
     const pages = getPages();
     if (curPage >= pages.length) curPage = pages.length - 1;
@@ -3100,7 +3354,33 @@
     const q = pages[curPage] || '';
     const base = q.trim() ? q : '문구를 입력하면 여기에 표시됩니다.';
     // 인용부호는 이제 선택한 부분에만 넣는 편집 기능이라, 여기서 감싸지 않는다
-    quoteText.innerHTML = formatQuote(base);
+    // 문단(빈 줄 기준)을 블록으로 나눠 그린다 — 끌어서 배치할 때 문단 단위로 잡힌다.
+    // 빈 줄 개수만큼의 간격은 margin 으로 살려서 보기엔 예전과 똑같다.
+    quoteText.innerHTML = '';
+    {
+      const parts = base.split(/(\n{2,})/);
+      let blk = 0;
+      for (let i = 0; i < parts.length; i += 2) {
+        if (parts[i] === '' && parts.length > 1) { continue; }
+        const div = document.createElement('div');
+        div.className = 'qblock';
+        div.dataset.blk = blk++;
+        if (i > 0) {
+          const blanks = (parts[i - 1] || '').length - 1;   // 빈 줄 수
+          div.style.marginTop = (blanks * (parseFloat($('lineHeightRange').value) || 1.5)) + 'em';
+        }
+        div.innerHTML = formatQuote(parts[i]);
+        quoteText.appendChild(div);
+      }
+    }
+    applyBlockOffsets();
+
+    // 제목 줄 — 비어 있으면 아예 표시하지 않는다. 문구와 같은 서식을 쓸 수 있다.
+    const titleRaw = $('titleInput').value;
+    const titleEl = $('cardTitle');
+    titleEl.style.display = titleRaw ? '' : 'none';
+    if (titleRaw) titleEl.innerHTML = formatQuote(titleRaw);
+    applyBlockOffsets();
     // 형광펜 색 적용
     applyHighlightColor();
 
@@ -3158,9 +3438,22 @@
   });
 
   // 출처 구분 기호
+  $('titleInput').addEventListener('input', renderCard);
   $('creditSepInput').addEventListener('input', () => {
     state.creditSep = $('creditSepInput').value;
     renderCard();
+  });
+
+  // 형광펜 모양 — 펼침 상자가 두 군데에 있어 상태를 함께 맞춘다
+  document.querySelectorAll('.hl-shape-seg button').forEach(btn => {
+    btn.addEventListener('mousedown', ev => ev.preventDefault());   // 선택 유지
+    btn.addEventListener('click', () => {
+      state.hlShape = btn.dataset.hls;
+      document.querySelectorAll('.hl-shape-seg button').forEach(b => {
+        b.classList.toggle('active', b.dataset.hls === state.hlShape);
+      });
+      renderCard();
+    });
   });
 
   // 형광펜 높이 슬라이더는 두 군데에 있으므로 어느 쪽을 움직여도 같이 반영
@@ -3172,7 +3465,7 @@
   });
 
   // 어느 칸에 서식을 걸지 추적 (문구 / 캐릭터 / 제작자)
-  ['quoteInput', 'charInput', 'makerInput', 'creditSepInput'].forEach(id => {
+  ['quoteInput', 'charInput', 'makerInput', 'creditSepInput', 'titleInput'].forEach(id => {
     const el = $(id);
     if (!el) return;
     el.addEventListener('focus', () => { fmtTarget = id; });
@@ -3347,9 +3640,9 @@
   // ===== 펼침 상자 =====
   function closePops() {
     document.querySelectorAll('.fmt-pop').forEach(el => el.classList.remove('open'));
-    document.querySelectorAll('.fmt-btn[data-pop]').forEach(b => b.classList.remove('on'));
+    document.querySelectorAll('[data-pop]').forEach(b => b.classList.remove('on'));
   }
-  document.querySelectorAll('.fmt-btn[data-pop]').forEach(btn => {
+  document.querySelectorAll('[data-pop]').forEach(btn => {
     btn.addEventListener('mousedown', ev => ev.preventDefault());
     btn.addEventListener('click', () => {
       const pop = $(btn.dataset.pop);
@@ -3389,6 +3682,9 @@
       card.style.padding = pad + 'px';
     }
     card.style.textAlign = state.align;
+    // 세로쓰기 — 위에서 아래로, 오른쪽에서 왼쪽으로
+    cardInner.style.writingMode = state.vertical ? 'vertical-rl' : '';
+    cardInner.style.height = state.vertical ? '100%' : '';
     card.style.borderRadius = radius + 'px';
     // 카드 테두리 — 덧그리는 레이어에 적용 (카드 크기·여백에 영향 없음)
     const bw = parseInt($('borderRange').value, 10) || 0;
@@ -3475,6 +3771,17 @@
     // 한 줄로 늘어놓을 때는 두 이름 크기를 같게 (2줄일 때만 제작자를 작게)
     makerName.style.fontSize =
       (creditSize * (state.creditLine === 1 ? 1 : 0.8) * fontScale) + 'px';
+    // 제목 줄 스타일
+    const tEl = $('cardTitle');
+    tEl.style.fontSize = ($('titleSizeRange').value * fontScale) + 'px';
+    tEl.style.color = $('titleColor').value;
+    tEl.style.marginBottom = $('titleGapRange').value + 'px';
+    tEl.style.letterSpacing = $('titleLetterRange').value + 'px';
+    tEl.style.textShadow = shadowCss;
+    $('titleSizeVal').textContent = $('titleSizeRange').value + 'px';
+    $('titleGapVal').textContent = $('titleGapRange').value + 'px';
+    $('titleLetterVal').textContent = $('titleLetterRange').value + 'px';
+
     // 강조선 모양 — 점선·도트·이중선을 그라데이션으로 그리면
     // html2canvas 가 저장본에서 이를 못 그려 선이 사라진다.
     // 그래서 조각을 '실제 div' 로 깔아 저장본에서도 똑같이 나오게 한다.
@@ -3539,7 +3846,7 @@
     card.style.justifyContent = state.vAlign === 'top' ? 'flex-start'
                               : (state.vAlign === 'bottom' ? 'flex-end' : 'center');
     // 글자 크기·여백·비율이 바뀌면 문구 덩어리 크기도 달라지므로 판을 다시 잡는다
-    setTimeout(applyPanel, 0);
+    setTimeout(() => { applyPanel(); applyIcon(); }, 0);
     const off = parseInt($('offsetRange').value, 10) || 0;
     const offX = parseInt($('offsetXRange').value, 10) || 0;
     cardInner.style.top = off + 'px';
@@ -3560,8 +3867,12 @@
   ['sizeRange','textColor','accentColor','lineHeightRange','letterRange','scaleRange',
    'gapRange','padRange','creditSizeRange','radiusRange','offsetRange','offsetXRange',
    'borderRange','borderColor','strokeRange','strokeColor',
+   'titleSizeRange','titleGapRange','titleLetterRange','titleColor',
+   'iconSizeRange','iconRadiusRange','iconXRange','iconYRange',
+   'iconOpacityRange','iconBorderRange','iconBorderColor',
    'patternSizeRange','patternOpacityRange','patternAngleRange','patternColor','vignetteRange',
    'panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
+   'panelBorderRange','panelBorderColor',
    'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
    'shX','shY','shBlur','shColor','shAlpha',
    'indentRange','sepWidthRange',
@@ -3737,6 +4048,17 @@
     applyStyle();
   });
 
+  // 글 방향 (가로쓰기 / 세로쓰기)
+  document.querySelectorAll('#writeSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#writeSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.vertical = btn.dataset.vert === '1';
+      applyStyle();
+      renderCard();
+    });
+  });
+
   // 강조선 모양
   document.querySelectorAll('#sepStyleSeg button').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3787,11 +4109,15 @@
       padTopRange: 56, padBottomRange: 56, padLeftRange: 56, padRightRange: 56,
       hlPadRange: 1, borderRange: 0, borderColor: '#1a1d24',
       strokeRange: 0, strokeColor: '#000000',
+      titleSizeRange: 13, titleGapRange: 18, titleLetterRange: 2, titleColor: '#ffffff',
+      iconSizeRange: 96, iconRadiusRange: 50, iconXRange: 50, iconYRange: 12,
+      iconOpacityRange: 100, iconBorderRange: 0, iconBorderColor: '#ffffff',
       patternSizeRange: 16, patternOpacityRange: 12, patternAngleRange: 0,
       patternColor: '#000000',
       vignetteRange: 0, vignetteColor: '#000000',
       panelColor: '#000000', panelOpacityRange: 35,
-      panelPadRange: 22, panelRadiusRange: 8, cornerColor: '#ffffff',
+      panelPadRange: 22, panelRadiusRange: 8,
+      panelBorderRange: 0, panelBorderColor: '#ffffff', cornerColor: '#ffffff',
       cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1,
       shX: 0, shY: 2, shBlur: 8, shColor: '#000000', shAlpha: 45
     };
@@ -3982,6 +4308,282 @@
     }
   }
 
+  // ===== 끌어서 배치 =====
+  // 문단·출처·제목을 흐름 배치 그대로 두고 transform 으로만 밀어낸다.
+  // 절대 좌표로 바꾸면 줄바꿈·정렬이 다 깨지므로, '원래 자리에서 얼마나 밀었나' 만 기억한다.
+  function offKey(kind) { return 'p' + curPage + '_' + kind; }
+
+  function applyBlockOffsets() {
+    const apply = (el, kind) => {
+      if (!el) return;
+      const o = state.blockOff[offKey(kind)];
+      el.style.transform = o && (o.x || o.y) ? ('translate(' + o.x + 'px,' + o.y + 'px)') : '';
+    };
+    quoteText.querySelectorAll('.qblock').forEach(b => apply(b, 'q' + b.dataset.blk));
+    apply(document.querySelector('.card-credit'), 'credit');
+    apply($('cardTitle'), 'title');
+    apply(cardSep, 'sep');
+  }
+
+  // 드래그 — '미리보기 드래그 배치' 가 켜졌을 때만.
+  // 누르고 거의 안 움직였으면 '선택' 으로, 움직였으면 '끌기' 로 본다.
+  // 선택된 블록이 여러 개면 함께 끌리고, 정렬 버튼의 대상이 된다.
+  const dragSel = new Set();   // 선택된 블록 kind 들
+
+  function blockEl(kind) {
+    if (kind === 'credit') return document.querySelector('.card-credit');
+    if (kind === 'title') return $('cardTitle');
+    if (kind === 'sep') return cardSep;
+    return quoteText.querySelector('.qblock[data-blk="' + kind.slice(1) + '"]');
+  }
+  function refreshSelStyles() {
+    document.querySelectorAll('#card .blk-sel').forEach(el => el.classList.remove('blk-sel'));
+    dragSel.forEach(k => { const el = blockEl(k); if (el) el.classList.add('blk-sel'); });
+  }
+
+  (function () {
+    let cur = null;   // { kind, sx, sy, moved, group: [{kind, ox, oy}] }
+    function findBlock(target) {
+      const b = target.closest && target.closest('.qblock');
+      if (b && quoteText.contains(b)) return 'q' + b.dataset.blk;
+      if (target.closest && target.closest('.card-credit')) return 'credit';
+      if (target.closest && target.closest('#cardTitle')) return 'title';
+      if (target === cardSep || (target.closest && target.closest('.card-sep'))) return 'sep';
+      return null;
+    }
+    card.addEventListener('pointerdown', ev => {
+      if (!state.dragPlace) return;
+      const kind = findBlock(ev.target);
+      if (!kind) return;
+      // 선택돼 있는 걸 잡으면 선택 묶음 전체가, 아니면 그것 하나만 끌린다
+      const group = (dragSel.has(kind) ? [...dragSel] : [kind]).map(k => {
+        const o = state.blockOff[offKey(k)] || { x: 0, y: 0 };
+        return { kind: k, ox: o.x, oy: o.y };
+      });
+      cur = { kind, sx: ev.clientX, sy: ev.clientY, moved: false, group };
+      card.setPointerCapture(ev.pointerId);
+      ev.preventDefault();
+    });
+    card.addEventListener('pointermove', ev => {
+      if (!cur) return;
+      const dx = ev.clientX - cur.sx, dy = ev.clientY - cur.sy;
+      if (!cur.moved && Math.hypot(dx, dy) < 4) return;   // 살짝 흔들린 클릭은 무시
+      cur.moved = true;
+      const rect = card.getBoundingClientRect();
+      const scale = rect.width / (card.offsetWidth || 1);
+      cur.group.forEach(g => {
+        state.blockOff[offKey(g.kind)] = {
+          x: Math.round(g.ox + dx / scale),
+          y: Math.round(g.oy + dy / scale)
+        };
+      });
+      applyBlockOffsets();
+      refreshSelStyles();
+    });
+    ['pointerup', 'pointercancel'].forEach(n => card.addEventListener(n, ev => {
+      if (cur && !cur.moved && n === 'pointerup') {
+        // 클릭 — 선택을 켜고 끈다
+        if (dragSel.has(cur.kind)) dragSel.delete(cur.kind);
+        else dragSel.add(cur.kind);
+        refreshSelStyles();
+      }
+      cur = null;
+    }));
+  })();
+
+  // 선택한 블록들 정렬 — 밀어둔 거리(x)만 조정하므로 줄바꿈은 그대로다
+  document.querySelectorAll('#alignSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (dragSel.size < 2) { toast('두 개 이상 클릭해서 선택한 뒤 정렬하세요'); return; }
+      const rect = card.getBoundingClientRect();
+      const scale = rect.width / (card.offsetWidth || 1);
+      const items = [...dragSel].map(k => {
+        const el = blockEl(k);
+        if (!el) return null;
+        // 블록 상자는 전부 카드 폭이라 상자 기준으론 차이가 없다.
+        // '글자가 실제로 차지하는 영역' 을 재야 정렬이 눈에 보인다.
+        const rng = document.createRange();
+        rng.selectNodeContents(el);
+        const r = rng.getBoundingClientRect();
+        return { k, left: (r.left - rect.left) / scale, w: r.width / scale };
+      }).filter(Boolean);
+      if (items.length < 2) return;
+      const al = btn.dataset.al;
+      let target;
+      if (al === 'left') target = Math.min(...items.map(i => i.left));
+      else if (al === 'right') target = Math.max(...items.map(i => i.left + i.w));
+      else target = items.reduce((a, i) => a + i.left + i.w / 2, 0) / items.length;
+      items.forEach(i => {
+        const o = state.blockOff[offKey(i.k)] || { x: 0, y: 0 };
+        let d;
+        if (al === 'left') d = target - i.left;
+        else if (al === 'right') d = target - (i.left + i.w);
+        else d = target - (i.left + i.w / 2);
+        state.blockOff[offKey(i.k)] = { x: Math.round(o.x + d), y: o.y };
+      });
+      applyBlockOffsets();
+      refreshSelStyles();
+    });
+  });
+
+  $('dragPlaceToggle').addEventListener('click', () => {
+    state.dragPlace = !state.dragPlace;
+    $('dragPlaceToggle').classList.toggle('on', state.dragPlace);
+    $('dragPlaceToggle').textContent = state.dragPlace ? '\uB044\uAE30' : '\uCF1C\uAE30';
+    document.body.classList.toggle('drag-place', state.dragPlace);
+    $('alignRow').style.display = state.dragPlace ? '' : 'none';
+    if (!state.dragPlace) { dragSel.clear(); refreshSelStyles(); }
+  });
+  $('blockOffReset').addEventListener('click', () => {
+    state.blockOff = {};
+    dragSel.clear();
+    applyBlockOffsets();
+    refreshSelStyles();
+    toast('밀어둔 배치를 원래대로 되돌렸어요');
+  });
+
+  // ===== 장(페이지)별 배경 =====
+  // 여러 장으로 나눴을 때 장마다 배경을 다르게 쓸 수 있다.
+  // 입력칸 값은 '공통 배경' 을 그대로 두고, 그리는 순간에만 잠깐 바꿔치기한다.
+  const PAGE_BG_KEYS = ['bgColor','gradColor1','gradColor2','dimColor','dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange'];
+
+  function capturePageBg() {
+    const o = { bgMode: state.bgMode, bgImageData: state.bgImageData,
+                gradTypeIdx: (typeof gradTypeIdx !== 'undefined' ? gradTypeIdx : 0) };
+    PAGE_BG_KEYS.forEach(k => { o[k] = $(k).value; });
+    return o;
+  }
+
+  // 저장된 장 배경으로 잠깐 갈아입혀 그린 뒤, 입력칸은 원래대로 되돌린다
+  function applyPageBg() {
+    const ov = state.pageBg && state.pageBg[curPage];
+    const pages = getPages().length;
+    $('pageBgRow').style.display = pages > 1 ? '' : 'none';
+    if (pages > 1) {
+      const n = Object.keys(state.pageBg || {}).length;
+      $('pageBgLabel').textContent = (curPage + 1) + '장의 배경';
+      $('pageBgHint').textContent = ov
+        ? (curPage + 1) + '장은 따로 저장된 배경을 씁니다. 공통 배경을 바꿔도 이 장은 그대로예요.'
+        : (n ? (curPage + 1) + '장은 공통 배경을 씁니다. (따로 저장된 장: ' + n + '개)'
+             : '장마다 배경을 다르게 하려면 배경을 맞춘 뒤 «이 장에 저장»을 누르세요.');
+    }
+    if (!ov) { applyBackground(); return; }
+    const keep = { bgMode: state.bgMode, bgImageData: state.bgImageData,
+                   gradTypeIdx: (typeof gradTypeIdx !== 'undefined' ? gradTypeIdx : 0) };
+    const keepVals = {};
+    PAGE_BG_KEYS.forEach(k => { keepVals[k] = $(k).value; });
+    state.bgMode = ov.bgMode; state.bgImageData = ov.bgImageData;
+    if (typeof gradTypeIdx !== 'undefined') gradTypeIdx = ov.gradTypeIdx || 0;
+    PAGE_BG_KEYS.forEach(k => { if (ov[k] !== undefined) $(k).value = ov[k]; });
+    applyBackground();
+    // 화면은 이미 그려졌으므로 값만 되돌린다 (입력칸은 공통 배경을 보여줘야 하니까)
+    state.bgMode = keep.bgMode; state.bgImageData = keep.bgImageData;
+    if (typeof gradTypeIdx !== 'undefined') gradTypeIdx = keep.gradTypeIdx;
+    PAGE_BG_KEYS.forEach(k => { $(k).value = keepVals[k]; });
+  }
+
+  $('pageBgSave').addEventListener('click', () => {
+    state.pageBg = state.pageBg || {};
+    state.pageBg[curPage] = capturePageBg();
+    applyPageBg();
+    toast((curPage + 1) + '장의 배경으로 저장했어요');
+  });
+  $('pageBgClear').addEventListener('click', () => {
+    if (state.pageBg) delete state.pageBg[curPage];
+    applyPageBg();
+    toast((curPage + 1) + '장은 공통 배경을 씁니다');
+  });
+
+  // 카드 안 이미지 — 위치는 카드 안쪽 여백을 뺀 영역에서의 비율(%)로 잡는다.
+  // 그래서 카드 비율이나 여백을 바꿔도 어색한 자리로 튀지 않는다.
+  function applyIcon() {
+    const el = $('cardIcon');
+    if (!el) return;
+    if (!state.iconData) {
+      el.style.display = 'none';
+      $('iconOpts').style.display = 'none';
+      return;
+    }
+    $('iconOpts').style.display = '';
+    const size = parseInt($('iconSizeRange').value, 10) || 96;
+    const rad = parseInt($('iconRadiusRange').value, 10) || 0;
+    const px = parseInt($('iconXRange').value, 10);
+    const py = parseInt($('iconYRange').value, 10);
+    const op = parseInt($('iconOpacityRange').value, 10) / 100;
+    const bw = parseInt($('iconBorderRange').value, 10) || 0;
+    $('iconSizeVal').textContent = size + 'px';
+    $('iconRadiusVal').textContent = rad + '%';
+    $('iconXVal').textContent = px + '%';
+    $('iconYVal').textContent = py + '%';
+    $('iconOpacityVal').textContent = Math.round(op * 100) + '%';
+    $('iconBorderVal').textContent = bw + 'px';
+    if (el.getAttribute('src') !== state.iconData) el.src = state.iconData;
+    el.style.display = '';
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+    el.style.borderRadius = rad + '%';
+    el.style.opacity = op;
+    el.style.border = bw > 0 ? (bw + 'px solid ' + $('iconBorderColor').value) : '0';
+    // 카드 '전체' 영역에서 비율로 배치 — 0% 는 왼쪽/위 끝, 100% 는 오른쪽/아래 끝
+    const total = size + bw * 2;
+    const availW = Math.max(0, (card.offsetWidth || 0) - total);
+    const availH = Math.max(0, (card.offsetHeight || 0) - total);
+    el.style.left = (availW * px / 100) + 'px';
+    el.style.top = (availH * py / 100) + 'px';
+  }
+
+  // 미리보기에서 마우스로 끌어 옮기기 — 슬라이더 값을 그대로 움직인다
+  (function () {
+    const el = $('cardIcon');
+    if (!el) return;
+    let dragging = false;
+    el.addEventListener('pointerdown', ev => {
+      if (!state.iconData) return;
+      dragging = true;
+      el.setPointerCapture(ev.pointerId);
+      ev.preventDefault();
+    });
+    el.addEventListener('pointermove', ev => {
+      if (!dragging) return;
+      const rect = card.getBoundingClientRect();
+      const scale = rect.width / (card.offsetWidth || 1);   // 화면 확대 보정
+      const size = (parseInt($('iconSizeRange').value, 10) || 96)
+                 + (parseInt($('iconBorderRange').value, 10) || 0) * 2;
+      const availW = Math.max(1, card.offsetWidth - size);
+      const availH = Math.max(1, card.offsetHeight - size);
+      // 포인터 위치를 카드 좌표로 바꾸고, 아이콘 중심이 따라오게
+      const cx = (ev.clientX - rect.left) / scale - size / 2;
+      const cy = (ev.clientY - rect.top) / scale - size / 2;
+      $('iconXRange').value = Math.round(Math.min(100, Math.max(0, cx / availW * 100)));
+      $('iconYRange').value = Math.round(Math.min(100, Math.max(0, cy / availH * 100)));
+      applyIcon();
+    });
+    ['pointerup', 'pointercancel'].forEach(n => el.addEventListener(n, () => { dragging = false; }));
+  })();
+
+  $('iconPick').addEventListener('click', () => $('iconFile').click());
+  $('iconFile').addEventListener('change', ev => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      state.iconData = fr.result;
+      applyIcon();
+      toast('이미지를 올렸어요');
+    };
+    fr.readAsDataURL(f);
+    ev.target.value = '';
+  });
+  $('iconClear').addEventListener('click', () => {
+    state.iconData = '';
+    applyIcon();
+    toast('이미지를 지웠어요');
+  });
+  ['iconSizeRange','iconRadiusRange','iconXRange','iconYRange',
+   'iconOpacityRange','iconBorderRange','iconBorderColor'].forEach(id => {
+    $(id).addEventListener('input', applyIcon);
+  });
+
   // 문구 뒤 반투명 판 — card-inner 의 실제 위치에 맞춰 크기를 잡는다
   function applyPanel() {
     const panel = $('cardPanel');
@@ -4004,13 +4606,91 @@
     const y = (ir.top - cr.top) / (sc || 1) - bt;
     const w = ir.width / (sc || 1);
     const h = ir.height / (sc || 1);
+    const pw = w + pad * 2, ph = h + pad * 2;
+    const pbw = parseInt($('panelBorderRange').value, 10) || 0;
+    const pbc = $('panelBorderColor').value;
+    $('panelBorderVal').textContent = pbw + 'px';
+    const fill = hexToRgba($('panelColor').value, op);
+
+    // 판과 꼬리를 캔버스에 '한 덩어리 윤곽' 으로 그려 배경 이미지로 쓴다.
+    // 조각을 겹치는 방식은 판이 반투명일 때 테두리 선이 비쳐 보여서 못 쓴다.
+    const t = state.panel ? state.panelTail : 'none';
+    const hasTail = t !== 'none';
+    const isBottom = (t === 'bl' || t === 'br');
+    const isLeft = (t === 'bl' || t === 'tl');
+    const TW = hasTail ? Math.max(9, Math.round(pad * 0.45 + 8)) : 0;   // 꼬리 반폭
+    const TH = hasTail ? Math.max(11, Math.round(pad * 0.6 + 11)) : 0;  // 꼬리 길이
+    const url = drawBubbleURL(pw, ph, rad, fill, pbw, pbc, t, TW, TH);
+
     panel.style.display = '';
     panel.style.left = (x - pad) + 'px';
-    panel.style.top = (y - pad) + 'px';
-    panel.style.width = (w + pad * 2) + 'px';
-    panel.style.height = (h + pad * 2) + 'px';
-    panel.style.background = hexToRgba($('panelColor').value, op);
-    panel.style.borderRadius = rad + 'px';
+    panel.style.top = (y - pad - (hasTail && !isBottom ? TH : 0)) + 'px';
+    panel.style.width = pw + 'px';
+    panel.style.height = (ph + TH) + 'px';
+    panel.style.background = 'none';
+    panel.style.border = '0';
+    panel.style.borderRadius = '0';
+    panel.innerHTML = '';
+    panel.style.backgroundImage = url ? 'url(' + url + ')' : 'none';
+    panel.style.backgroundSize = '100% 100%';
+    panel.style.backgroundRepeat = 'no-repeat';
+  }
+
+  // 말풍선(둥근 사각형 + 꼬리)을 하나의 윤곽선으로 그려 이미지로 만든다.
+  // 반투명 채우기여도 겹침 없이 고르게 칠해지고, 테두리도 꼬리까지 한 번에 이어진다.
+  function drawBubbleURL(pw, ph, rad, fill, pbw, pbc, tail, TW, TH) {
+    const SS = 3;   // 저장할 때 확대되므로 3배로 그려 흐려지지 않게
+    const hasTail = tail !== 'none';
+    const isBottom = (tail === 'bl' || tail === 'br');
+    const isLeft = (tail === 'bl' || tail === 'tl');
+    const cv = document.createElement('canvas');
+    cv.width = pw * SS; cv.height = (ph + TH) * SS;
+    const g = cv.getContext && cv.getContext('2d');
+    if (!g) return '';
+    g.scale(SS, SS);
+    // 테두리가 캔버스 가장자리에서 잘리지 않게 반 굵기만큼 안쪽으로
+    const o = pbw > 0 ? pbw / 2 : 0;
+    const x0 = o, y0 = (hasTail && !isBottom ? TH : 0) + o;
+    const x1 = pw - o, y1 = y0 + ph - o * 2 - (hasTail && !isBottom ? 0 : 0);
+    const r = Math.max(0, Math.min(rad, (x1 - x0) / 2, (y1 - y0) / 2));
+    // 꼬리 발 위치 — 판 모서리 둥글기를 피해서
+    const foot = Math.max(r + 8, 18);
+    const fx1 = isLeft ? (x0 + foot) : (x1 - foot - TW * 2);
+    const fx2 = fx1 + TW * 2;
+    const tipX = fx1 + TW * (isLeft ? 0.35 : 1.65);   // 꼬리 끝을 살짝 바깥쪽으로
+
+    g.beginPath();
+    // 위 변 (왼→오)
+    g.moveTo(x0 + r, y0);
+    if (hasTail && !isBottom) {          // 위 꼬리
+      g.lineTo(fx1, y0);
+      g.lineTo(tipX, y0 - TH + o);
+      g.lineTo(fx2, y0);
+    }
+    g.lineTo(x1 - r, y0);
+    g.arcTo(x1, y0, x1, y0 + r, r);      // 오른위 모서리
+    g.lineTo(x1, y1 - r);
+    g.arcTo(x1, y1, x1 - r, y1, r);      // 오른아래 모서리
+    if (hasTail && isBottom) {           // 아래 꼬리 (오→왼 방향으로 지나감)
+      g.lineTo(fx2, y1);
+      g.lineTo(tipX, y1 + TH - o);
+      g.lineTo(fx1, y1);
+    }
+    g.lineTo(x0 + r, y1);
+    g.arcTo(x0, y1, x0, y1 - r, r);      // 왼아래 모서리
+    g.lineTo(x0, y0 + r);
+    g.arcTo(x0, y0, x0 + r, y0, r);      // 왼위 모서리
+    g.closePath();
+
+    g.fillStyle = fill;
+    g.fill();
+    if (pbw > 0) {
+      g.strokeStyle = pbc;
+      g.lineWidth = pbw;
+      g.lineJoin = 'round';
+      g.stroke();
+    }
+    return cv.toDataURL('image/png');
   }
 
   // 패턴 / 모서리 종류 버튼
@@ -4043,8 +4723,18 @@
    'cornerColor','cornerSizeRange','cornerInsetRange'].forEach(id => {
     $(id).addEventListener('input', () => { patternCache = ''; applyDecor(); });
   });
-  ['panelColor','panelOpacityRange','panelPadRange','panelRadiusRange'].forEach(id => {
+  ['panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
+   'panelBorderRange','panelBorderColor'].forEach(id => {
     $(id).addEventListener('input', applyPanel);
+  });
+  // 말풍선 꼬리 방향
+  document.querySelectorAll('#panelTailSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#panelTailSeg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.panelTail = btn.dataset.tail;
+      applyPanel();
+    });
   });
   ['shX','shY','shBlur','shColor','shAlpha'].forEach(id => {
     $(id).addEventListener('input', applyStyle);
@@ -4203,6 +4893,18 @@
     state.corner = 'none';
     state.panel = false;
     state.sepStyle = 'solid';
+    state.hlShape = 'fill';
+    state.vertical = false;
+    state.iconData = '';
+    state.panelTail = 'none';
+    state.pageBg = {};
+    state.blockOff = {};
+    state.dragPlace = false;
+    $('dragPlaceToggle').classList.remove('on');
+    $('dragPlaceToggle').textContent = '\uCF1C\uAE30';
+    $('alignRow').style.display = 'none';
+    dragSel.clear();
+    document.body.classList.remove('drag-place');
     $('panelToggle').classList.remove('on');
     $('panelToggle').textContent = '켜기';
     $('panelOpts').style.display = 'none';
@@ -4228,6 +4930,9 @@
     $('bgGradPanel').style.display = 'none';
     $('bgImagePanel').style.display = 'none';
     setActive('.qs-seg button', b => b.dataset.qs === '0');
+    setActive('.hl-shape-seg button', b => b.dataset.hls === 'fill');
+    setActive('#writeSeg button', b => b.dataset.vert === '0');
+    setActive('#panelTailSeg button', b => b.dataset.tail === 'none');
     setActive('#charBoldSeg button', b => b.dataset.cbold === '1');
     setActive('#patternSeg button', b => b.dataset.pat === 'none');
     setActive('#cornerSeg button', b => b.dataset.corner === 'none');
@@ -4470,16 +5175,38 @@
       const lineHeight = parseFloat(st.lineHeight) || fontSize * 1.75;
       // line-height와 font-size 차이의 절반 = 행간 여백 위쪽 (leading)
       const leading = (lineHeight - fontSize) / 2;
+      // 세로쓰기에서는 행간 여백이 좌우로 생기므로 보정 축이 바뀐다
+      const vert = !!state.vertical;
       const list = mk.getClientRects();
       for (let i = 0; i < list.length; i++) {
         const r = list[i];
+        let rx = (r.left - baseRect.left) / (sc || 1) - bl;
+        let ry = (r.top - baseRect.top) / (sc || 1) - bt;
+        let rw = r.width / (sc || 1);
+        let rh = r.height / (sc || 1);
+        const frac = HL_FRACTION[state.hlShape];
+        if (vert) {
+          // 세로쓰기 — 글자가 위아래로 흐르므로 띠도 좌우 기준으로 계산
+          rx += leading * 0.5 - extra;
+          rw += -leading * 0.5 + extra * 2;
+          if (frac) {                       // 아래쪽만 칠하기 → 왼쪽만 칠하기
+            const bandW = fontSize * frac + extra;
+            rx = rx + rw - bandW;
+            rw = bandW;
+          }
+        } else {
+          ry += leading * 0.5 - extra;
+          rh += -leading * 0.5 + extra * 2;
+          if (frac) {
+            const bandH = fontSize * frac + extra;
+            ry = ry + rh - bandH;
+            rh = bandH;
+          }
+        }
         rects.push({
-          x: (r.left - baseRect.left) / (sc || 1) - bl,
-          y: (r.top - baseRect.top) / (sc || 1) - bt
-             + leading * 0.5 - extra,                       // leading 절반만 보정
-          w: r.width / (sc || 1),
-          h: r.height / (sc || 1) - leading * 0.5 + extra * 2,   // 높이도 절반만 줄임
-          col: col
+          x: rx, y: ry, w: rw, h: rh,
+          col: col,
+          round: state.hlShape === 'round'
         });
       }
     });
@@ -4543,7 +5270,8 @@
             'width:' + r.w + 'px',
             'height:' + r.h + 'px',
             'background:' + (r.col || state.hlColor || '#ffe17d'),
-            // 화면에서 보이는 그대로 직각으로 (예전엔 2px 둥글렸음)
+            // 기본은 화면 그대로 직각. '둥근끝' 모양일 때만 알약처럼 굴린다.
+            r.round ? ('border-radius:' + (r.h / 2) + 'px') : '',
             'z-index:0',
             'pointer-events:none'
           ].join(';');
@@ -4798,8 +5526,12 @@
       'letterRange','scaleRange','gapRange','padRange','creditSizeRange',
       'radiusRange','fontScaleRange','bgColor','dimColor','gradColor1','gradColor2',
       'borderRange','borderColor','strokeRange','strokeColor',
+      'titleSizeRange','titleGapRange','titleLetterRange','titleColor',
+      'iconSizeRange','iconRadiusRange','iconXRange','iconYRange',
+      'iconOpacityRange','iconBorderRange','iconBorderColor',
       'patternSizeRange','patternOpacityRange','patternAngleRange','patternColor','vignetteRange',
       'panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
+      'panelBorderRange','panelBorderColor',
       'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
       'shX','shY','shBlur','shColor','shAlpha',
       'dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange',
@@ -4830,7 +5562,13 @@
       pattern: state.pattern,
       corner: state.corner,
       panel: state.panel,
-      sepStyle: state.sepStyle
+      sepStyle: state.sepStyle,
+      hlShape: state.hlShape,
+      vertical: state.vertical,
+      iconData: state.iconData,
+      panelTail: state.panelTail,
+      pageBg: state.pageBg,
+      blockOff: state.blockOff
     };
   }
 
@@ -4945,6 +5683,12 @@
     state.corner = s.corner || 'none';
     state.panel = !!s.panel;
     state.sepStyle = s.sepStyle || 'solid';
+    state.hlShape = s.hlShape || 'fill';
+    state.vertical = !!s.vertical;
+    state.iconData = s.iconData || '';
+    state.panelTail = s.panelTail || 'none';
+    state.pageBg = s.pageBg || {};
+    state.blockOff = s.blockOff || {};
     if (s.wordBreak) state.wordBreak = s.wordBreak;
     state.quoteStyle = s.quoteStyle || 0;
     state.showCredit = s.showCredit !== false;
@@ -4966,6 +5710,9 @@
     setActive('#creditAlignSeg button', b => b.dataset.calign === state.creditAlign);
     setActive('#creditLineSeg button', b => b.dataset.cline === String(state.creditLine));
     setActive('.qs-seg button', b => b.dataset.qs === String(state.quoteStyle));
+    setActive('.hl-shape-seg button', b => b.dataset.hls === state.hlShape);
+    setActive('#writeSeg button', b => b.dataset.vert === (state.vertical ? '1' : '0'));
+    setActive('#panelTailSeg button', b => b.dataset.tail === state.panelTail);
     setActive('#bgModeSeg button', b => b.dataset.mode === state.bgMode);
     $('bgColorPanel').style.display = state.bgMode === 'color' ? '' : 'none';
     $('bgGradPanel').style.display = state.bgMode === 'gradient' ? '' : 'none';
