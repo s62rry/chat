@@ -559,14 +559,16 @@
      여백·좌표 기준(테두리 안/밖)도 어긋나기 때문. */
   #cardBorder { box-sizing: border-box; }
   /* 카드 안에 얹는 이미지 (캐릭터 아이콘 등) */
-  #cardIcon {
+  .card-icon {
     position: absolute;
-    object-fit: cover;
+    object-fit: fill;    /* 상자가 원본 비율이라 늘어날 일이 없고, 저장(html2canvas)과도 어긋나지 않는다 */
     cursor: grab;
     touch-action: none;      /* 모바일에서 끌 때 화면 스크롤 방지 */
     user-select: none;
   }
-  #cardIcon:active { cursor: grabbing; }
+  .card-icon:active { cursor: grabbing; }
+  /* 여러 장일 때 지금 편집 중인 이미지 표시 */
+  .card-icon.icon-sel { outline: 2px dashed color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
   #cardPattern { background-repeat: repeat; }
   #cardVignette { background-size: 100% 100%; background-repeat: no-repeat; }
   #cardCorners .corner { position: absolute; box-sizing: border-box; }
@@ -1711,6 +1713,7 @@
           <button class="mini-btn" id="iconClear" type="button" title="올린 이미지 제거">지우기</button>
         </label>
         <input type="file" id="iconFile" accept="image/*" style="display:none;">
+        <div id="iconChips" style="display:none; margin-top:6px;"></div>
       </div>
       <div id="iconOpts" style="display:none;">
         <div class="row">
@@ -1733,19 +1736,26 @@
           <div>
             <label class="field-label">가로 위치</label>
             <div class="slider-row">
-              <input type="range" id="iconXRange" min="0" max="100" value="50">
+              <input type="range" id="iconXRange" min="-50" max="150" value="50">
               <span class="slider-val" id="iconXVal">50%</span>
             </div>
           </div>
           <div>
             <label class="field-label">세로 위치</label>
             <div class="slider-row">
-              <input type="range" id="iconYRange" min="0" max="100" value="12">
+              <input type="range" id="iconYRange" min="-50" max="150" value="12">
               <span class="slider-val" id="iconYVal">12%</span>
             </div>
           </div>
         </div>
         <div class="row">
+          <div>
+            <label class="field-label">회전</label>
+            <div class="slider-row">
+              <input type="range" id="iconRotRange" min="-180" max="180" step="5" value="0">
+              <span class="slider-val" id="iconRotVal">0°</span>
+            </div>
+          </div>
           <div>
             <label class="field-label">투명도</label>
             <div class="slider-row">
@@ -1971,7 +1981,7 @@
         <div id="cardVignette"></div>
         <div id="cardPanel"></div>
         <div id="cardCorners"></div>
-        <img id="cardIcon" alt="" style="display:none;">
+
         <div id="cardBorder"></div>
         <div class="card-inner">
           <div id="cardTitle" style="display:none;"></div>
@@ -1990,6 +2000,8 @@
         <button class="page-btn" id="pagePrev" type="button">◀</button>
         <span class="page-ind" id="pageInd">1 / 1</span>
         <button class="page-btn" id="pageNext" type="button">▶</button>
+        <button class="mini-btn" id="pageEditToggle" type="button" style="margin-left:9px;"
+                title="입력창에 지금 보는 장만 보여줍니다">이 장만 편집</button>
       </div>
     </div>
   </div>
@@ -2174,7 +2186,8 @@
     draftTimer = setTimeout(() => {
       try {
         localStorage.setItem(DRAFT_KEY, JSON.stringify({
-          quote: (document.getElementById('quoteInput') || {}).value || '',
+          quote: (typeof fullQuoteText === 'function' ? fullQuoteText()
+                  : (document.getElementById('quoteInput') || {}).value) || '',
           maker: (document.getElementById('makerInput') || {}).value || '',
           char: (document.getElementById('charInput') || {}).value || ''
         }));
@@ -2187,7 +2200,10 @@
       const raw = localStorage.getItem(DRAFT_KEY);
       if (!raw) return;
       const d = JSON.parse(raw);
-      if (d.quote) document.getElementById('quoteInput').value = d.quote;
+      if (d.quote) {
+        if (typeof exitPageEdit === 'function') try { exitPageEdit(); } catch (e) {}
+        document.getElementById('quoteInput').value = d.quote;
+      }
       if (d.maker) document.getElementById('makerInput').value = d.maker;
       if (d.char) document.getElementById('charInput').value = d.char;
     } catch (e) {}
@@ -2389,7 +2405,7 @@
     hlColor: '#ffe17d',
     hlShape: 'fill',       // 형광펜 모양 (채우기 / 밑줄 / 반칠 / 둥근끝)
     vertical: false,       // 세로쓰기 (위→아래, 오른쪽→왼쪽)
-    iconData: '',          // 카드 안에 얹는 이미지 (data URL)
+    icons: [],             // 카드 안에 얹는 이미지들 [{data,size,radius,x,y,op,bw,bc}]
     pageBg: {},            // 장(페이지)별 배경 덮어쓰기 { 장번호: {...} }
     dragPlace: false,      // 끌어서 배치 모드
     blockOff: {},          // 블록별 밀어둔 거리 { 'p장_q문단' | 'p장_credit' | 'p장_title': {x,y} }
@@ -3319,8 +3335,39 @@
   let curPage = 0;
 
   // 본문을 '---' 구분선으로 나눠 페이지 배열로 반환
+  // 장 편집 모드 — 켜져 있으면 전체 글은 master 에 있고, 입력창엔 현재 장만 보인다
+  const pageEdit = { on: false, master: '' };
+
+  function fullQuoteText() {
+    return pageEdit.on ? pageEdit.master : $('quoteInput').value;
+  }
+
+  function enterPageEdit() {
+    pageEdit.master = $('quoteInput').value;
+    pageEdit.on = true;
+    $('quoteInput').value = getPages()[curPage] || '';
+    $('pageEditToggle').classList.add('on');
+    $('pageEditToggle').textContent = '\uC804\uCCB4 \uD3B8\uC9D1';
+    renderCard();
+  }
+  function exitPageEdit() {
+    if (!pageEdit.on) return;
+    pageEdit.on = false;
+    $('quoteInput').value = pageEdit.master;
+    $('pageEditToggle').classList.remove('on');
+    $('pageEditToggle').textContent = '\uC774 \uC7A5\uB9CC \uD3B8\uC9D1';
+    renderCard();
+  }
+  // 입력창 내용(현재 장)을 전체 글에 되박아 넣는다
+  function syncPageEdit() {
+    if (!pageEdit.on) return;
+    const pages = pageEdit.master.split(/\n[ \t]*-{3,}[ \t]*\n/);
+    pages[Math.min(curPage, pages.length - 1)] = $('quoteInput').value;
+    pageEdit.master = pages.join('\n---\n');
+  }
+
   function getPages() {
-    const raw = $('quoteInput').value;
+    const raw = fullQuoteText();
     // 한 줄에 --- (앞뒤 공백 허용) 만 있는 줄을 구분선으로
     const parts = raw.split(/\n[ \t]*-{3,}[ \t]*\n/);
     // 각 조각의 앞뒤 빈 줄만 정리 (내부 줄바꿈은 유지)
@@ -3409,7 +3456,7 @@
 
     updatePageNav();
   }
-  $('quoteInput').addEventListener('input', renderCard);
+  $('quoteInput').addEventListener('input', () => { syncPageEdit(); renderCard(); });
   // 저장 형식
   document.querySelectorAll('#fmtSeg button').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3489,12 +3536,19 @@
   });
 
   // 페이지 이동 버튼
+  function showPageInInput() {
+    if (pageEdit.on) $('quoteInput').value = getPages()[curPage] || '';
+  }
   $('pagePrev').addEventListener('click', () => {
-    if (curPage > 0) { curPage--; renderCard(); }
+    if (curPage > 0) { curPage--; showPageInInput(); renderCard(); }
   });
   $('pageNext').addEventListener('click', () => {
     const pages = getPages();
-    if (curPage < pages.length - 1) { curPage++; renderCard(); }
+    if (curPage < pages.length - 1) { curPage++; showPageInInput(); renderCard(); }
+  });
+  $('pageEditToggle').addEventListener('click', () => {
+    if (pageEdit.on) exitPageEdit();
+    else if (getPages().length > 1) enterPageEdit();
   });
   // 구분선 넣기 버튼 — 현재 커서 위치에 --- 줄 삽입
   // 서식 버튼이 어느 칸에 적용될지 — 마지막으로 커서를 둔 칸을 따라간다
@@ -4494,94 +4548,199 @@
     toast((curPage + 1) + '장은 공통 배경을 씁니다');
   });
 
-  // 카드 안 이미지 — 위치는 카드 안쪽 여백을 뺀 영역에서의 비율(%)로 잡는다.
-  // 그래서 카드 비율이나 여백을 바꿔도 어색한 자리로 튀지 않는다.
-  function applyIcon() {
-    const el = $('cardIcon');
-    if (!el) return;
-    if (!state.iconData) {
-      el.style.display = 'none';
-      $('iconOpts').style.display = 'none';
-      return;
-    }
-    $('iconOpts').style.display = '';
-    const size = parseInt($('iconSizeRange').value, 10) || 96;
-    const rad = parseInt($('iconRadiusRange').value, 10) || 0;
-    const px = parseInt($('iconXRange').value, 10);
-    const py = parseInt($('iconYRange').value, 10);
-    const op = parseInt($('iconOpacityRange').value, 10) / 100;
-    const bw = parseInt($('iconBorderRange').value, 10) || 0;
-    $('iconSizeVal').textContent = size + 'px';
-    $('iconRadiusVal').textContent = rad + '%';
-    $('iconXVal').textContent = px + '%';
-    $('iconYVal').textContent = py + '%';
-    $('iconOpacityVal').textContent = Math.round(op * 100) + '%';
-    $('iconBorderVal').textContent = bw + 'px';
-    if (el.getAttribute('src') !== state.iconData) el.src = state.iconData;
-    el.style.display = '';
-    el.style.width = size + 'px';
-    el.style.height = size + 'px';
-    el.style.borderRadius = rad + '%';
-    el.style.opacity = op;
-    el.style.border = bw > 0 ? (bw + 'px solid ' + $('iconBorderColor').value) : '0';
-    // 카드 '전체' 영역에서 비율로 배치 — 0% 는 왼쪽/위 끝, 100% 는 오른쪽/아래 끝
-    const total = size + bw * 2;
-    const availW = Math.max(0, (card.offsetWidth || 0) - total);
-    const availH = Math.max(0, (card.offsetHeight || 0) - total);
-    el.style.left = (availW * px / 100) + 'px';
-    el.style.top = (availH * py / 100) + 'px';
+  // ===== 카드 안 이미지 (여러 장) =====
+  // 이미지마다 크기·둥글기·위치·투명도·테두리를 따로 가진다.
+  // 슬라이더는 '지금 고른 이미지' 하나를 편집하고, 번호 칩으로 골라 바꾼다.
+  let iconSel = 0;   // 지금 편집 중인 이미지 번호
+
+  function curIcon() { return state.icons[iconSel] || null; }
+
+  // 고른 이미지의 값을 슬라이더에 채운다
+  function loadIconSliders() {
+    const ic = curIcon();
+    if (!ic) return;
+    $('iconSizeRange').value = ic.size;
+    $('iconRadiusRange').value = ic.radius;
+    $('iconXRange').value = ic.x;
+    $('iconYRange').value = ic.y;
+    $('iconOpacityRange').value = ic.op;
+    $('iconBorderRange').value = ic.bw;
+    $('iconBorderColor').value = ic.bc;
+    $('iconRotRange').value = ic.rot || 0;
   }
 
-  // 미리보기에서 마우스로 끌어 옮기기 — 슬라이더 값을 그대로 움직인다
-  (function () {
-    const el = $('cardIcon');
-    if (!el) return;
-    let dragging = false;
-    el.addEventListener('pointerdown', ev => {
-      if (!state.iconData) return;
-      dragging = true;
-      el.setPointerCapture(ev.pointerId);
-      ev.preventDefault();
+  function renderIconChips() {
+    const box = $('iconChips');
+    box.innerHTML = '';
+    box.style.display = state.icons.length > 1 ? '' : 'none';
+    state.icons.forEach((ic, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mini-btn' + (i === iconSel ? ' on' : '');
+      b.textContent = (i + 1);
+      b.title = (i + 1) + '번 이미지 편집';
+      b.addEventListener('click', () => {
+        iconSel = i;
+        loadIconSliders();
+        renderIconChips();
+        applyIcons();
+      });
+      box.appendChild(b);
     });
-    el.addEventListener('pointermove', ev => {
+  }
+
+  function applyIcons() {
+    // 이미지 개수만큼 img 요소를 맞춘다
+    const have = card.querySelectorAll('.card-icon');
+    for (let i = have.length - 1; i >= state.icons.length; i--) have[i].remove();
+    for (let i = have.length; i < state.icons.length; i++) {
+      const img = document.createElement('img');
+      img.className = 'card-icon';
+      img.alt = '';
+      card.insertBefore(img, $('cardBorder'));
+    }
+    $('iconOpts').style.display = state.icons.length ? '' : 'none';
+    if (!state.icons.length) { renderIconChips(); return; }
+    if (iconSel >= state.icons.length) iconSel = state.icons.length - 1;
+
+    const els = card.querySelectorAll('.card-icon');
+    state.icons.forEach((ic, i) => {
+      const el = els[i];
+      el.dataset.idx = i;
+      if (el.getAttribute('src') !== ic.data) el.src = ic.data;
+      // 예전 저장본엔 비율(ar)이 없다 — 그림이 로드된 뒤 한 번 채워 넣는다
+      if (!ic.ar && el.complete && el.naturalWidth && el.naturalHeight) {
+        ic.ar = el.naturalWidth / el.naturalHeight;
+      }
+      if (!ic.ar) {
+        el.onload = () => {
+          if (!ic.ar && el.naturalWidth && el.naturalHeight) {
+            ic.ar = el.naturalWidth / el.naturalHeight;
+            applyIcons();
+          }
+        };
+      }
+      // '크기' 는 긴 쪽 길이 — 짧은 쪽은 원본 비율대로 (찌그러짐 없음)
+      const ar = ic.ar || 1;
+      const iw = ar >= 1 ? ic.size : Math.round(ic.size * ar);
+      const ih = ar >= 1 ? Math.round(ic.size / ar) : ic.size;
+      el.style.width = iw + 'px';
+      el.style.height = ih + 'px';
+      el.style.borderRadius = ic.radius + '%';
+      el.style.opacity = ic.op / 100;
+      el.style.border = ic.bw > 0 ? (ic.bw + 'px solid ' + ic.bc) : '0';
+      el.style.transform = ic.rot ? ('rotate(' + ic.rot + 'deg)') : '';
+      el.classList.toggle('icon-sel', state.icons.length > 1 && i === iconSel);
+      // 카드 '전체' 영역에서 비율로 배치 — 0% 왼쪽/위 끝, 100% 오른쪽/아래 끝
+      const availW = (card.offsetWidth || 0) - (iw + ic.bw * 2);
+      const availH = (card.offsetHeight || 0) - (ih + ic.bw * 2);
+      el.style.left = (availW * ic.x / 100) + 'px';
+      el.style.top = (availH * ic.y / 100) + 'px';
+    });
+    // 슬라이더 값 표시
+    const ic = curIcon();
+    $('iconSizeVal').textContent = ic.size + 'px';
+    $('iconRadiusVal').textContent = ic.radius + '%';
+    $('iconXVal').textContent = ic.x + '%';
+    $('iconYVal').textContent = ic.y + '%';
+    $('iconOpacityVal').textContent = ic.op + '%';
+    $('iconBorderVal').textContent = ic.bw + 'px';
+    $('iconRotVal').textContent = (ic.rot || 0) + '\u00B0';
+    renderIconChips();
+  }
+  // 예전 이름으로 부르는 곳이 남아 있어도 동작하게
+  const applyIcon = applyIcons;
+
+  // 미리보기에서 끌어 옮기기 — 잡은 이미지가 편집 대상으로 바뀐다
+  card.addEventListener('pointerdown', ev => {
+    const el = ev.target.closest && ev.target.closest('.card-icon');
+    if (!el) return;
+    const idx = parseInt(el.dataset.idx, 10);
+    if (isNaN(idx) || !state.icons[idx]) return;
+    if (idx !== iconSel) { iconSel = idx; loadIconSliders(); renderIconChips(); applyIcons(); }
+    const ic = state.icons[idx];
+    let dragging = true;
+    el.setPointerCapture(ev.pointerId);
+    ev.preventDefault();
+    const move = mv => {
       if (!dragging) return;
       const rect = card.getBoundingClientRect();
-      const scale = rect.width / (card.offsetWidth || 1);   // 화면 확대 보정
-      const size = (parseInt($('iconSizeRange').value, 10) || 96)
-                 + (parseInt($('iconBorderRange').value, 10) || 0) * 2;
-      const availW = Math.max(1, card.offsetWidth - size);
-      const availH = Math.max(1, card.offsetHeight - size);
-      // 포인터 위치를 카드 좌표로 바꾸고, 아이콘 중심이 따라오게
-      const cx = (ev.clientX - rect.left) / scale - size / 2;
-      const cy = (ev.clientY - rect.top) / scale - size / 2;
-      $('iconXRange').value = Math.round(Math.min(100, Math.max(0, cx / availW * 100)));
-      $('iconYRange').value = Math.round(Math.min(100, Math.max(0, cy / availH * 100)));
-      applyIcon();
-    });
-    ['pointerup', 'pointercancel'].forEach(n => el.addEventListener(n, () => { dragging = false; }));
-  })();
+      const scale = rect.width / (card.offsetWidth || 1);
+      const ar = ic.ar || 1;
+      const iw = (ar >= 1 ? ic.size : Math.round(ic.size * ar)) + ic.bw * 2;
+      const ih = (ar >= 1 ? Math.round(ic.size / ar) : ic.size) + ic.bw * 2;
+      const availW = (card.offsetWidth - iw) || 1;
+      const availH = (card.offsetHeight - ih) || 1;
+      const cx = (mv.clientX - rect.left) / scale - iw / 2;
+      const cy = (mv.clientY - rect.top) / scale - ih / 2;
+      // 카드 밖으로도 반쯤 나갈 수 있게 -50 ~ 150 까지 허용
+      ic.x = Math.round(Math.min(150, Math.max(-50, cx / availW * 100)));
+      ic.y = Math.round(Math.min(150, Math.max(-50, cy / availH * 100)));
+      $('iconXRange').value = ic.x;
+      $('iconYRange').value = ic.y;
+      applyIcons();
+    };
+    const up = () => {
+      dragging = false;
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  });
 
   $('iconPick').addEventListener('click', () => $('iconFile').click());
   $('iconFile').addEventListener('change', ev => {
     const f = ev.target.files && ev.target.files[0];
     if (!f) return;
+    if (state.icons.length >= 6) { toast('이미지는 6장까지예요'); ev.target.value = ''; return; }
     const fr = new FileReader();
     fr.onload = () => {
-      state.iconData = fr.result;
-      applyIcon();
-      toast('이미지를 올렸어요');
+      // 원본 가로세로 비율을 먼저 읽는다 — 찌그러지지 않게 상자를 비율대로 잡기 위해
+      const probe = new Image();
+      probe.onload = () => {
+        const ar = (probe.naturalWidth && probe.naturalHeight)
+          ? probe.naturalWidth / probe.naturalHeight : 1;
+        // 새 이미지는 기본값으로, 겹치지 않게 자리를 조금 옮겨서
+        state.icons.push({ data: fr.result, size: 96, radius: 50,
+                            x: Math.min(90, 12 + state.icons.length * 16), y: 12,
+                            op: 100, bw: 0, bc: '#ffffff', rot: 0, ar: ar });
+        iconSel = state.icons.length - 1;
+        loadIconSliders();
+        applyIcons();
+        toast(state.icons.length + '\uBC88 \uC774\uBBF8\uC9C0\uB97C \uC62C\uB838\uC5B4\uC694');
+      };
+      probe.src = fr.result;
     };
     fr.readAsDataURL(f);
     ev.target.value = '';
   });
   $('iconClear').addEventListener('click', () => {
-    state.iconData = '';
-    applyIcon();
-    toast('이미지를 지웠어요');
+    if (!state.icons.length) return;
+    state.icons.splice(iconSel, 1);
+    iconSel = Math.max(0, iconSel - 1);
+    loadIconSliders();
+    applyIcons();
+    toast('\uACE0\uB978 \uC774\uBBF8\uC9C0\uB97C \uC9C0\uC6E0\uC5B4\uC694');
   });
+  // 슬라이더 → 고른 이미지에 반영
   ['iconSizeRange','iconRadiusRange','iconXRange','iconYRange',
-   'iconOpacityRange','iconBorderRange','iconBorderColor'].forEach(id => {
-    $(id).addEventListener('input', applyIcon);
+   'iconOpacityRange','iconBorderRange','iconBorderColor','iconRotRange'].forEach(id => {
+    $(id).addEventListener('input', () => {
+      const ic = curIcon();
+      if (!ic) return;
+      ic.size = parseInt($('iconSizeRange').value, 10) || 96;
+      ic.radius = parseInt($('iconRadiusRange').value, 10) || 0;
+      ic.x = parseInt($('iconXRange').value, 10) || 0;
+      ic.y = parseInt($('iconYRange').value, 10) || 0;
+      ic.op = parseInt($('iconOpacityRange').value, 10) || 100;
+      ic.bw = parseInt($('iconBorderRange').value, 10) || 0;
+      ic.bc = $('iconBorderColor').value;
+      ic.rot = parseInt($('iconRotRange').value, 10) || 0;
+      applyIcons();
+    });
   });
 
   // 문구 뒤 반투명 판 — card-inner 의 실제 위치에 맞춰 크기를 잡는다
@@ -4895,7 +5054,8 @@
     state.sepStyle = 'solid';
     state.hlShape = 'fill';
     state.vertical = false;
-    state.iconData = '';
+    state.icons = [];
+    iconSel = 0;
     state.panelTail = 'none';
     state.pageBg = {};
     state.blockOff = {};
@@ -5565,7 +5725,7 @@
       sepStyle: state.sepStyle,
       hlShape: state.hlShape,
       vertical: state.vertical,
-      iconData: state.iconData,
+      icons: state.icons,
       panelTail: state.panelTail,
       pageBg: state.pageBg,
       blockOff: state.blockOff
@@ -5598,7 +5758,7 @@
 
   function addHistory() {
     const pages = getPages();
-    const fullText = $('quoteInput').value.trim();
+    const fullText = fullQuoteText().trim();   // 장 편집 모드여도 전체 글을 기록
     if (!fullText) return;
 
     const now = new Date();
@@ -5685,7 +5845,18 @@
     state.sepStyle = s.sepStyle || 'solid';
     state.hlShape = s.hlShape || 'fill';
     state.vertical = !!s.vertical;
-    state.iconData = s.iconData || '';
+    // 예전 저장본(iconData 한 장)은 배열로 옮겨 살린다
+    state.icons = Array.isArray(s.icons) ? s.icons
+      : (s.iconData ? [{ data: s.iconData,
+          size: parseInt((s.sliders || {}).iconSizeRange, 10) || 96,
+          radius: parseInt((s.sliders || {}).iconRadiusRange, 10) || 50,
+          x: parseInt((s.sliders || {}).iconXRange, 10) || 12,
+          y: parseInt((s.sliders || {}).iconYRange, 10) || 12,
+          op: parseInt((s.sliders || {}).iconOpacityRange, 10) || 100,
+          bw: parseInt((s.sliders || {}).iconBorderRange, 10) || 0,
+          bc: (s.sliders || {}).iconBorderColor || '#ffffff' }] : []);
+    iconSel = 0;
+    loadIconSliders();
     state.panelTail = s.panelTail || 'none';
     state.pageBg = s.pageBg || {};
     state.blockOff = s.blockOff || {};
@@ -5781,6 +5952,7 @@
 
       // 항목 클릭 — 문구·제작자·캐릭터 + 글자/배경 설정 전체 복원
       item.addEventListener('click', () => {
+        exitPageEdit();   // 히스토리는 전체 글이므로 장 편집 모드를 끄고 넣는다
         $('quoteInput').value = h.text;
         if (h.maker) makerInput.value = h.maker;
         if (h.char) charInput.value = h.char;
