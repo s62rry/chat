@@ -991,6 +991,78 @@
     #copyBtn span, #downloadBtn span { display: none; }
     #copyBtn, #downloadBtn { padding: 7px; gap: 0; }
   }
+
+  /* ===== 대화 카드 모드 ===== */
+  /* 모드 탭 — 헤더 한가운데 */
+  .mode-seg { width: 148px; margin-left: auto; }
+  .header-actions { margin-left: auto; }
+  .mode-seg button { padding: 5px 4px; font-size: 12px; }
+  .mode-seg button.active { color: #fff !important; }
+  .chat-shell { display: flex; justify-content: center; width: 100%; }
+  #chat {
+    width: 100%;
+    max-width: 420px;
+    background: #b2c7da;
+    padding: 22px 14px;
+    overflow: hidden;
+    font-family: inherit;
+  }
+  .msg { display: flex; gap: 8px; align-items: flex-start; position: relative; }
+  .msg.right { flex-direction: row-reverse; }
+  .msg-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    overflow: hidden;                 /* 틀 밖으로 나간 그림은 잘린다 */
+    flex: 0 0 auto; background: rgba(255,255,255,0.2);
+    position: relative; z-index: 1;   /* 말풍선 꼬리 조각보다 앞에 */
+  }
+  .msg-avatar img {
+    width: 100%; height: 100%;
+    display: block;      /* 구운 캔버스(정사각형)라 늘어날 것이 없다 */
+  }
+  .msg-avatar.empty { visibility: hidden; }
+  .msg-body { max-width: 76%; display: flex; flex-direction: column; }
+  .msg.right .msg-body { align-items: flex-end; }
+  .msg-name { font-size: 11px; margin-bottom: 3px; opacity: 0.75; }
+  .bubble {
+    padding: 7px 11px;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    line-height: 1.5;
+    width: fit-content;
+  }
+  .msg-narr {
+    text-align: center; font-size: 0.85em; opacity: 0.72;
+    margin: 12px 8px; white-space: pre-wrap;
+    position: relative;
+  }
+  /* 대본 입력창 — 발췌 쪽(.ta-wrap)은 글자를 투명하게 두는 미러 기법이라 못 빌려 쓴다 */
+  .tk-ta textarea {
+    width: 100%;
+    min-height: 190px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.65;
+    padding: 10px 11px;
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
+  }
+  .tk-ta textarea:focus { border-color: var(--accent); }
+  .tk-ta textarea::placeholder { color: var(--text-dim); }
+  .speaker { border: 1px solid var(--border); border-radius: 7px; padding: 9px 11px; margin-bottom: 8px; }
+  .speaker-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .speaker-name { font-size: 12.5px; font-weight: 700; color: var(--text-strong); }
+  .speaker-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--bg);
+    object-fit: cover; flex: 0 0 auto; cursor: pointer;
+  }
+  .speaker-head .seg { width: 96px; margin-left: auto; }
+  .speaker-head .seg button { padding: 4px 2px; font-size: 11px; }
 </style>
 </head>
 <body data-theme="light">
@@ -1000,6 +1072,10 @@
     <span class="dot"></span>
     발췌 이미지 메이커
     <small>quote card</small>
+  </div>
+  <div class="seg mode-seg" id="modeSeg">
+    <button data-mode="quote" class="active">발췌</button>
+    <button data-mode="talk">메시지</button>
   </div>
   <div class="header-actions">
     <button class="icon" id="dataExport" title="설정·목록을 파일로 내보내기">
@@ -1971,6 +2047,223 @@
 
   </div>
 
+  <!-- ===== 대화 카드 편집 ===== -->
+  <div class="editor" id="talkEditor" style="display:none;">
+    <div class="section">
+      <div class="section-title">대본
+        <button class="mini-btn" id="tkClearBtn" type="button">비우기</button>
+      </div>
+      <div class="tk-ta"><textarea id="tkScript" spellcheck="false" placeholder="이름: 내용"></textarea></div>
+      <div class="hint">
+        <b>이름: 내용</b> 한 줄 = 말풍선 하나 (이름 없으면 앞사람이 이어 말함)<br>
+        <b>*</b> 서술 &nbsp;·&nbsp; <b>『[파티]이름: …』</b> 게임 창 &nbsp;·&nbsp; <b>---</b> 장 나누기<br>
+        줄 끝 <b>@6:26</b> 시간 &nbsp;·&nbsp; <b>!1</b> 안읽음 &nbsp;·&nbsp; 내용 앞 <b>+</b> 크게 / <b>-</b> 작게
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">화자</div>
+      <div id="tkSpeakerList"></div>
+      <div class="hint" id="tkSpeakerEmpty">대본에 <b>이름: 내용</b> 을 쓰면 화자가 여기 나타나요.</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">글꼴</div>
+      <div class="btn-grid" id="tkFontGrid"></div>
+      <div class="row" style="margin-top:10px; margin-bottom:0;">
+        <div>
+          <label class="field-label">글자 크기</label>
+          <div class="slider-row">
+            <input type="range" id="tkFontRange" min="10" max="22" value="14">
+            <span class="slider-val" id="tkFontVal">14px</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">이모티콘 크기</label>
+          <div class="slider-row">
+            <input type="range" id="tkStickerRange" min="60" max="200" value="110">
+            <span class="slider-val" id="tkStickerVal">110px</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">이모티콘
+        <button class="mini-btn" id="tkStickerPick" type="button">올리기</button>
+      </div>
+      <input type="file" id="tkStickerFile" accept="image/*" style="display:none;">
+      <div id="tkStickerList" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+      <div class="hint">이미지를 올리면 번호가 붙어요. 이모티콘을 <b>누르면 대본의 커서 자리에</b> 들어가요 (직접 <b>:1:</b> 이라고 써도 돼요). 지우기는 구석의 ×.</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">화면</div>
+      <div class="field-group">
+        <label class="field-label">프리셋</label>
+        <div class="seg" id="tkPresetSeg">
+          <button data-tkp="kakao" type="button">카톡</button>
+          <button data-tkp="imsg" type="button">아이메시지</button>
+          <button data-tkp="line" type="button">라인</button>
+          <button data-tkp="insta" type="button">인스타</button>
+          <button data-tkp="disc" type="button">디코</button>
+          <button data-tkp="game" type="button">게임</button>
+        </div>
+        <div class="hint">누르면 배경·말풍선 모양·화자 색이 그 느낌으로 한 번에 바뀌어요. (화자 색을 직접 정했다면 덮어써요)</div>
+        <div id="tkMyPresets" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:7px;"></div>
+        <button class="mini-btn" id="tkPresetSave" type="button" style="margin:7px 0 0;">지금 설정을 내 프리셋으로 저장</button>
+      </div>
+      <div class="field-group">
+        <label class="field-label" style="display:flex;align-items:center;">
+          배경 이미지
+          <button class="mini-btn" id="tkBgPick" type="button">올리기</button>
+          <button class="mini-btn" id="tkBgClear" type="button">지우기</button>
+        </label>
+        <input type="file" id="tkBgFile" accept="image/*" style="display:none;">
+        <div id="tkBgOpts" style="display:none; margin-top:8px;">
+          <div class="field-group">
+            <label class="field-label">배경 확대</label>
+            <div class="slider-row">
+              <input type="range" id="tkBgScale" min="50" max="250" step="5" value="100">
+              <span class="slider-val" id="tkBgScaleVal">100%</span>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label class="field-label">막 진하기</label>
+              <div class="slider-row">
+                <input type="range" id="tkDimRange" min="-80" max="80" value="0">
+                <span class="slider-val" id="tkDimVal" style="min-width:52px;">없음</span>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">배경 흐림</label>
+              <div class="slider-row">
+                <input type="range" id="tkBgBlur" min="0" max="20" value="0">
+                <span class="slider-val" id="tkBgBlurVal">0px</span>
+              </div>
+            </div>
+          </div>
+          <div class="row" style="margin-bottom:0;">
+            <div>
+              <label class="field-label">가로 위치</label>
+              <div class="slider-row">
+                <input type="range" id="tkBgX" min="0" max="100" value="50">
+                <span class="slider-val" id="tkBgXVal">50%</span>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">세로 위치</label>
+              <div class="slider-row">
+                <input type="range" id="tkBgY" min="0" max="100" value="50">
+                <span class="slider-val" id="tkBgYVal">50%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-swatch">
+          <label class="field-label">배경 색</label>
+          <input type="color" class="swatch-input" id="tkBgColor" value="#b2c7da">
+        </div>
+        <div>
+          <label class="field-label">말풍선 모양</label>
+          <div class="seg" id="tkShapeSeg">
+            <button data-shape="plain" class="active">둥근</button>
+            <button data-shape="notch">모서리</button>
+            <button data-shape="tailtop">위 꼬리</button>
+            <button data-shape="tailcut">꺾인</button>
+            <button data-shape="tailbot">아래 꼬리</button>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="field-label">말풍선 둥글기</label>
+          <div class="slider-row">
+            <input type="range" id="tkRadiusRange" min="0" max="22" value="12">
+            <span class="slider-val" id="tkRadiusVal">12px</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">말풍선 간격</label>
+          <div class="slider-row">
+            <input type="range" id="tkGapRange" min="2" max="26" value="10">
+            <span class="slider-val" id="tkGapVal">10px</span>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="field-label">위아래 여백</label>
+          <div class="slider-row">
+            <input type="range" id="tkPadRange" min="6" max="60" value="22">
+            <span class="slider-val" id="tkPadVal">22px</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">좌우 여백</label>
+          <div class="slider-row">
+            <input type="range" id="tkPadXRange" min="4" max="60" value="14">
+            <span class="slider-val" id="tkPadXVal">14px</span>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="field-label">모서리 둥글기</label>
+          <div class="slider-row">
+            <input type="range" id="tkShellRange" min="0" max="30" value="0">
+            <span class="slider-val" id="tkShellVal">0px</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">아바타 크기</label>
+          <div class="slider-row">
+            <input type="range" id="tkAvSizeRange" min="22" max="64" value="36">
+            <span class="slider-val" id="tkAvSizeVal">36px</span>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="margin-bottom:0;">
+        <div>
+          <label class="field-label">아바타 표시</label>
+          <div class="seg" id="tkAvatarSeg">
+            <button data-av="on" class="active">보임</button>
+            <button data-av="off">숨김</button>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">이름 표시</label>
+          <div class="seg" id="tkNameSeg">
+            <button data-nm="all">모두</button>
+            <button data-nm="left" class="active">왼쪽만</button>
+            <button data-nm="off">숨김</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">히스토리</div>
+      <div id="tkHistList"></div>
+      <div class="hint" id="tkHistEmpty">저장하거나 복사하면 그때의 대본이 여기에 쌓여요. 눌러서 되살릴 수 있어요.</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">저장</div>
+      <div class="field-group">
+        <label class="field-label">저장 가로 크기</label>
+        <div class="slider-row">
+          <input type="range" id="tkSaveWidthRange" min="420" max="1600" step="20" value="840">
+          <span class="slider-val" id="tkSaveWidthVal">840px</span>
+        </div>
+      </div>
+      <div class="hint">위 오른쪽의 <b>복사</b>·<b>저장</b> 버튼이 이 대화 화면을 PNG 로 만들어요. 대본과 화자 설정은 이 브라우저에 자동 저장됩니다.</div>
+    </div>
+  </div>
+
   <!-- ===== 미리보기 ===== -->
   <div class="preview">
     <div class="preview-stack">
@@ -2004,6 +2297,12 @@
                 title="입력창에 지금 보는 장만 보여줍니다">이 장만 편집</button>
       </div>
     </div>
+    <div class="chat-shell" id="chatWrap" style="display:none;"><div id="chat"></div></div>
+    <div class="page-nav" id="tkNav" style="display:none;">
+        <button class="page-btn" id="tkPrev" type="button">◀</button>
+        <span class="page-ind" id="tkInd">1 / 1</span>
+        <button class="page-btn" id="tkNext" type="button">▶</button>
+      </div>
   </div>
 </main>
 
@@ -5994,8 +6293,21 @@
     ctxMenu.style.top = y + 'px';
   });
   function closeCtx() { ctxMenu.classList.remove('show'); }
-  $('ctxCopy').addEventListener('click', () => { closeCtx(); copyImage(); });
-  $('ctxSave').addEventListener('click', () => { closeCtx(); saveImage(); });
+  // 어느 탭인지는 화면 상태로 판정한다 (메시지 편집칸이 보이면 메시지 모드)
+  function inTalkMode() {
+    const el = document.getElementById('talkEditor');
+    return el && el.style.display !== 'none';
+  }
+  $('ctxCopy').addEventListener('click', () => {
+    closeCtx();
+    if (inTalkMode() && window.tkCopyImage) window.tkCopyImage();
+    else copyImage();
+  });
+  $('ctxSave').addEventListener('click', () => {
+    closeCtx();
+    if (inTalkMode() && window.tkSaveImage) window.tkSaveImage();
+    else saveImage();
+  });
   document.addEventListener('click', closeCtx);
   document.addEventListener('scroll', closeCtx, true);
   window.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtx(); });
@@ -6009,7 +6321,11 @@
     'quotecard:history',    // 히스토리
     'quotecard:draft',      // 임시 저장된 문구
     'quotecard:collapsed',  // 접어둔 영역
-    'quotecard:theme'       // 밝기 테마
+    'quotecard:theme',      // 밝기 테마
+    'quotecard:talk',       // 대화 카드 (대본·화자)
+    'quotecard:talkhistory',// 대화 카드 히스토리
+    'quotecard:talkpresets',// 대화 카드 내 프리셋
+    'quotecard:mode'        // 마지막으로 쓰던 모드
   ];
   $('dataExport').addEventListener('click', () => {
     const dump = { _tool: 'quote-card', _at: new Date().toISOString(), store: {} };
@@ -6019,6 +6335,10 @@
         if (v !== null) dump.store[k] = v;
       } catch (e) {}
     });
+    // IndexedDB 에 있는 대화 카드 내 프리셋도 함께 담는다
+    if (typeof tkMyPresetsCache !== 'undefined' && tkMyPresetsCache.length) {
+      dump.talkPresets = tkMyPresetsCache;
+    }
     const blob = new Blob([JSON.stringify(dump)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -6059,6 +6379,11 @@
       });
     } catch (e) {
       toast('저장 공간이 부족해 일부만 복원됐어요');
+    }
+    // 백업에 대화 카드 프리셋이 있으면 IndexedDB 로
+    if (Array.isArray(dump.talkPresets) && typeof tkIdbSet === 'function') {
+      tkIdbSet('presets', dump.talkPresets).then(() => location.reload());
+      return;
     }
     location.reload();
   }
@@ -6128,7 +6453,1186 @@
         try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(list)); } catch (e) {}
       });
     });
-  })();
+    // ==================== 대화 카드 모드 ====================
+  // 대본을 "이름: 내용" 줄로 해석해 메신저풍 말풍선 화면을 만든다.
+  // 발췌 카드와 화면·저장 버튼을 같이 쓰고, 데이터는 quotecard:talk 에 따로 저장.
+  const TK_KEY = 'quotecard:talk';
+  const tk = { speakers: {}, avatarOn: true, nameMode: 'left', avPos: 'top', shape: 'plain',
+               rowMode: '',      // '' 말풍선 | 'game' 게임 채팅창 | 'disc' 디스코드식 줄
+               avRadius: 50,     // 프사 모서리(%) — 50=원, 카톡은 42(둥근 네모)
+               unreadColor: '#ffe000',   // 안읽음 숫자 색 (카톡만 노랑, 다른 프리셋은 회색)
+               font: '', bgImg: '', stickers: [], page: 0 };
+  let uiMode = 'quote';
+
+  let tkSaveTimer = null;
+  function tkPersist() {
+    clearTimeout(tkSaveTimer);
+    tkSaveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(TK_KEY, JSON.stringify({
+          script: $('tkScript').value,
+          speakers: tk.speakers,
+          avatarOn: tk.avatarOn,
+          nameMode: tk.nameMode,
+          avPos: tk.avPos,
+          shape: tk.shape,
+          font: tk.font,
+          bgImg: tk.bgImg,
+          stickers: tk.stickers,
+          rowMode: tk.rowMode,
+          avRadius: tk.avRadius,
+          unreadColor: tk.unreadColor,
+          sliders: ['tkBgColor','tkFontRange','tkStickerRange','tkRadiusRange','tkGapRange',
+                    'tkPadRange','tkPadXRange','tkShellRange','tkAvSizeRange','tkSaveWidthRange',
+                    'tkBgScale','tkBgX','tkBgY','tkDimRange','tkBgBlur']
+            .reduce((o, id) => { o[id] = $(id).value; return o; }, {})
+        }));
+      } catch (e) {}
+    }, 400);
+  }
+  function tkRestore() {
+    try {
+      const d = JSON.parse(localStorage.getItem(TK_KEY) || 'null');
+      if (!d) return;
+      if (d.script) $('tkScript').value = d.script;
+      tk.speakers = d.speakers || {};
+      tk.avatarOn = d.avatarOn !== false;
+      // 옛 저장본(nameOn 참/거짓)은 새 3단 값으로 이관
+      tk.nameMode = d.nameMode || (d.nameOn === false ? 'off' : 'left');
+      tk.avPos = d.avPos || 'top';
+      tk.shape = d.shape || 'round';
+      if (tk.shape === 'square' || tk.shape === 'tail') tk.shape = 'tailtop';   // 옛 값 이관
+      if (tk.shape === 'round') tk.shape = 'notch';   // 옛 '둥근' 은 모서리 접힌 모양이었다
+      tk.font = d.font || '';
+      tk.bgImg = d.bgImg || '';
+      tk.stickers = Array.isArray(d.stickers) ? d.stickers : [];
+      tk.rowMode = d.rowMode || (d.gameRow ? 'game' : '');   // 옛 저장본 이관
+      tk.avRadius = d.avRadius || 50;
+      tk.unreadColor = d.unreadColor || '#ffe000';
+      Object.keys(d.sliders || {}).forEach(k => { if ($(k)) $(k).value = d.sliders[k]; });
+      tkSyncSegs();
+    } catch (e) {}
+  }
+  function tkSyncSegs() {
+    document.querySelectorAll('#tkAvatarSeg button').forEach(b =>
+      b.classList.toggle('active', (b.dataset.av === 'on') === tk.avatarOn));
+    document.querySelectorAll('#tkNameSeg button').forEach(b =>
+      b.classList.toggle('active', b.dataset.nm === tk.nameMode));
+    document.querySelectorAll('#tkAvPosSeg button').forEach(b =>
+      b.classList.toggle('active', b.dataset.avp === tk.avPos));
+    document.querySelectorAll('#tkShapeSeg button').forEach(b =>
+      b.classList.toggle('active', b.dataset.shape === tk.shape));
+  }
+
+  // 대본 → 장 배열. 각 장은 { name?, narr?, text } 목록
+  function tkPages() {
+    const raw = $('tkScript').value;
+    return raw.split(/\n(?:[ \t]*\n){2,}|\n[ \t]*-{3,}[ \t]*\n/).map(pt => {
+      const msgs = [];
+      let last = null;
+      pt.split('\n').forEach(line => {
+        let t = line.trim();
+        if (!t) return;
+        // 【이름: 내용】 처럼 감싸 붙여넣은 줄은 괄호를 벗기고 해석한다
+        if (t.startsWith('\u3010') && t.endsWith('\u3011')) t = t.slice(1, -1).trim();
+        // 『...』 = 게임 창 메시지 — [시스템]/[귓]/[파티] 같은 머리표를 알아듣는다.
+        // 게임 프리셋이 켜져 있으면 『』 없이 [머리표]로 시작만 해도 게임 줄로 본다.
+        const wrapped = t.startsWith('\u300E') && t.endsWith('\u300F');
+        if (wrapped || (tk.rowMode === 'game' && /^\[[^\]]{1,10}\]/.test(t))) {
+          const inner = wrapped ? t.slice(1, -1).trim() : t;
+          const gm = { game: true, tag: '', gname: '', text: inner };
+          const tagM = inner.match(/^\[([^\]]{1,10})\]\s*(.*)$/);   // ] 뒤 띄어쓰기 유무 무관
+          if (tagM) {
+            gm.tag = tagM[1].trim();
+            let rest = tagM[2];
+            const nmM = rest.match(/^([^:：]{1,20})[:：]\s*(.*)$/);
+            if (nmM && nmM[2] !== '') { gm.gname = nmM[1].trim(); gm.text = nmM[2]; }
+            else gm.text = rest;
+          }
+          msgs.push(gm);
+          return;
+        }
+        if (t.startsWith('*')) { msgs.push({ narr: true, text: t.replace(/^\*+\s*/, '') }); return; }
+        // 줄 끝의 " @3:15" 는 시간으로 뗀다
+        let time = '';
+        let body = t;
+        // "@3:15" 도, "@오후 3:15" 처럼 앞에 한 단어가 붙은 것도 먹는다.
+        // "!1" 은 카톡 안읽음 숫자. 시간과 순서 상관없이 끝에 붙이면 된다.
+        let unread = '';
+        for (let k = 0; k < 2; k++) {
+          const tmatch = body.match(/\s+@((?:[^\s@]{1,6}[ ])?[0-9]{1,2}:[0-9]{2})$/);
+          if (tmatch && !time) { time = tmatch[1]; body = body.slice(0, tmatch.index); continue; }
+          const umatch = body.match(/\s+!([0-9]{1,2})$/);
+          if (umatch && !unread) { unread = umatch[1]; body = body.slice(0, umatch.index); }
+        }
+        // ":1:" 홀로 있는 줄은 앞 화자(없으면 익명)의 이모티콘
+        const stAlone = body.match(/^:(\d{1,2}):$/);
+        if (stAlone) {
+          msgs.push({ name: last || '', sticker: parseInt(stAlone[1], 10) - 1, time: time, unread: unread });
+          return;
+        }
+        const m = body.match(/^([^:：]{1,20})[:：]\s*(.*)$/);
+        let name2 = null, content = null;
+        if (m && m[2] !== '') { last = m[1].trim(); name2 = last; content = m[2]; }
+        else if (last) { name2 = last; content = body; }
+        if (name2 !== null) {
+          const st = content.match(/^:(\d{1,2}):$/);          // ":1:" 한 줄 = 이모티콘
+          if (st) { msgs.push({ name: name2, sticker: parseInt(st[1], 10) - 1, time: time, unread: unread }); return; }
+          let big = false, small = false;
+          if (content.startsWith('+ ')) { big = true; content = content.slice(2); }        // "+ " = 크게
+          else if (content.startsWith('- ')) { small = true; content = content.slice(2); } // "- " = 작고 옅게
+          msgs.push({ name: name2, text: content, time: time, unread: unread, big: big, small: small });
+        } else {
+          msgs.push({ narr: true, text: t });
+        }
+      });
+      return msgs;
+    }).filter(p => p.length);
+  }
+
+  function tkCollect(pages) {
+    const seen = [];
+    pages.forEach(p => p.forEach(m => {
+      if (m.narr || m.game || !m.name) return;   // 서술·게임 창 줄은 화자가 아니다
+      if (!seen.includes(m.name)) seen.push(m.name);
+    }));
+    seen.forEach((name, i) => {
+      if (!tk.speakers[name]) {
+        tk.speakers[name] = {
+          side: i === 1 ? 'right' : 'left',
+          bubble: i === 1 ? '#ffe94a' : '#ffffff',
+          text: '#1a1d24',
+          avatar: '',
+          avScale: 100, avX: 0, avY: 0   // 틀 안 그림의 확대·위치
+        };
+      }
+    });
+    return seen;
+  }
+
+  function tkRenderSpeakers(names) {
+    const box = $('tkSpeakerList');
+    box.innerHTML = '';
+    $('tkSpeakerEmpty').style.display = names.length ? 'none' : '';
+    names.forEach(name => {
+      const sp = tk.speakers[name];
+      const card = document.createElement('div');
+      card.className = 'speaker';
+      const head = document.createElement('div');
+      head.className = 'speaker-head';
+      const av = document.createElement('img');
+      av.className = 'speaker-avatar';
+      av.alt = '';
+      av.title = '눌러서 아바타 올리기';
+      if (sp.avatar) av.src = sp.avatar;
+      const nm = document.createElement('span');
+      nm.className = 'speaker-name';
+      nm.textContent = name;
+      const seg = document.createElement('div');
+      seg.className = 'seg';
+      [['left', '왼쪽'], ['right', '오른쪽']].forEach(([v, label]) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.classList.toggle('active', sp.side === v);
+        b.addEventListener('click', () => { sp.side = v; tkRender(); tkPersist(); });
+        seg.appendChild(b);
+      });
+      head.appendChild(av); head.appendChild(nm); head.appendChild(seg);
+
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.marginBottom = '0';
+      row.innerHTML =
+        '<div class="col-swatch"><label class="field-label">말풍선</label>' +
+        '<input type="color" class="swatch-input sp-bubble" value="' + sp.bubble + '"></div>' +
+        '<div class="col-swatch"><label class="field-label">글자</label>' +
+        '<input type="color" class="swatch-input sp-text" value="' + sp.text + '"></div>' +
+        '<div class="col-swatch"><label class="field-label">이름</label>' +
+        '<input type="color" class="swatch-input sp-name" value="' + (sp.nameColor || '#888888') + '"' +
+        (sp.nameColor ? '' : ' title="지금은 배경에 따라 자동"') + '></div>' +
+        '<div style="flex:1; display:flex; align-items:flex-end; justify-content:flex-end;">' +
+        '<button class="mini-btn sp-av-clear" type="button">아바타 지우기</button></div>';
+      row.querySelector('.sp-bubble').addEventListener('input', ev => { sp.bubble = ev.target.value; tkRender(); tkPersist(); });
+      row.querySelector('.sp-text').addEventListener('input', ev => { sp.text = ev.target.value; tkRender(); tkPersist(); });
+      row.querySelector('.sp-name').addEventListener('input', ev => { sp.nameColor = ev.target.value; tkRender(); tkPersist(); });
+      row.querySelector('.sp-av-clear').addEventListener('click', () => { sp.avatar = ''; tkRenderAll(); tkPersist(); });
+
+      // 아바타 그림 조절 — 틀 안에서 확대하고 밀어서 잘리는 부분을 고른다
+      let adj = null;
+      if (sp.avatar) {
+        adj = document.createElement('div');
+        adj.className = 'row';
+        adj.style.cssText = 'margin:8px 0 0;';
+        adj.innerHTML =
+          '<div><label class="field-label">그림 확대</label><div class="slider-row">' +
+          '<input type="range" class="sp-avs" min="100" max="300" step="5" value="' + (sp.avScale || 100) + '">' +
+          '<span class="slider-val sp-avs-v">' + (sp.avScale || 100) + '%</span></div></div>' +
+          '<div><label class="field-label">가로</label><div class="slider-row">' +
+          '<input type="range" class="sp-avx" min="-50" max="50" value="' + (sp.avX || 0) + '">' +
+          '<span class="slider-val sp-avx-v">' + (sp.avX || 0) + '%</span></div></div>' +
+          '<div><label class="field-label">세로</label><div class="slider-row">' +
+          '<input type="range" class="sp-avy" min="-50" max="50" value="' + (sp.avY || 0) + '">' +
+          '<span class="slider-val sp-avy-v">' + (sp.avY || 0) + '%</span></div></div>';
+        [['sp-avs', 'avScale', '%'], ['sp-avx', 'avX', '%'], ['sp-avy', 'avY', '%']].forEach(([cls, key, unit]) => {
+          const inp = adj.querySelector('.' + cls);
+          inp.addEventListener('input', () => {
+            sp[key] = parseInt(inp.value, 10);
+            adj.querySelector('.' + cls + '-v').textContent = inp.value + unit;
+            tkRender();     // 화자 목록은 다시 만들지 않는다 (슬라이더 잡은 채 조절되게)
+            tkPersist();
+          });
+        });
+      }
+      av.addEventListener('click', () => {
+        const fi = document.createElement('input');
+        fi.type = 'file';
+        fi.accept = 'image/*';
+        fi.addEventListener('change', () => {
+          const f = fi.files && fi.files[0];
+          if (!f) return;
+          const fr = new FileReader();
+          fr.onload = () => { sp.avatar = fr.result; tkRenderAll(); tkPersist(); };
+          fr.readAsDataURL(f);
+        });
+        fi.click();
+      });
+      card.appendChild(head);
+      card.appendChild(row);
+      if (adj) card.appendChild(adj);
+      box.appendChild(card);
+    });
+  }
+
+  // 아래 꼬리 굽기 — 말풍선색 판을 그리고 투명하게 깎아낸 초승달 (색·방향별 캐시)
+  const tkTailCache = {};
+  function bakeTailBot(color, side) {
+    const key = color + '|' + side;
+    if (tkTailCache[key]) return tkTailCache[key];
+    const S = 3;   // 저장 확대에도 안 흐리게
+    const cv = document.createElement('canvas');
+    cv.width = 20 * S; cv.height = 20 * S;
+    const g = cv.getContext('2d');
+    g.scale(S, S);
+    const rr = (x, y, w, h, r, corner) => {   // 한 모서리만 둥근 사각형
+      g.beginPath();
+      if (corner === 'br') {
+        g.moveTo(x, y); g.lineTo(x + w, y); g.lineTo(x + w, y + h - r);
+        g.arcTo(x + w, y + h, x + w - r, y + h, r); g.lineTo(x, y + h);
+      } else {   // bl
+        g.moveTo(x, y); g.lineTo(x + w, y); g.lineTo(x + w, y + h);
+        g.lineTo(x + r, y + h); g.arcTo(x, y + h, x, y + h - r, r);
+      }
+      g.closePath();
+    };
+    if (side === 'right') {
+      g.fillStyle = color;
+      rr(-13, 0, 33, 20, 15, 'bl');   // 말풍선색 판 (왼쪽으로 말풍선 안까지)
+      g.fill();
+      g.globalCompositeOperation = 'destination-out';
+      rr(7, 0, 26, 20, 10, 'bl');     // 바깥쪽을 투명하게 깎는다
+      g.fill();
+    } else {
+      g.fillStyle = color;
+      rr(0, 0, 33, 20, 15, 'br');
+      g.fill();
+      g.globalCompositeOperation = 'destination-out';
+      rr(-19, 0, 26, 20, 10, 'br');
+      g.fill();
+    }
+    tkTailCache[key] = cv.toDataURL();
+    return tkTailCache[key];
+  }
+
+  // 아바타 그림 굽기 — 원본을 비율대로 '덮기' 로 깔고, 확대·이동을 적용한 정사각형 캔버스
+  function bakeAvatar(sp) {
+    const key = sp.avatar.length + ':' + (sp.avScale || 100) + ':' + (sp.avX || 0) + ':' + (sp.avY || 0);
+    if (sp._bakedKey === key && sp._baked) return sp._baked;
+    if (!sp._img || sp._imgSrc !== sp.avatar) {
+      sp._img = new Image();
+      sp._imgSrc = sp.avatar;
+      sp._img.onload = () => { sp._bakedKey = ''; tkRender(); };   // 로드되면 다시 그린다
+      sp._img.src = sp.avatar;
+    }
+    const im = sp._img;
+    if (!im.complete || !im.naturalWidth) return sp.avatar;   // 아직 로드 전이면 원본으로
+    const S = 128;
+    const cv = document.createElement('canvas');
+    cv.width = S; cv.height = S;
+    const g = cv.getContext('2d');
+    const base = Math.max(S / im.naturalWidth, S / im.naturalHeight);   // 덮기
+    const sc = base * ((sp.avScale || 100) / 100);
+    const dw = im.naturalWidth * sc, dh = im.naturalHeight * sc;
+    g.drawImage(im,
+      (S - dw) / 2 + (sp.avX || 0) / 100 * S,
+      (S - dh) / 2 + (sp.avY || 0) / 100 * S, dw, dh);
+    sp._baked = cv.toDataURL();
+    sp._bakedKey = key;
+    return sp._baked;
+  }
+
+  function tkReadable(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const lum = ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114;
+    return lum > 140 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.75)';
+  }
+
+  // 글씨체 그리드 — 각 버튼이 자기 글씨체로 보인다 (발췌 쪽 목록 공유)
+  function tkFillFonts() {
+    const grid = $('tkFontGrid');
+    const fonts = allFonts();
+    const needRebuild = grid.dataset.n != fonts.length;
+    if (needRebuild) {
+      grid.innerHTML = '';
+      const mk = (label, family) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        if (family) b.style.fontFamily = family;
+        b.dataset.family = family || '';
+        b.addEventListener('click', () => {
+          tk.font = b.dataset.family;
+          tkFillFonts();
+          tkRender();
+          tkPersist();
+        });
+        grid.appendChild(b);
+      };
+      fonts.forEach(f => mk(f.name, f.family));
+      grid.dataset.n = fonts.length;
+    }
+    // 아무것도 안 골랐으면 첫 글씨체(프리텐다드)가 기본
+    const cur = tk.font || (fonts[0] && fonts[0].family) || '';
+    grid.querySelectorAll('button').forEach(b =>
+      b.classList.toggle('active', b.dataset.family === cur));
+  }
+
+  // 이모티콘 목록 — 눌러서 지우기
+  function tkFillStickers() {
+    const box = $('tkStickerList');
+    box.innerHTML = '';
+    tk.stickers.forEach((src, i) => {
+      const wrap = document.createElement('button');
+      wrap.type = 'button';
+      wrap.title = '누르면 대본의 커서 자리에 들어가요 (:' + (i + 1) + ':)';
+      wrap.style.cssText = 'position:relative; border:1px solid var(--border); border-radius:6px;'
+        + 'background:var(--bg); padding:3px; cursor:pointer; width:52px; height:52px;';
+      wrap.innerHTML = '<img src="' + src + '" style="width:100%;height:100%;object-fit:contain;">'
+        + '<span style="position:absolute;left:2px;top:0;font-size:10px;color:var(--text-dim);">' + (i + 1) + '</span>'
+        + '<span class="st-del" title="지우기" style="position:absolute;right:-1px;top:-1px;width:15px;height:15px;'
+        + 'line-height:13px;font-size:11px;border-radius:0 5px 0 5px;background:var(--border);color:var(--text);">×</span>';
+      // 누르면 대본 커서 자리에 :N: 을 한 줄로 넣어준다
+      wrap.addEventListener('click', ev => {
+        if (ev.target.classList.contains('st-del')) {
+          askConfirm(':' + (i + 1) + ': 이모티콘을 지울까요?').then(ok => {
+            if (!ok) return;
+            tk.stickers.splice(i, 1);
+            tkFillStickers();
+            tkRender();
+            tkPersist();
+          });
+          return;
+        }
+        const ta = $('tkScript');
+        const v = ta.value;
+        const pos = ta.selectionStart != null ? ta.selectionStart : v.length;
+        const before = v.slice(0, pos), after = v.slice(pos);
+        let ins = ':' + (i + 1) + ':';
+        if (before.length && !before.endsWith('\n')) ins = '\n' + ins;
+        if (after.length && !after.startsWith('\n')) ins = ins + '\n';
+        ta.value = before + ins + after;
+        const np = (before + ins).length;
+        ta.focus();
+        ta.setSelectionRange(np, np);
+        tkRenderAll();
+        tkPersist();
+      });
+      box.appendChild(wrap);
+    });
+  }
+
+  function tkRender() {
+    tkFillFonts();
+    const pages = tkPages();
+    const chat = $('chat');
+    chat.innerHTML = '';
+    if (tk.page >= pages.length) tk.page = Math.max(0, pages.length - 1);
+    $('tkNav').style.display = (uiMode === 'talk' && pages.length > 1) ? '' : 'none';
+    $('tkInd').textContent = (tk.page + 1) + ' / ' + Math.max(1, pages.length);
+
+    chat.style.background = $('tkBgColor').value;
+    chat.style.fontFamily = tk.font || (allFonts()[0] && allFonts()[0].family) || 'inherit';
+    chat.style.position = 'relative';
+    $('tkBgOpts').style.display = tk.bgImg ? '' : 'none';
+    chat.style.fontSize = $('tkFontRange').value + 'px';
+    chat.style.padding = $('tkPadRange').value + 'px ' + $('tkPadXRange').value + 'px';
+    chat.style.borderRadius = $('tkShellRange').value + 'px';
+    $('tkFontVal').textContent = $('tkFontRange').value + 'px';
+    $('tkRadiusVal').textContent = $('tkRadiusRange').value + 'px';
+    $('tkGapVal').textContent = $('tkGapRange').value + 'px';
+    $('tkPadVal').textContent = $('tkPadRange').value + 'px';
+    $('tkPadXVal').textContent = $('tkPadXRange').value + 'px';
+    $('tkStickerVal').textContent = $('tkStickerRange').value + 'px';
+    $('tkAvSizeVal').textContent = $('tkAvSizeRange').value + 'px';
+    $('tkShellVal').textContent = $('tkShellRange').value + 'px';
+    $('tkSaveWidthVal').textContent = $('tkSaveWidthRange').value + 'px';
+
+    const msgs = pages[tk.page] || [];
+    const rad = parseInt($('tkRadiusRange').value, 10);
+    const gap = parseInt($('tkGapRange').value, 10);
+
+    // 게임 창 채널별 색 — 시스템은 강조, 나머지는 채널 느낌대로
+    const GAME_COLORS = {
+      '시스템': '#6ff2ff', '공지': '#6ff2ff',
+      '귓': '#ff9ad5', '귓속말': '#ff9ad5',
+      '파티': '#7fb2ff', '길드': '#7ee787', '전체': '#cfd6df'
+    };
+    msgs.forEach((m, i) => {
+      if (m.game) {
+        const d = document.createElement('div');
+        d.className = 'msg-game';
+        const col = GAME_COLORS[m.tag] || (m.tag ? '#c9b3ff' : '#cfd6df');
+        d.style.cssText = 'position:relative; font-size:0.86em; line-height:1.55;'
+          + 'margin-bottom:' + Math.max(2, Math.round(gap * 0.4)) + 'px;'
+          + 'color:' + col + ';'
+          + (m.tag === '시스템' || m.tag === '공지'
+             ? 'text-shadow:0 0 7px rgba(111,242,255,0.35);' : '');
+        let html = '';
+        if (m.tag) html += '<span style="opacity:0.9;">[' + m.tag + ']</span> ';
+        if (m.gname) html += '<span>' + m.gname + '</span>: ';
+        const tspan = document.createElement('span');
+        tspan.textContent = m.text;
+        d.innerHTML = html;
+        d.appendChild(tspan);
+        chat.appendChild(d);
+        return;
+      }
+      if (m.narr) {
+        const d = document.createElement('div');
+        d.className = 'msg-narr';
+        d.textContent = m.text;
+        d.style.color = tkReadable($('tkBgColor').value);
+        chat.appendChild(d);
+        return;
+      }
+      // 카톡처럼: 같은 사람이 같은 시간에 연달아 말하면 시간은 마지막 말에만
+      const nx = msgs[i + 1];
+      const timeShown = (m.time && !(nx && !nx.narr && !nx.game && nx.name === m.name && nx.time === m.time))
+        ? m.time : '';
+      const spReal0 = tk.speakers[m.name] || { side: 'left', bubble: '#fff', text: '#1a1d24', avatar: '' };
+      // 게임 줄 모드: 일반 대사도 게임 창 줄과 똑같은 모양·크기로 (『』 유무로 달라지지 않게)
+      // 디스코드식: 아바타 + [이름  시간] 줄 + 아래 본문, 연속 발화는 이어붙는다
+      if (tk.rowMode === 'disc') {
+        const prev0 = msgs[i - 1];
+        const first0 = !(prev0 && !prev0.narr && !prev0.game && prev0.name === m.name);
+        const avs = parseInt($('tkAvSizeRange').value, 10) || 36;
+        const row = document.createElement('div');
+        row.className = 'msg';
+        // 같은 사람이 이어 말하면 촘촘하게, 사람이 바뀌면 넉넉하게 띄운다
+        row.style.marginBottom = Math.max(2, Math.round(gap * 0.35)) + 'px';
+        if (first0 && i > 0) row.style.marginTop = Math.round(gap * 1.6) + 'px';
+        if (tk.avatarOn) {
+          const av = document.createElement('div');
+          av.className = 'msg-avatar' + (first0 && spReal0.avatar ? '' : ' empty');
+          av.style.width = avs + 'px';
+          av.style.height = first0 ? avs + 'px' : '0';
+          av.style.borderRadius = (tk.avRadius || 50) + '%';
+          if (first0 && spReal0.avatar) {
+            const img = document.createElement('img');
+            img.src = bakeAvatar(spReal0);
+            av.appendChild(img);
+          }
+          row.appendChild(av);
+        }
+        const col = document.createElement('div');
+        col.className = 'msg-body';
+        col.style.maxWidth = 'none';
+        col.style.flex = '1';
+        if (first0 && tk.nameMode !== 'off') {
+          const head = document.createElement('div');
+          head.style.cssText = 'display:flex; align-items:baseline; gap:7px; margin-bottom:2px;';
+          const nm = document.createElement('span');
+          nm.style.color = spReal0.nameColor || '#dbdee1';
+          nm.style.fontSize = '0.95em';
+          nm.textContent = m.name;
+          head.appendChild(nm);
+          if (m.time) {
+            const tmEl = document.createElement('span');
+            tmEl.style.cssText = 'font-size:0.62em; opacity:0.45;';
+            tmEl.style.color = '#dbdee1';
+            tmEl.textContent = m.time;
+            head.appendChild(tmEl);
+          }
+          col.appendChild(head);
+        }
+        if (m.sticker !== undefined) {
+          const src = tk.stickers[m.sticker];
+          if (src) {
+            const img = document.createElement('img');
+            const ssz = parseInt($('tkStickerRange').value, 10) || 110;
+            img.src = src;
+            img.style.cssText = 'max-width:' + ssz + 'px; max-height:' + ssz + 'px; display:block;';
+            col.appendChild(img);
+          }
+        } else {
+          const tx = document.createElement('div');
+          tx.style.color = spReal0.text || '#dbdee1';
+          tx.style.lineHeight = '1.5';
+          if (m.big) tx.style.fontSize = '1.3em';
+          if (m.small) { tx.style.fontSize = '0.82em'; tx.style.opacity = '0.68'; }
+          tx.textContent = m.text;
+          col.appendChild(tx);
+        }
+        row.appendChild(col);
+        chat.appendChild(row);
+        return;
+      }
+      if (tk.rowMode === 'game' && m.sticker === undefined) {
+        const d = document.createElement('div');
+        d.className = 'msg-game';
+        d.style.cssText = 'position:relative; font-size:0.86em; line-height:1.55;'
+          + 'margin-bottom:' + Math.max(2, Math.round(gap * 0.4)) + 'px;'
+          + 'color:' + spReal0.text + ';';
+        if (m.big) d.style.fontSize = '1.2em';
+        if (m.small) d.style.fontSize = '0.72em';
+        if (tk.nameMode !== 'off') {
+          const nm = document.createElement('span');
+          nm.style.color = spReal0.nameColor || tkReadable($('tkBgColor').value);
+          nm.textContent = m.name;
+          d.appendChild(nm);
+          d.appendChild(document.createTextNode(': '));
+        }
+        const tx = document.createElement('span');
+        if (m.small) tx.style.opacity = '0.68';
+        tx.textContent = m.text;
+        d.appendChild(tx);
+        chat.appendChild(d);
+        return;
+      }
+      const spReal = spReal0;
+      // 게임 줄 모드면 화자 설정은 그대로 두고 '보이기만' 왼쪽으로
+      const sp = tk.rowMode ? Object.assign({}, spReal, { side: 'left' }) : spReal;
+      const row = document.createElement('div');
+      row.className = 'msg' + (sp.side === 'right' ? ' right' : '');
+      row.style.marginBottom = gap + 'px';
+      const prev = msgs[i - 1];
+      const firstOfRun = !(prev && !prev.narr && prev.name === m.name);
+      // 프사 칸은 '프사가 있는 화자' 에게만 — 없는 화자는 칸 자체가 없어서
+      // 말풍선이 화면 가장자리에 자연스럽게 붙는다 (양쪽 여백이 유령 칸 때문에 달라지지 않게)
+      if (tk.avatarOn && sp.avatar) {
+        const av = document.createElement('div');
+        const showAv = firstOfRun;
+        av.className = 'msg-avatar' + (showAv ? '' : ' empty');
+        const avs = parseInt($('tkAvSizeRange').value, 10) || 36;
+        av.style.width = avs + 'px';
+        av.style.height = showAv ? avs + 'px' : '0';   // 이어지는 말은 자리만 (정렬 유지)
+        av.style.borderRadius = (tk.avRadius || 50) + '%';
+        av.style.alignSelf = tk.avPos === 'center' ? 'center'
+          : tk.avPos === 'bottom' ? 'flex-end' : 'flex-start';
+        if (showAv) {
+          const img = document.createElement('img');
+          img.src = bakeAvatar(sp);
+          av.appendChild(img);
+        }
+        row.appendChild(av);
+      }
+      const body = document.createElement('div');
+      body.className = 'msg-body';
+      const showName = tk.nameMode === 'all'
+        || (tk.nameMode === 'left' && sp.side !== 'right');
+      if (showName && firstOfRun && !tk.rowMode) {
+        const nmEl = document.createElement('div');
+        nmEl.className = 'msg-name';
+        nmEl.textContent = m.name;
+        nmEl.style.color = sp.nameColor || tkReadable($('tkBgColor').value);   // 안 정했으면 배경에 따라 자동
+        body.appendChild(nmEl);
+      }
+      // 이모티콘 — 말풍선 없이 그림만
+      if (m.sticker !== undefined) {
+        const img = document.createElement('img');
+        const src = tk.stickers[m.sticker];
+        const ssz = parseInt($('tkStickerRange').value, 10) || 110;
+        if (src) {
+          img.src = src;
+          img.style.cssText = 'max-width:' + ssz + 'px; max-height:' + ssz + 'px; display:block;';
+          if (timeShown) {
+            const wrap = document.createElement('div');
+            wrap.style.cssText = 'display:flex; align-items:flex-end; gap:4px;'
+              + (sp.side === 'right' ? 'flex-direction:row-reverse;' : '');
+            const tmEl = document.createElement('div');
+            tmEl.textContent = timeShown;
+            tmEl.style.cssText = 'font-size:0.62em; opacity:0.65; white-space:nowrap;';
+            tmEl.style.color = tkReadable($('tkBgColor').value);
+            wrap.appendChild(img); wrap.appendChild(tmEl);
+            body.appendChild(wrap);
+          } else body.appendChild(img);
+        } else {
+          const miss = document.createElement('div');
+          miss.className = 'bubble';
+          miss.textContent = ':' + (m.sticker + 1) + ': (이모티콘 없음)';
+          miss.style.background = sp.bubble;
+          miss.style.color = sp.text;
+          miss.style.borderRadius = rad + 'px';
+          body.appendChild(miss);
+        }
+        row.appendChild(body);
+        chat.appendChild(row);
+        return;
+      }
+      const bub = document.createElement('div');
+      bub.className = 'bubble';
+      bub.style.background = sp.bubble;
+      bub.style.color = sp.text;
+      if (tk.rowMode) {
+        // 줄 모드 — 말풍선 없이 글줄만
+        bub.style.background = 'transparent';
+        bub.style.padding = '1px 0';
+        bub.style.borderRadius = '0';
+      }
+      if (m.big) bub.style.fontSize = '1.45em';
+      if (m.small) bub.style.fontSize = '0.82em';
+      if (tk.shape === 'tailtop') {
+        // 뾰족한 위 꼬리 — 45도 돌린 사각형을 위 모서리에 반쯤 겹친다 (카톡 느낌)
+        bub.style.borderRadius = rad + 'px';
+        if (firstOfRun) {
+          bub.style.position = 'relative';
+          const d = document.createElement('div');
+          d.style.cssText = 'position:absolute; top:7px; width:13px; height:13px;'
+            + 'background:' + sp.bubble + ';'
+            + 'transform:scaleY(0.72) rotate(45deg);'   // 뾰족하되 옹졸하지 않게
+            + (sp.side === 'right' ? 'right:-4px;' : 'left:-4px;');
+          bub.appendChild(d);
+        }
+      } else if (tk.shape === 'tailcut') {
+        // 꺾인 꼬리 — 위는 수평(직각), 아래는 비스듬한 삼각형 (말풍선은 그냥 둥근 채로)
+        bub.style.borderRadius = rad + 'px';
+        if (firstOfRun) {
+          bub.style.position = 'relative';
+          const d = document.createElement('div');
+          d.style.cssText = 'position:absolute; top:5px; width:0; height:0;'
+            + 'border-top:8px solid ' + sp.bubble + ';'
+            + (sp.side === 'right'
+               ? 'right:-5px; border-right:6px solid transparent;'
+               : 'left:-5px; border-left:6px solid transparent;');
+          bub.appendChild(d);
+        }
+      } else if (tk.shape === 'tailbot') {
+        // 둥근 아래 꼬리 — 투명 캔버스에 구워 붙인다.
+        // (배경'색'으로 깎는 옛 방식은 배경이 이미지면 색 판때기가 보인다)
+        bub.style.borderRadius = rad + 'px';
+        if (firstOfRun) {
+          bub.style.position = 'relative';
+          const img = document.createElement('img');
+          img.src = bakeTailBot(sp.bubble, sp.side);
+          img.style.cssText = 'position:absolute; bottom:0; width:20px; height:20px;'
+            + (sp.side === 'right' ? 'right:-7px;' : 'left:-7px;');
+          bub.appendChild(img);
+        }
+      } else if (tk.shape === 'notch') {
+        const r = rad + 'px', rs = Math.min(rad, 4) + 'px';
+        bub.style.borderRadius = sp.side === 'right'
+          ? (firstOfRun ? r + ' ' + rs + ' ' + r + ' ' + r : r)
+          : (firstOfRun ? rs + ' ' + r + ' ' + r + ' ' + r : r);
+      } else {
+        bub.style.borderRadius = rad + 'px';   // 민둥근 — 아무 표시 없음
+      }
+      // 글자는 꼬리 조각들보다 '뒤에' 넣어서 항상 위에 그려지게 한다
+      if (tk.rowMode === 'game' && tk.nameMode !== 'off') {
+        const nmIn = document.createElement('span');
+        nmIn.style.cssText = 'position:relative; margin-right:7px;';
+        // 내용을 +/- 로 키우거나 줄여도 이름은 원래 크기를 지킨다
+        if (m.big) nmIn.style.fontSize = Math.round(100 / 1.45) / 100 + 'em';
+        if (m.small) nmIn.style.fontSize = Math.round(100 / 0.82) / 100 + 'em';
+        nmIn.style.color = sp.nameColor || tkReadable($('tkBgColor').value);
+        nmIn.textContent = m.name;
+        bub.appendChild(nmIn);
+      }
+      const txt = document.createElement('span');
+      txt.style.position = 'relative';
+      if (m.small) txt.style.opacity = '0.68';   // 글자만 옅게 (말풍선 색은 그대로)
+      txt.textContent = m.text;
+      bub.appendChild(txt);
+
+      // 시간·안읽음 — 말풍선 옆에 작게 (안읽음 노란 숫자가 위, 시간이 아래. 카톡처럼)
+      if ((timeShown || m.unread) && tk.rowMode !== 'game') {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex; align-items:flex-end; gap:4px;'
+          + (sp.side === 'right' ? 'flex-direction:row-reverse;' : '');
+        const sideCol = document.createElement('div');
+        sideCol.style.cssText = 'display:flex; flex-direction:column; gap:1px;'
+          + 'align-items:' + (sp.side === 'right' ? 'flex-end' : 'flex-start') + ';';
+        if (m.unread) {
+          const un = document.createElement('div');
+          un.textContent = m.unread;
+          un.style.cssText = 'font-size:0.6em; white-space:nowrap;';
+          un.style.color = tk.unreadColor || '#ffe000';
+          sideCol.appendChild(un);
+        }
+        if (timeShown) {
+          const tm = document.createElement('div');
+          tm.textContent = timeShown;
+          tm.style.cssText = 'font-size:0.62em; opacity:0.65; white-space:nowrap;';
+          tm.style.color = tkReadable($('tkBgColor').value);
+          sideCol.appendChild(tm);
+        }
+        wrap.appendChild(bub);
+        wrap.appendChild(sideCol);
+        body.appendChild(wrap);
+      } else {
+        body.appendChild(bub);
+      }
+      row.appendChild(body);
+      chat.appendChild(row);
+    });
+
+    if (!msgs.length) {
+      const d = document.createElement('div');
+      d.className = 'msg-narr';
+      d.textContent = '대본을 입력하면 여기에 대화가 나타나요';
+      chat.appendChild(d);
+    }
+
+    // 게임 줄 모드 — 위 탭바와 아래 입력칸을 그려 진짜 채팅창처럼
+    if (tk.rowMode === 'game') {
+      const tabs = document.createElement('div');
+      tabs.style.cssText = 'position:relative; display:flex; gap:2px; margin:-6px -4px 9px;'
+        + 'font-size:0.72em; user-select:none;';
+      ['전체', '전투', '파티', '커플', '친구', '길드'].forEach((t, i) => {
+        const tab = document.createElement('div');
+        tab.textContent = t;
+        tab.style.cssText = 'padding:3px 10px; border-radius:4px 4px 0 0;'
+          + (i === 0
+             ? 'background:rgba(255,255,255,0.13); color:#ffffff;'
+             : 'background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.45);');
+        tabs.appendChild(tab);
+      });
+      const divider = document.createElement('div');
+      divider.style.cssText = 'position:relative; height:1px; margin:0 -4px 9px;'
+        + 'background:rgba(255,255,255,0.14);';
+      chat.insertBefore(divider, chat.firstChild);
+      tabs.style.marginBottom = '0';
+      chat.insertBefore(tabs, divider);
+
+      const inputBar = document.createElement('div');
+      inputBar.style.cssText = 'position:relative; display:flex; align-items:center; gap:8px;'
+        + 'margin:11px -4px -6px; padding:6px 10px; border-radius:5px;'
+        + 'background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.1);'
+        + 'font-size:0.78em;';
+      inputBar.innerHTML =
+        '<span style="flex:1; color:rgba(255,255,255,0.35);">메시지를 입력하세요</span>'
+        + '<span style="color:rgba(255,255,255,0.3); border:1px solid rgba(255,255,255,0.22);'
+        + 'border-radius:3px; padding:1px 6px; font-size:0.9em;">Enter</span>';
+      chat.appendChild(inputBar);
+    }
+
+    // 배경 그림 + 어둡기 막 — 맨 앞(맨 아래 레이어)에 넣는다.
+    // object-fit 은 저장(html2canvas)이 무시하므로 '덮기' 좌표를 직접 계산한다.
+    // 100% = 화면을 딱 덮는 크기(가로·세로 중 빡빡한 쪽 기준), 100% 미만이면 여백에 배경색이 보인다.
+    if (tk.bgImg) {
+      if (!tk._bgEl || tk._bgSrc !== tk.bgImg) {
+        tk._bgEl = new Image();
+        tk._bgSrc = tk.bgImg;
+        tk._bgEl.onload = () => tkRender();
+        tk._bgEl.src = tk.bgImg;
+      }
+      const im = tk._bgEl;
+      if (im.complete && im.naturalWidth) {
+        const holder = document.createElement('div');
+        holder.style.cssText = 'position:absolute; inset:0; overflow:hidden;';
+        const cw = chat.offsetWidth, ch = chat.offsetHeight;
+        const sc = Math.max(cw / im.naturalWidth, ch / im.naturalHeight)
+                 * ((parseInt($('tkBgScale').value, 10) || 100) / 100);
+        const dw = im.naturalWidth * sc, dh = im.naturalHeight * sc;
+        // 주의: 0 은 falsy 라 `|| 50` 을 쓰면 0% 가 무시된다
+        const rawX = parseInt($('tkBgX').value, 10);
+        const rawY = parseInt($('tkBgY').value, 10);
+        const px = (isNaN(rawX) ? 50 : rawX) / 100;
+        const py = (isNaN(rawY) ? 50 : rawY) / 100;
+        const bi = document.createElement('img');
+        const blur = parseInt($('tkBgBlur').value, 10) || 0;
+        // CSS filter 는 저장(html2canvas)이 무시하므로, 흐림은 캔버스에 구워서 쓴다
+        if (blur > 0) {
+          const bkey = tk.bgImg.length + ':' + blur + ':' + Math.round(dw) + 'x' + Math.round(dh);
+          if (tk._bgBlurKey !== bkey) {
+            const cv = document.createElement('canvas');
+            cv.width = Math.max(1, Math.round(dw));
+            cv.height = Math.max(1, Math.round(dh));
+            const g = cv.getContext('2d');
+            const pad = blur * 2;   // 가장자리 흐림 번짐이 비치지 않게 조금 크게 그린다
+            g.filter = 'blur(' + blur + 'px)';
+            g.drawImage(im, -pad, -pad, cv.width + pad * 2, cv.height + pad * 2);
+            tk._bgBlurred = cv.toDataURL();
+            tk._bgBlurKey = bkey;
+          }
+          bi.src = tk._bgBlurred;
+        } else {
+          bi.src = tk.bgImg;
+        }
+        bi.style.cssText = 'position:absolute; width:' + dw + 'px; height:' + dh + 'px;'
+          + 'left:' + ((cw - dw) * px) + 'px; top:' + ((ch - dh) * py) + 'px;';
+        holder.appendChild(bi);
+        const dim = parseInt($('tkDimRange').value, 10) || 0;
+        if (dim !== 0) {
+          // 음수 = 흰 막(밝게), 양수 = 검은 막(어둡게)
+          const dimEl = document.createElement('div');
+          const c = dim < 0 ? '255,255,255' : '0,0,0';
+          dimEl.style.cssText = 'position:absolute; inset:0; background:rgba(' + c + ',' + (Math.abs(dim) / 100) + ');';
+          holder.appendChild(dimEl);
+        }
+        chat.insertBefore(holder, chat.firstChild);
+      }
+      $('tkBgScaleVal').textContent = $('tkBgScale').value + '%';
+      $('tkBgBlurVal').textContent = $('tkBgBlur').value + 'px';
+      $('tkBgXVal').textContent = $('tkBgX').value + '%';
+      $('tkBgYVal').textContent = $('tkBgY').value + '%';
+      {
+        const dv = parseInt($('tkDimRange').value, 10) || 0;
+        $('tkDimVal').textContent = dv === 0 ? '없음'
+          : (dv < 0 ? '밝게 ' + (-dv) + '%' : '어둡게 ' + dv + '%');
+      }
+    }
+  }
+  function tkRenderAll() { tkRenderSpeakers(tkCollect(tkPages())); tkRender(); }
+
+  function tkCanvas() {
+    const chat = $('chat');
+    const outW = parseInt($('tkSaveWidthRange').value, 10) || 840;
+    return html2canvas(chat, { scale: outW / chat.offsetWidth, useCORS: true, backgroundColor: null });
+  }
+
+  // 미리보기 우클릭 — 발췌와 같은 커스텀 메뉴(복사/저장)를 쓴다
+  $('chat').addEventListener('contextmenu', e => {
+    e.preventDefault();
+    ctxMenu.classList.add('show');
+    const mw = 160, mh = 90;
+    let x = e.clientX, y = e.clientY;
+    if (x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
+    if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+    ctxMenu.style.left = x + 'px';
+    ctxMenu.style.top = y + 'px';
+  });
+
+  // 저장·복사 동작을 함수로 빼서 헤더 버튼과 우클릭 메뉴가 같이 쓴다
+  function tkSaveImage() {
+    tkCanvas().then(cv => {
+      const a = document.createElement('a');
+      a.download = 'talk_' + Date.now() + '.png';
+      a.href = cv.toDataURL('image/png');
+      a.click();
+      toast('대화 화면을 저장했어요');
+      tkAddHistory();
+    }).catch(() => toast('저장에 실패했어요'));
+  }
+  function tkCopyImage() {
+    tkCanvas().then(cv => {
+      cv.toBlob(blob => {
+        navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+          .then(() => { toast('복사했어요'); tkAddHistory(); })
+          .catch(() => toast('복사가 안 되는 브라우저예요'));
+      });
+    });
+  }
+  // 우클릭 메뉴(다른 스코프)에서도 부를 수 있게 창에 노출
+  window.tkSaveImage = tkSaveImage;
+  window.tkCopyImage = tkCopyImage;
+
+  // ===== 메시지 히스토리 — 저장·복사할 때의 대본을 쌓아둔다 =====
+  const TK_HIST_KEY = 'quotecard:talkhistory';
+  function tkHistList() {
+    try { return JSON.parse(localStorage.getItem(TK_HIST_KEY) || '[]'); } catch (e) { return []; }
+  }
+  function tkAddHistory() {
+    const script = $('tkScript').value.trim();
+    if (!script) return;
+    let list = tkHistList();
+    if (list[0] && list[0].script === script) return;   // 같은 대본 연속 저장은 한 번만
+    const now = new Date();
+    const stamp = (now.getMonth() + 1) + '월 ' + now.getDate() + '일 '
+      + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    list.unshift({ stamp: stamp, script: script });
+    list = list.slice(0, 20);
+    try { localStorage.setItem(TK_HIST_KEY, JSON.stringify(list)); } catch (e) {}
+    tkRenderHistory();
+  }
+  function tkRenderHistory() {
+    const box = $('tkHistList');
+    const list = tkHistList();
+    box.innerHTML = '';
+    $('tkHistEmpty').style.display = list.length ? 'none' : '';
+    list.forEach((h, i) => {
+      const item = document.createElement('div');
+      item.style.cssText = 'display:flex; align-items:center; gap:8px; padding:7px 9px;'
+        + 'border:1px solid var(--border); border-radius:6px; margin-bottom:6px; cursor:pointer;';
+      const first = h.script.split('\n')[0].slice(0, 26);
+      item.innerHTML = '<div style="flex:1; min-width:0;">'
+        + '<div style="font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + first.replace(/</g, '&lt;') + '</div>'
+        + '<div style="font-size:10.5px; color:var(--text-dim); margin-top:1px;">' + h.stamp + '</div></div>'
+        + '<button class="mini-btn tkh-del" type="button" style="margin-left:0;">×</button>';
+      item.addEventListener('click', ev => {
+        if (ev.target.classList.contains('tkh-del')) {
+          const list2 = tkHistList();
+          list2.splice(i, 1);
+          try { localStorage.setItem(TK_HIST_KEY, JSON.stringify(list2)); } catch (e) {}
+          tkRenderHistory();
+          return;
+        }
+        askConfirm('이 기록의 대본을 불러올까요?', '지금 입력창의 대본은 덮어써요.').then(ok => {
+          if (!ok) return;
+          $('tkScript').value = h.script;
+          tkRenderAll();
+          tkPersist();
+          toast('대본을 되살렸어요');
+        });
+      });
+      box.appendChild(item);
+    });
+  }
+
+  // ===== 내 프리셋 — 화면 설정 + 화자(색·아바타 포함)를 통째로 저장 =====
+  // localStorage(약 5MB)는 아바타·배경까지 담기엔 좁아서 IndexedDB 에 넣는다.
+  const TK_MYPRESET_KEY = 'quotecard:talkpresets';
+  function tkIDB() {
+    return new Promise((res, rej) => {
+      const rq = indexedDB.open('quotecard-talk', 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore('kv');
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  function tkIdbGet(key) {
+    return tkIDB().then(db => new Promise((res, rej) => {
+      const rq = db.transaction('kv').objectStore('kv').get(key);
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    })).catch(() => undefined);
+  }
+  function tkIdbSet(key, val) {
+    return tkIDB().then(db => new Promise((res, rej) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(val, key);
+      tx.oncomplete = () => res(true);
+      tx.onerror = () => rej(tx.error);
+    }));
+  }
+  // 메모리 사본을 쓰고, 읽기/쓰기는 IndexedDB 와 동기화한다
+  let tkMyPresetsCache = [];
+  function tkMyPresets() { return tkMyPresetsCache; }
+  function tkLoadMyPresets() {
+    return tkIdbGet('presets').then(v => {
+      if (Array.isArray(v)) { tkMyPresetsCache = v; return; }
+      // 예전에 localStorage 에 저장했던 프리셋은 IndexedDB 로 옮겨온다
+      try {
+        const old = JSON.parse(localStorage.getItem(TK_MYPRESET_KEY) || 'null');
+        if (Array.isArray(old) && old.length) {
+          tkMyPresetsCache = old;
+          tkIdbSet('presets', old).then(() => localStorage.removeItem(TK_MYPRESET_KEY));
+        }
+      } catch (e) {}
+    });
+  }
+  function tkSaveMyPresets() {
+    return tkIdbSet('presets', tkMyPresetsCache)
+      .catch(() => toast('프리셋 저장에 실패했어요'));
+  }
+  function tkSnapshot() {
+    return {
+      speakers: JSON.parse(JSON.stringify(tk.speakers, (k, v) => (k.startsWith('_') ? undefined : v))),
+      avatarOn: tk.avatarOn, nameMode: tk.nameMode, avPos: tk.avPos, shape: tk.shape,
+      font: tk.font, bgImg: tk.bgImg, rowMode: tk.rowMode, avRadius: tk.avRadius,
+      unreadColor: tk.unreadColor,
+      sliders: ['tkBgColor','tkFontRange','tkStickerRange','tkRadiusRange','tkGapRange',
+                'tkPadRange','tkPadXRange','tkShellRange','tkAvSizeRange',
+                'tkBgScale','tkBgX','tkBgY','tkDimRange','tkBgBlur']
+        .reduce((o, id) => { o[id] = $(id).value; return o; }, {})
+    };
+  }
+  function tkApplySnapshot(d) {
+    Object.keys(d.speakers || {}).forEach(nm => { tk.speakers[nm] = d.speakers[nm]; });
+    tk.avatarOn = d.avatarOn !== false;
+    tk.nameMode = d.nameMode || 'left';
+    tk.avPos = d.avPos || 'top';
+    tk.shape = d.shape || 'plain';
+    tk.font = d.font || '';
+    tk.bgImg = d.bgImg || '';
+    tk.rowMode = d.rowMode || '';
+    tk.avRadius = d.avRadius || 50;
+    tk.unreadColor = d.unreadColor || '#ffe000';
+    Object.keys(d.sliders || {}).forEach(id => { if ($(id)) $(id).value = d.sliders[id]; });
+    tkSyncSegs();
+    tkRenderAll();
+    tkPersist();
+  }
+  function tkRenderMyPresets() {
+    const box = $('tkMyPresets');
+    const list = tkMyPresets();
+    box.innerHTML = '';
+    list.forEach((pz, i) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'mini-btn';
+      chip.style.marginLeft = '0';
+      chip.innerHTML = pz.name.replace(/</g, '&lt;') + ' <span class="tkp-del" style="opacity:0.55;">×</span>';
+      chip.addEventListener('click', ev => {
+        if (ev.target.classList.contains('tkp-del')) {
+          askConfirm("'" + pz.name + "' 프리셋을 지울까요?").then(ok => {
+            if (!ok) return;
+            tkMyPresetsCache.splice(i, 1);
+            tkSaveMyPresets();
+            tkRenderMyPresets();
+          });
+          return;
+        }
+        tkApplySnapshot(pz.data);
+        toast("'" + pz.name + "' 프리셋을 적용했어요");
+      });
+      box.appendChild(chip);
+    });
+  }
+  $('tkPresetSave').addEventListener('click', () => {
+    askText('내 프리셋 이름', '', '저장').then(name => {
+      if (!name) return;
+      const found = tkMyPresetsCache.findIndex(x => x.name === name);
+      const item = { name: name, data: tkSnapshot() };
+      if (found >= 0) tkMyPresetsCache[found] = item;
+      else tkMyPresetsCache.push(item);
+      tkSaveMyPresets().then(() => toast("'" + name + "' 프리셋으로 저장했어요 (화자 포함)"));
+      tkRenderMyPresets();
+    });
+  });
+
+  // 모드 전환 — 편집 패널과 미리보기를 통째로 바꾼다
+  function setUiMode(m) {
+    uiMode = m;
+    document.querySelectorAll('#modeSeg button').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === m));
+    const talk = m === 'talk';
+    document.querySelector('.editor:not(#talkEditor)').style.display = talk ? 'none' : '';
+    $('talkEditor').style.display = talk ? '' : 'none';
+    document.querySelector('.preview-stack').style.display = talk ? 'none' : '';
+    $('chatWrap').style.display = talk ? '' : 'none';
+    if (talk) { $('pageNav').style.display = 'none'; tkRender(); }
+    else renderCard();
+    try { localStorage.setItem('quotecard:mode', m); } catch (e) {}
+  }
+  document.querySelectorAll('#modeSeg button').forEach(b =>
+    b.addEventListener('click', () => setUiMode(b.dataset.mode)));
+
+  // 복사·저장 — 대화 모드일 때 가로챈다 (capture 단계라 발췌 쪽보다 먼저 돈다)
+  $('downloadBtn').addEventListener('click', ev => {
+    if (uiMode !== 'talk') return;
+    ev.stopImmediatePropagation();
+    tkSaveImage();
+  }, true);
+  $('copyBtn').addEventListener('click', ev => {
+    if (uiMode !== 'talk') return;
+    ev.stopImmediatePropagation();
+    tkCopyImage();
+  }, true);
+
+  // 입력들
+  $('tkScript').addEventListener('input', () => { tkRenderAll(); tkPersist(); });
+  document.querySelectorAll('#tkAvPosSeg button').forEach(b =>
+    b.addEventListener('click', () => { tk.avPos = b.dataset.avp; tkSyncSegs(); tkRender(); tkPersist(); }));
+  document.querySelectorAll('#tkShapeSeg button').forEach(b =>
+    b.addEventListener('click', () => { tk.shape = b.dataset.shape; tkSyncSegs(); tkRender(); tkPersist(); }));
+  // 느낌 프리셋 — 배경·모양·화자 색을 한 번에
+  const TK_PRESETS = {
+    kakao: { bg: '#b2c7da', shape: 'tailcut', radius: 5, nameMode: 'left', avatarOn: true, avRadius: 42,
+             unreadColor: '#ffe000',
+             left: { bubble: '#ffffff', text: '#1a1d24' }, right: { bubble: '#ffe94a', text: '#1a1d24' } },
+    imsg:  { bg: '#ffffff', shape: 'tailbot', radius: 18, nameMode: 'off', avatarOn: false,
+             left: { bubble: '#e9e9eb', text: '#111111' }, right: { bubble: '#0b93f6', text: '#ffffff' } },
+    line:  { bg: '#7d95c1', shape: 'tailtop', radius: 14, nameMode: 'left', avatarOn: true,
+             left: { bubble: '#ffffff', text: '#1a1d24' }, right: { bubble: '#9ede4f', text: '#173300' } },
+    insta: { bg: '#ffffff', shape: 'plain', radius: 18, nameMode: 'off', avatarOn: true, avRadius: 50,
+             left: { bubble: '#efefef', text: '#111111' }, right: { bubble: '#4f5bd5', text: '#ffffff' },
+             sliders: { tkRadiusRange: 18, tkGapRange: 8 } },
+    disc:  { bg: '#313338', shape: 'plain', radius: 8, nameMode: 'all', avatarOn: true,
+             left: { bubble: '#313338', text: '#dbdee1' }, right: { bubble: '#313338', text: '#dbdee1' },
+             rowMode: 'disc',
+             nameColors: ['#f2c464', '#5bd6a2', '#7aa9ff', '#ff7d9c', '#c78bff'],
+             sliders: { tkGapRange: 6, tkPadRange: 14, tkPadXRange: 14, tkShellRange: 8 } },
+    game:  { bg: '#0e1116', shape: 'plain', radius: 3, nameMode: 'all', avatarOn: false,
+             left: { bubble: '#0e1116', text: '#cfd6df' }, right: { bubble: '#0e1116', text: '#cfd6df' },
+             // 게임 채팅창: 전부 왼쪽 한 줄로, 이름만 색색으로, 말풍선은 배경에 녹아든다
+             rowMode: 'game', nameColors: ['#ffd75e', '#7ee787', '#79c0ff', '#ff9d9d', '#d2a8ff'],
+             sliders: { tkGapRange: 3, tkPadRange: 10, tkPadXRange: 10, tkRadiusRange: 3, tkShellRange: 6 } }
+  };
+  document.querySelectorAll('#tkPresetSeg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pz = TK_PRESETS[btn.dataset.tkp];
+      if (!pz) return;
+      $('tkBgColor').value = pz.bg;
+      $('tkRadiusRange').value = pz.radius;
+      tk.shape = pz.shape;
+      tk.nameMode = pz.nameMode;
+      tk.avatarOn = pz.avatarOn;
+      tk.rowMode = pz.rowMode || '';   // 게임·디코만 켜지고, 다른 프리셋을 누르면 말풍선으로
+      tk.avRadius = pz.avRadius || 50;   // 카톡은 둥근 네모 프사
+      tk.unreadColor = pz.unreadColor || 'rgba(140,148,160,0.9)';   // 카톡만 노랑
+      Object.keys(tk.speakers).forEach((nm, i) => {
+        const sp = tk.speakers[nm];
+        const c = (!tk.rowMode && sp.side === 'right') ? pz.right : pz.left;
+        sp.bubble = c.bubble;
+        sp.text = c.text;
+        sp.nameColor = pz.nameColors ? pz.nameColors[i % pz.nameColors.length] : '';
+      });
+      if (pz.sliders) Object.keys(pz.sliders).forEach(id => { $(id).value = pz.sliders[id]; });
+      tkSyncSegs();
+      tkRenderAll();
+      tkPersist();
+      toast(btn.textContent + ' 프리셋을 적용했어요');
+    });
+  });
+
+  $('tkStickerPick').addEventListener('click', () => $('tkStickerFile').click());
+  $('tkStickerFile').addEventListener('change', ev => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    if (tk.stickers.length >= 12) { toast('이모티콘은 12개까지예요'); ev.target.value = ''; return; }
+    const fr = new FileReader();
+    fr.onload = () => {
+      tk.stickers.push(fr.result);
+      tkFillStickers();
+      tkRender();
+      tkPersist();
+      toast(':' + tk.stickers.length + ': 로 쓸 수 있어요');
+    };
+    fr.readAsDataURL(f);
+    ev.target.value = '';
+  });
+  $('tkBgPick').addEventListener('click', () => $('tkBgFile').click());
+  $('tkBgFile').addEventListener('change', ev => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    const fr = new FileReader();
+    fr.onload = () => { tk.bgImg = fr.result; tkRender(); tkPersist(); toast('배경 이미지를 올렸어요'); };
+    fr.readAsDataURL(f);
+    ev.target.value = '';
+  });
+  $('tkBgClear').addEventListener('click', () => { tk.bgImg = ''; tkRender(); tkPersist(); });
+  ['tkBgColor','tkFontRange','tkStickerRange','tkRadiusRange','tkGapRange','tkPadRange','tkPadXRange',
+   'tkShellRange','tkAvSizeRange','tkSaveWidthRange','tkBgScale','tkBgX','tkBgY','tkDimRange','tkBgBlur'].forEach(id => {
+    $(id).addEventListener('input', () => { tkRender(); tkPersist(); });
+  });
+  document.querySelectorAll('#tkAvatarSeg button').forEach(b =>
+    b.addEventListener('click', () => { tk.avatarOn = b.dataset.av === 'on'; tkSyncSegs(); tkRender(); tkPersist(); }));
+  document.querySelectorAll('#tkNameSeg button').forEach(b =>
+    b.addEventListener('click', () => { tk.nameMode = b.dataset.nm; tkSyncSegs(); tkRender(); tkPersist(); }));
+  $('tkPrev').addEventListener('click', () => { if (tk.page > 0) { tk.page--; tkRender(); } });
+  $('tkNext').addEventListener('click', () => { if (tk.page < tkPages().length - 1) { tk.page++; tkRender(); } });
+  $('tkClearBtn').addEventListener('click', () => { $('tkScript').value = ''; tkRenderAll(); tkPersist(); });
+
+  tkRestore();
+  tkFillStickers();
+  tkRenderHistory();
+  tkLoadMyPresets().then(tkRenderMyPresets);
+  tkRenderAll();
+  try {
+    if (localStorage.getItem('quotecard:mode') === 'talk') setUiMode('talk');
+  } catch (e) {}
+
+})();
 
   // ============ 초기화 ============
   loadDraft();   // 지난번에 쓰던 문구·출처 복원
@@ -6403,6 +7907,7 @@
     if (u) { btn.classList.add('on'); setLabel(u.email ? u.email.split('@')[0] : '동기화 켜짐'); await firstSync(); }
     else { btn.classList.remove('on'); setLabel('로그인'); stopWatch(); }
   });
+
 })();
 </script>
 </body>
