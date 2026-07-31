@@ -198,7 +198,14 @@
   /* 색 스와치 칸은 제 폭만 쓰고, 남는 자리는 같은 줄 슬라이더가 가져간다 */
   .row > .col-swatch { flex: 0 0 auto; }
   /* 이름 사이 기호 — 한 글자짜리라 좁게 */
-  .row > .col-sep { flex: 0 0 62px; }
+  .row > .col-sep { flex: 0 0 92px; }
+  /* 사이 기호 칸의 색 버튼 — 라벨과 같은 높이라야 옆 칸들과 줄이 맞는다 */
+  .col-sep .label-row { margin-bottom: 4px; }
+  .col-sep .field-fmt .fmt-btn {
+    height: 15px; min-width: 20px; padding: 0 3px;
+    font-size: 9.5px; border-radius: 4px;
+  }
+  .col-sep .field-fmt .pop-caret { font-size: 7px; }
   .col-sep input { text-align: center; height: 31px; }   /* 옆 seg 와 같은 키 */
   .field-group { margin-bottom: 9px; }
   /* 토글을 켰을 때만 나타나는 옵션 묶음 — 위 내용과 선으로 구분 */
@@ -441,7 +448,8 @@
     gap: 8px; margin-bottom: 4px;
   }
   .label-row .field-label { margin-bottom: 0; }
-  .field-fmt { margin: 0; gap: 2px; }
+  /* .fmt-bar 기본 여백이 뒤에 선언돼 있어 두 클래스로 못박는다 */
+  .label-row .fmt-bar.field-fmt { margin: 0; gap: 2px; }
   .field-fmt .fmt-btn { height: 21px; font-size: 10.5px; }
   .field-fmt .fmt-ico { min-width: 24px; padding: 0 3px; }
   .sub-rule {
@@ -1443,7 +1451,12 @@
           </div>
         </div>
         <div class="col-sep">
-          <label class="field-label">사이 기호</label>
+          <div class="label-row">
+            <label class="field-label">사이 기호</label>
+            <div class="fmt-bar field-fmt" data-for="creditSepInput">
+              <button class="fmt-btn fmt-ico" type="button" data-pop="colorPop2" title="기호 색"><span class="fb-col">A</span><span class="pop-caret">▾</span></button>
+            </div>
+          </div>
           <input type="text" id="creditSepInput" value="·" maxlength="12"
                  placeholder="·" autocomplete="off" title="캐릭터와 제작자 사이에 넣을 기호 — 서식도 쓸 수 있어요 (예: {#e74c3c|·})">
         </div>
@@ -4224,7 +4237,13 @@
       if (fieldBar) {
         // 칸 전용 줄에서 열렸으면 그 칸(입력창) 다음에 끼워 넣는다
         const group = fieldBar.closest('.field-group');
-        if (group) group.appendChild(pop);
+        if (group) {
+          group.appendChild(pop);
+        } else {
+          // 줄(.row) 안의 칸이면 줄 '다음' 에 (안에 넣으면 칸이 하나 더 생긴다)
+          const row = fieldBar.closest('.row');
+          if (row && row.parentNode) row.parentNode.insertBefore(pop, row.nextSibling);
+        }
       } else {
         const home = popHome.get(pop.id);
         if (home && home.parent) home.parent.insertBefore(pop, home.next);
