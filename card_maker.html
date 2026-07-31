@@ -2171,10 +2171,11 @@
           <label class="field-label">말풍선 모양</label>
           <div class="seg" id="tkShapeSeg">
             <button data-shape="plain" class="active">둥근</button>
+            <button data-shape="stack">묶음</button>
             <button data-shape="notch">모서리</button>
-            <button data-shape="tailtop">위 꼬리</button>
+            <button data-shape="tailtop">위</button>
             <button data-shape="tailcut">꺾인</button>
-            <button data-shape="tailbot">아래 꼬리</button>
+            <button data-shape="tailbot">아래</button>
           </div>
         </div>
       </div>
@@ -6727,10 +6728,10 @@
     };
     if (side === 'right') {
       g.fillStyle = color;
-      rr(-13, 0, 33, 20, 15, 'bl');   // 말풍선색 판 (왼쪽으로 말풍선 안까지)
+      rr(-13, 0, 33, 20, 15, 'bl');
       g.fill();
       g.globalCompositeOperation = 'destination-out';
-      rr(7, 0, 26, 20, 10, 'bl');     // 바깥쪽을 투명하게 깎는다
+      rr(7, 0, 26, 20, 10, 'bl');
       g.fill();
     } else {
       g.fillStyle = color;
@@ -7014,18 +7015,32 @@
       const sp = tk.rowMode ? Object.assign({}, spReal, { side: 'left' }) : spReal;
       const row = document.createElement('div');
       row.className = 'msg' + (sp.side === 'right' ? ' right' : '');
-      row.style.marginBottom = gap + 'px';
+      // 묶음 모양에선 같은 사람 연속 말풍선끼리 촘촘하게 붙는다 (인스타처럼)
+      const nxRun = msgs[i + 1];
+      const contRun = tk.shape === 'stack' && nxRun && !nxRun.narr && !nxRun.game
+        && nxRun.sticker === undefined && nxRun.name === m.name;
+      row.style.marginBottom = contRun ? Math.max(2, Math.round(gap * 0.25)) + 'px' : gap + 'px';
       const prev = msgs[i - 1];
       const firstOfRun = !(prev && !prev.narr && prev.name === m.name);
       // 프사 칸은 '프사가 있는 화자' 에게만 — 없는 화자는 칸 자체가 없어서
       // 말풍선이 화면 가장자리에 자연스럽게 붙는다 (양쪽 여백이 유령 칸 때문에 달라지지 않게)
       if (tk.avatarOn && sp.avatar) {
         const av = document.createElement('div');
-        const showAv = firstOfRun;
+        // 묶음(인스타) 모양은 프사가 묶음 '맨 아래' 말풍선 옆에 붙는다. 그 외엔 첫 말풍선 옆.
+        const stackAv = tk.shape === 'stack';
+        const showAv = stackAv ? !contRun : firstOfRun;
         av.className = 'msg-avatar' + (showAv ? '' : ' empty');
         const avs = parseInt($('tkAvSizeRange').value, 10) || 36;
         av.style.width = avs + 'px';
-        av.style.height = showAv ? avs + 'px' : '0';   // 이어지는 말은 자리만 (정렬 유지)
+        av.style.height = showAv ? avs + 'px' : '0';   // 나머지 줄은 자리만 (정렬 유지)
+        if (stackAv && showAv) {
+          // 행 흐름에서 빼서(절대배치) 마지막 말풍선 바닥에 정확히 붙인다.
+          // 행 높이에 영향이 없어 묶음 간격이 일정하게 유지된다.
+          av.style.position = 'absolute';
+          av.style.bottom = '0';
+          av.style[sp.side === 'right' ? 'right' : 'left'] = '0';
+          row.style[sp.side === 'right' ? 'paddingRight' : 'paddingLeft'] = (avs + 8) + 'px';
+        }
         av.style.borderRadius = (tk.avRadius || 50) + '%';
         av.style.alignSelf = tk.avPos === 'center' ? 'center'
           : tk.avPos === 'bottom' ? 'flex-end' : 'flex-start';
@@ -7092,7 +7107,7 @@
       if (m.big) bub.style.fontSize = '1.45em';
       if (m.small) bub.style.fontSize = '0.82em';
       if (tk.shape === 'tailtop') {
-        // 뾰족한 위 꼬리 — 45도 돌린 사각형을 위 모서리에 반쯤 겹친다 (카톡 느낌)
+        // 뾰족한 위 꼬리 — 눌러 돌린 사각형이 가시처럼 옆으로 뻗는다
         bub.style.borderRadius = rad + 'px';
         if (firstOfRun) {
           bub.style.position = 'relative';
@@ -7117,8 +7132,7 @@
           bub.appendChild(d);
         }
       } else if (tk.shape === 'tailbot') {
-        // 둥근 아래 꼬리 — 투명 캔버스에 구워 붙인다.
-        // (배경'색'으로 깎는 옛 방식은 배경이 이미지면 색 판때기가 보인다)
+        // 둥근 아래 꼬리 — 투명 캔버스에 구워 붙인다 (어떤 배경 위에서도 동작)
         bub.style.borderRadius = rad + 'px';
         if (firstOfRun) {
           bub.style.position = 'relative';
@@ -7128,6 +7142,23 @@
             + (sp.side === 'right' ? 'right:-7px;' : 'left:-7px;');
           bub.appendChild(img);
         }
+      } else if (tk.shape === 'stack') {
+        // 인스타 DM 처럼: 같은 사람 묶음에서 바깥쪽 모서리만 좁힌다
+        const nx2 = msgs[i + 1];
+        const lastOfRun = !(nx2 && !nx2.narr && !nx2.game && nx2.sticker === undefined && nx2.name === m.name);
+        const R = rad + 'px', r2 = Math.min(rad, 4) + 'px';
+        let tl, tr, br, bl;
+        if (firstOfRun && lastOfRun) { tl = tr = br = bl = R; }        // 혼자면 다 둥글게
+        else if (sp.side === 'right') {
+          tr = firstOfRun ? R : r2;
+          br = lastOfRun ? R : r2;
+          tl = bl = R;
+        } else {
+          tl = firstOfRun ? R : r2;
+          bl = lastOfRun ? R : r2;
+          tr = br = R;
+        }
+        bub.style.borderRadius = tl + ' ' + tr + ' ' + br + ' ' + bl;
       } else if (tk.shape === 'notch') {
         const r = rad + 'px', rs = Math.min(rad, 4) + 'px';
         bub.style.borderRadius = sp.side === 'right'
@@ -7544,7 +7575,7 @@
              left: { bubble: '#e9e9eb', text: '#111111' }, right: { bubble: '#0b93f6', text: '#ffffff' } },
     line:  { bg: '#7d95c1', shape: 'tailtop', radius: 14, nameMode: 'left', avatarOn: true,
              left: { bubble: '#ffffff', text: '#1a1d24' }, right: { bubble: '#9ede4f', text: '#173300' } },
-    insta: { bg: '#ffffff', shape: 'plain', radius: 18, nameMode: 'off', avatarOn: true, avRadius: 50,
+    insta: { bg: '#ffffff', shape: 'stack', radius: 18, nameMode: 'off', avatarOn: true, avRadius: 50,
              left: { bubble: '#efefef', text: '#111111' }, right: { bubble: '#4f5bd5', text: '#ffffff' },
              sliders: { tkRadiusRange: 18, tkGapRange: 8 } },
     disc:  { bg: '#313338', shape: 'plain', radius: 8, nameMode: 'all', avatarOn: true,
