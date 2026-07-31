@@ -201,6 +201,7 @@
   .row > .col-sep { flex: 0 0 92px; }
   /* 사이 기호 칸의 색 버튼 — 라벨과 같은 높이라야 옆 칸들과 줄이 맞는다 */
   .col-sep .label-row { margin-bottom: 4px; }
+  .col-sep .field-fmt .fmt-btn.fmt-ico,
   .col-sep .field-fmt .fmt-btn {
     height: 15px; min-width: 20px; padding: 0 3px;
     font-size: 9.5px; border-radius: 4px;
@@ -239,8 +240,10 @@
   .combo { position: relative; }
   .combo input[type="text"] { padding-right: 38px; }
   .combo-btn {
-    position: absolute; right: 4px; top: 4px;
-    width: 30px; height: 30px; padding: 0;
+    /* 입력칸 높이에 맞춰 세로 가운데 — top 고정이면 아래로 삐져나온다 */
+    position: absolute; right: 4px; top: 50%;
+    transform: translateY(-50%);
+    width: 28px; height: 26px; padding: 0;
     border: 0; background: transparent;
     color: var(--text-dim);
     border-radius: 6px;
@@ -450,12 +453,31 @@
   .label-row .field-label { margin-bottom: 0; }
   /* .fmt-bar 기본 여백이 뒤에 선언돼 있어 두 클래스로 못박는다 */
   .label-row .fmt-bar.field-fmt { margin: 0; gap: 2px; }
-  .field-fmt .fmt-btn { height: 21px; font-size: 10.5px; }
-  .field-fmt .fmt-ico { min-width: 24px; padding: 0 3px; }
+  .field-fmt .fmt-btn.fmt-ico,
+  .field-fmt .fmt-btn { height: 19px; font-size: 10px; }
+  /* 제목 팝업 안은 자리가 넉넉해서 본문 툴바와 같은 크기로 */
+  .field-fmt[data-for="titleInput"] .fmt-btn.fmt-ico,
+  .field-fmt[data-for="titleInput"] .fmt-btn { height: 26px; font-size: 12px; min-width: 30px; }
+  .field-fmt[data-for="titleInput"] .pop-caret { font-size: 8px; }
+  .field-fmt .fmt-btn.fmt-ico { min-width: 22px; padding: 0 3px; }
+  .field-fmt .pop-caret { font-size: 7px; }
   .sub-rule {
     height: 1px; background: var(--border);
     margin: 13px 0 11px;
   }
+  /* 입력칸 높이 자동 맞춤 버튼 — 입력칸 오른쪽 아래 구석에 작게 */
+  .ta-wrap { position: relative; }
+  .ta-grow {
+    position: absolute; right: 6px; bottom: 6px;
+    width: 22px; height: 22px; padding: 0;
+    border: 1px solid var(--border); border-radius: 5px;
+    background: var(--panel); color: var(--text-dim);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.55; z-index: 2;
+  }
+  .ta-grow svg { width: 12px; height: 12px; }
+  .ta-grow:hover { opacity: 1; color: var(--accent); }
+  .ta-grow.on { opacity: 1; color: var(--accent); border-color: var(--accent); }
   .hint { font-size: 10.5px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
   .bg-panel { /* 배경 모드별 패널 */ }
 
@@ -566,6 +588,20 @@
   #card .qindent { display: inline-block; }
   /* 문단 블록 — 끌어서 배치의 단위 */
   #card .qblock { white-space: pre-wrap; }
+  /* 번역 줄 — 본문보다 작고 윗줄에 바짝 붙는다.
+     앞 줄바꿈을 흡수했으므로 블록으로 만들어 간격을 직접 준다. */
+  #card .qsub {
+    display: block;
+    font-size: 0.76em;
+    line-height: 1.35;
+    opacity: 0.82;
+    /* 위로는 바짝(본문 줄 간격보다 좁게), 아래로는 본문 간격만큼 되돌린다 */
+    margin-top: 3px;
+    margin-bottom: 7px;
+  }
+  /* 입력창 뒤 강조 레이어는 글자 크기를 바꾸면 안 된다 (칸이 어긋남).
+     번역 줄은 색만 옅게 표시한다. */
+  .tk-sub { opacity: 0.62; }
   body.drag-place #card .qblock,
   body.drag-place #card .card-credit,
   body.drag-place #card .card-sep,
@@ -752,7 +788,7 @@
     flex-wrap: wrap;
     margin: 7px 0 6px;
   }
-  .fmt-bar .fmt-gap { flex: 1; min-width: 4px; }
+  .fmt-bar .fmt-gap { flex: 1 1 6px; min-width: 6px; }
   .fmt-btn {
     padding: 0 8px;
     height: 26px;
@@ -763,8 +799,8 @@
   }
   /* 글자 아이콘 버튼 — 같은 폭·높이의 네모로 줄맞춤 */
   .fmt-btn.fmt-ico {
-    min-width: 27px; height: 26px;
-    padding: 0 4px;
+    min-width: 25px; height: 26px;
+    padding: 0 3px;
     justify-content: center;
     font-size: 12.5px;
   }
@@ -1117,6 +1153,11 @@
     line-height: 1.5;
     width: fit-content;
   }
+  .msg-sys {
+    text-align: center;
+    margin: 10px 8px;
+    position: relative;
+  }
   .msg-narr {
     text-align: center; font-size: 0.85em; opacity: 0.72;
     margin: 12px 8px; white-space: pre-wrap;
@@ -1219,17 +1260,19 @@
                 title="문구 위에 얹을 제목 줄">제목 <span class="pop-caret">▾</span></button>
       </div>
       <div class="fmt-pop" id="titlePop">
-        <div class="row">
-          <div style="flex:2;">
-            <label class="field-label">제목 줄</label>
-            <input type="text" id="titleInput" maxlength="60" autocomplete="off"
-                   placeholder="비워두면 안 나옵니다 — 서식도 쓸 수 있어요">
-          </div>
-          <div class="col-swatch">
-            <label class="field-label">색</label>
-            <input type="color" class="swatch-input" id="titleColor" value="#ffffff"
-                   style="height:30px;width:44px;">
-          </div>
+        <div class="field-group">
+          <label class="field-label">제목 줄</label>
+          <input type="text" id="titleInput" maxlength="60" autocomplete="off"
+                 placeholder="비워두면 안 나옵니다 — 서식도 쓸 수 있어요">
+        </div>
+        <div class="fmt-bar field-fmt" data-for="titleInput" style="margin:0 0 9px;">
+          <button class="fmt-btn fmt-ico" type="button" data-fmt="b" title="굵게"><b>B</b></button>
+          <button class="fmt-btn fmt-ico" type="button" data-fmt="em" title="기울임"><i>I</i></button>
+          <button class="fmt-btn fmt-ico" type="button" data-fmt="st" title="취소선"><s>S</s></button>
+          <button class="fmt-btn fmt-ico" type="button" data-pop="hlPop3" title="형광펜"><span class="fb-hl">A</span><span class="pop-caret">▾</span></button>
+          <button class="fmt-btn fmt-ico" type="button" data-pop="colorPop3" title="글씨색"><span class="fb-col">A</span><span class="pop-caret">▾</span></button>
+          <span class="fmt-gap"></span>
+          <button class="fmt-btn fmt-ico js-clear-fmt" type="button" title="제목 줄 서식 지우기">✕</button>
         </div>
         <div class="row" style="margin-bottom:0;">
           <div>
@@ -1249,15 +1292,38 @@
           <div>
             <label class="field-label">자간</label>
             <div class="slider-row">
-              <input type="range" id="titleLetterRange" min="-2" max="12" step="0.5" value="2">
-              <span class="slider-val" id="titleLetterVal">2px</span>
+              <input type="range" id="titleLetterRange" min="-2" max="12" step="0.5" value="0">
+              <span class="slider-val" id="titleLetterVal">0px</span>
             </div>
           </div>
+        </div>
+      </div>
+      <div class="fmt-pop" id="hlPop3" data-pal="hl">
+        <span class="hl-swatches pal-grid"><!-- JS --></span>
+        <div class="pop-recent pal-recent-wrap">
+          <span class="fh-tip">최근</span>
+          <span class="hl-swatches pal-recent"><!-- JS --></span>
+        </div>
+      </div>
+      <div class="fmt-pop" id="colorPop3" data-pal="col">
+        <span class="hl-swatches pal-grid"><!-- JS --></span>
+        <div class="pop-recent pal-recent-wrap">
+          <span class="fh-tip">최근</span>
+          <span class="hl-swatches pal-recent"><!-- JS --></span>
+        </div>
+        <div class="pop-extra">
+          <button class="fmt-btn js-clear-color" type="button" style="flex:1; justify-content:center;">색 빼기 (원래 글자색으로)</button>
         </div>
       </div>
       <div class="ta-wrap">
         <textarea id="quoteInput" placeholder="이미지로 만들 문구를 입력하세요" spellcheck="false"></textarea>
         <div class="ta-mirror" id="quoteMirror" aria-hidden="true"></div>
+        <button class="ta-grow" id="taGrowBtn" type="button"
+                title="입력칸 높이를 글 길이에 맞춤 — 다시 누르면 원래대로">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="8 5 12 1 16 5"/><polyline points="8 19 12 23 16 19"/><line x1="12" y1="2" x2="12" y2="22"/>
+          </svg>
+        </button>
       </div>
 
       <!-- 서식 툴바 — 글자 서식 · 문단 도구 한 줄 -->
@@ -1268,6 +1334,7 @@
         <button class="fmt-btn fmt-ico" id="hlBtn" type="button" data-pop="hlPop" title="형광펜 (Ctrl+H 는 마지막 색)"><span class="fb-hl">A</span><span class="pop-caret">▾</span></button>
         <button class="fmt-btn fmt-ico" id="colorBtn" type="button" data-pop="colorPop" title="글씨색"><span class="fb-col">A</span><span class="pop-caret">▾</span></button>
         <button class="fmt-btn fmt-ico" type="button" data-pop="quotePop" id="quoteBtn" title="인용부호로 감쌈 (Ctrl+Q 는 마지막 모양)">“”<span class="pop-caret">▾</span></button>
+        <button class="fmt-btn fmt-ico" id="subLineBtn" type="button" title="이 줄을 번역 줄로 (작게) — 다시 누르면 해제">(가)</button>
         <button class="fmt-btn fmt-ico" id="indentBtn" type="button" title="문단 들여쓰기"><svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="2" width="14" height="2"/><rect x="7" y="7" width="8" height="2"/><rect x="1" y="12" width="14" height="2"/><path d="M1 6 L5 8 L1 10 Z"/></svg></button>
         <span class="fmt-gap"></span>
         <button class="fmt-btn" type="button" data-pop="tidyPop" title="붙여넣은 글 다듬기">정리<span class="pop-caret">▾</span></button>
@@ -1323,6 +1390,13 @@
         </div>
         <div class="pop-extra">
           <button class="fmt-btn js-clear-color" type="button" style="flex:1; justify-content:center;">색 빼기 (원래 글자색으로)</button>
+        </div>
+      </div>
+      <div class="field-group" id="indentBox" style="margin-top:8px; display:none;">
+        <label class="field-label">들여쓰기 폭</label>
+        <div class="slider-row">
+          <input type="range" id="indentRange" min="0.5" max="5" step="0.5" value="2">
+          <span class="slider-val" id="indentVal">2em</span>
         </div>
       </div>
       <div class="multi-help">
@@ -1625,13 +1699,6 @@
         <div class="slider-row">
           <input type="range" id="scaleRange" min="70" max="130" value="100">
           <span class="slider-val" id="scaleVal">100%</span>
-        </div>
-      </div>
-      <div class="field-group">
-        <label class="field-label">들여쓰기 폭</label>
-        <div class="slider-row">
-          <input type="range" id="indentRange" min="0.5" max="5" step="0.5" value="2">
-          <span class="slider-val" id="indentVal">2em</span>
         </div>
       </div>
       <!-- 글자 꾸밈 — 본문에 관한 설정 -->
@@ -2163,7 +2230,7 @@
       <div class="tk-ta"><textarea id="tkScript" spellcheck="false" placeholder="이름: 내용"></textarea></div>
       <div class="hint">
         <b>이름: 내용</b> 한 줄 = 말풍선 하나 (이름 없으면 앞사람이 이어 말함)<br>
-        <b>*</b> 서술 &nbsp;·&nbsp; <b>『[파티]이름: …』</b> 게임 창 &nbsp;·&nbsp; <b>---</b> 장 나누기<br>
+        <b>*</b> 서술 &nbsp;·&nbsp; <b>//</b> 가운데 알림 &nbsp;·&nbsp; <b>(번역)</b> 윗줄에 번역 붙이기 &nbsp;·&nbsp; <b>『[파티]이름: …』</b> 게임 창 &nbsp;·&nbsp; <b>---</b> 장 나누기<br>
         줄 끝 <b>@6:26</b> 시간 &nbsp;·&nbsp; <b>!1</b> 안읽음 &nbsp;·&nbsp; 내용 앞 <b>+</b> 크게 / <b>-</b> 작게
       </div>
     </div>
@@ -3468,8 +3535,23 @@
   // 이름은 공백으로 시작하거나 끝나지 않는다 — "중간에 ｜ 파이프" 같은 문장을
   // 이름으로 잘못 읽지 않게 하는 조건이다.
   const NAME_BAR = /^([^\s｜|\n\\*_={}~][^｜|\n\\*_={}~]{0,18}[^\s｜|\n\\*_={}~]|[^\s｜|\n\\*_={}~])[｜|]/;
+  // 줄 하나가 통째로 "(…)" 이면 윗줄의 번역·부연으로 보고 작게 붙여 보여준다.
+  // 표식을 걷어낸 '보이는 글자' 로 판단하므로 색·굵게가 걸려 있어도 알아본다.
+  // 괄호를 그냥 글자로 쓰고 싶으면 \( 처럼 앞에 \ 를 붙이면 된다.
+  function subLinePlain(line) {
+    if (!line || line.indexOf('(') === -1) return null;
+    const plain = textToChars(line).map(c => c.ch).join('').trim();
+    return (plain.length >= 2 && plain[0] === '(' && plain[plain.length - 1] === ')') ? plain : null;
+  }
+  // 커서가 놓인 줄의 범위 [시작, 끝)
+  function lineRangeAt(v, pos) {
+    const a = v.lastIndexOf('\n', Math.max(0, pos - 1)) + 1;
+    let b = v.indexOf('\n', pos);
+    if (b === -1) b = v.length;
+    return { a: a, b: b };
+  }
 
-  function parseInline(s) {
+  function parseInline(s, skipSub) {
     let out = '';
     let i = 0;
     while (i < s.length) {
@@ -3478,6 +3560,18 @@
         out += escapeHtml(s[i + 1]);
         i += 2;
         continue;
+      }
+      // 줄 하나가 통째로 괄호면 작은 글씨로 (번역 줄).
+      // 앞의 줄바꿈까지 함께 삼켜서, 윗줄과의 간격을 직접 정한다.
+      if (!skipSub && (i === 0 || s[i] === '\n')) {
+        const st0 = (s[i] === '\n') ? i + 1 : i;
+        const nl0 = s.indexOf('\n', st0);
+        const line0 = (nl0 === -1 ? s.slice(st0) : s.slice(st0, nl0));
+        if (line0 && subLinePlain(line0)) {
+          out += '<span class="qsub">' + parseInline(line0, true) + '</span>';
+          i = st0 + line0.length;
+          continue;
+        }
       }
       // 줄 첫머리의 탭 = 그 문단만 들여쓰기 (탭 개수만큼)
       if ((i === 0 || s[i - 1] === '\n') && s[i] === '\t') {
@@ -3492,7 +3586,7 @@
           const from = i + cm[0].length;
           const close = findColorClose(s, from);
           if (close !== -1) {
-            const body = parseInline(s.slice(from, close));
+            const body = parseInline(s.slice(from, close), skipSub);
             // data-hl 은 이미지로 뽑을 때 형광펜 띠 색을 읽는 데 쓴다
             out += (cm[1] === '=')
               ? '<mark class="qhl' + (state.hlShape === 'round' ? ' hl-round' : '')
@@ -3506,7 +3600,7 @@
       }
       const mm = matchMark(s, i);
       if (mm) {
-        out += mm.mk.open + parseInline(s.slice(i + mm.mk.tag.length, mm.close)) + mm.mk.close;
+        out += mm.mk.open + parseInline(s.slice(i + mm.mk.tag.length, mm.close), skipSub) + mm.mk.close;
         i = mm.close + mm.mk.tag.length;
         continue;
       }
@@ -3518,7 +3612,7 @@
 
   // 입력창 뒤에 깔리는 강조 레이어용 HTML — 표식을 지우지 않고 색만 입힘.
   // parseInline 과 같은 규칙을 쓰므로 미리보기와 절대 어긋나지 않는다.
-  function mirrorInline(s) {
+  function mirrorInline(s, skipSub) {
     let out = '';
     let i = 0;
     while (i < s.length) {
@@ -3527,6 +3621,16 @@
         out += '<span class="tk-mark">\\</span>' + escapeHtml(s[i + 1]);
         i += 2;
         continue;
+      }
+      // 줄 하나가 통째로 괄호면 옅게 (카드와 같은 규칙)
+      if (!skipSub && (i === 0 || s[i - 1] === '\n')) {
+        const nl0 = s.indexOf('\n', i);
+        const line0 = (nl0 === -1 ? s.slice(i) : s.slice(i, nl0));
+        if (line0 && subLinePlain(line0)) {
+          out += '<span class="tk-sub">' + mirrorInline(line0, true) + '</span>';
+          i += line0.length;
+          continue;
+        }
       }
       // 줄 시작의 --- 구분선
       if (i === 0 || s[i - 1] === '\n') {
@@ -3543,7 +3647,7 @@
           const from = i + cm[0].length;
           const close = findColorClose(s, from);
           if (close !== -1) {
-            const inner = mirrorInline(s.slice(from, close));
+            const inner = mirrorInline(s.slice(from, close), skipSub);
             const styled = (cm[1] === '=')
               ? '<span class="tk-h' + (state.hlShape === 'round' ? ' hl-round' : '')
                 + '" style="' + hlInlineStyle(cm[2]) + '">' + inner + '</span>'
@@ -3560,7 +3664,7 @@
       if (mm) {
         out += '<span class="tk-mark">' + mm.mk.tag + '</span>'
              + '<span class="' + mm.mk.cls + '">'
-             + mirrorInline(s.slice(i + mm.mk.tag.length, mm.close)) + '</span>'
+             + mirrorInline(s.slice(i + mm.mk.tag.length, mm.close), skipSub) + '</span>'
              + '<span class="tk-mark">' + mm.mk.tag + '</span>';
         i = mm.close + mm.mk.tag.length;
         continue;
@@ -3810,8 +3914,16 @@
   }
 
   function renderCard() {
-    // 투명 배경 — 미리보기에서도 배경·덮개를 감추고 체커보드를 깔아 보여준다
+    // 투명 배경 — 미리보기에서도 배경·덮개를 깔아 보여준다
     card.classList.toggle('trans-preview', !!state.transBg);
+    // 들여쓰기 폭은 실제로 들여쓴 줄이 있을 때만 보여준다 (평소엔 숨김)
+    {
+      const box = document.getElementById('indentBox');
+      if (box) {
+        const full = (typeof fullQuoteText === 'function' ? fullQuoteText() : $('quoteInput').value) || '';
+        box.style.display = full.indexOf('\t') !== -1 ? '' : 'none';
+      }
+    }
     syncMirror();          // 입력창 서식 강조 레이어 갱신
     saveDraft();           // 쓰던 내용 자동 보관 (0.4초 묶음)
     // 장이 바뀌거나 --- 로 나뉜 장 수가 달라지면 배경도 다시 정해야 한다
@@ -3912,6 +4024,7 @@
     }
     syncPageEdit();
     renderCard();
+    taFit();
   });
   // 저장 형식
   document.querySelectorAll('#fmtSeg button').forEach(btn => {
@@ -4060,7 +4173,7 @@
       fmtTarget = 'quoteInput';
     }
     setSelColor(null);
-    closePops();
+    closeChildPop();
   }));
 
   // 옛 설정 이관 — 캐릭터 이름이 통짜로 굵어 보이던 걸 __굵게__ 서식으로 바꾼다.
@@ -4107,6 +4220,61 @@
       chars.forEach(c => { c.b = false; c.em = false; c.st = false; c.hl = null; c.col = null; });
       commitQuoteEdit(charsToText(chars), 0, 0);
     });
+  });
+
+  // 입력칸 높이 자동 맞춤 — 켜면 글 길이에 맞춰 늘어나고, 끄면 원래 높이로
+  let taGrow = false;
+  function taFit() {
+    const ta = $('quoteInput');
+    if (!ta) return;
+    if (taGrow) {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    } else {
+      ta.style.height = '';
+    }
+  }
+  $('taGrowBtn').addEventListener('click', () => {
+    taGrow = !taGrow;
+    $('taGrowBtn').classList.toggle('on', taGrow);
+    taFit();
+    syncMirror();
+    toast(taGrow ? '입력칸이 글 길이에 맞춰 늘어나요' : '입력칸 높이를 원래대로');
+  });
+
+  // 번역 줄 토글 — 커서가 놓인 줄을 (…) 로 감싸거나 벗긴다.
+  // 글자 단위 서식 모델을 쓰므로 색·굵게가 걸려 있어도 그대로 남는다.
+  bindFmtBtn($('subLineBtn'), () => {
+    fmtTarget = 'quoteInput';
+    const ta = $('quoteInput');
+    const v = ta.value;
+    const r = lineRangeAt(v, ta.selectionStart);
+    const line = v.slice(r.a, r.b);
+    if (!line.trim()) { ta.focus(); toast('먼저 줄에 커서를 두세요'); return; }
+    const chars = textToChars(line);
+    if (subLinePlain(line)) {
+      // 벗기기 — 보이는 글자 기준으로 첫 '(' 와 마지막 ')' 만 뺀다
+      let a = 0, b = chars.length - 1;
+      while (a < chars.length && !chars[a].ch.trim()) a++;
+      while (b >= 0 && !chars[b].ch.trim()) b--;
+      if (chars[a] && chars[a].ch === '(' && chars[b] && chars[b].ch === ')') {
+        chars.splice(b, 1);
+        chars.splice(a, 1);
+      }
+    } else {
+      // 감싸기 — 줄 양 끝 공백은 건드리지 않는다
+      let a = 0, b = chars.length - 1;
+      while (a < chars.length && !chars[a].ch.trim()) a++;
+      while (b >= 0 && !chars[b].ch.trim()) b--;
+      const like = chars[a] || { b: false, em: false, st: false, hl: null, col: null };
+      const mk = (ch) => ({ ch: ch, b: like.b, em: like.em, st: like.st, hl: like.hl, col: like.col });
+      chars.splice(b + 1, 0, mk(')'));
+      chars.splice(a, 0, mk('('));
+    }
+    const newLine = charsToText(chars);
+    const text = v.slice(0, r.a) + newLine + v.slice(r.b);
+    const pos = r.a + newLine.length;
+    commitQuoteEdit(text, pos, pos);
   });
 
   $('insertSepBtn').addEventListener('click', () => {
@@ -4206,13 +4374,26 @@
         saveData();
         applyHighlightColor();
         if (isHl) setSelHighlight(col); else setSelColor(col);
-        closePops();
+        closeChildPop();
         renderAllPalettes();
       });
     });
   }
 
   // ===== 펼침 상자 =====
+  // 색을 고른 뒤처럼 '자식 팝업만' 닫고 싶을 때 — 부모 팝업은 열어둔다
+  function closeChildPop() {
+    // 열린 것 중 '다른 팝업 안에 들어 있는' 것을 찾아야 한다
+    // (문서 순서로 찾으면 부모 팝업이 먼저 잡힌다)
+    const nested = [...document.querySelectorAll('.fmt-pop.open')]
+      .find(el => el.parentElement && el.parentElement.closest('.fmt-pop'));
+    const parent = nested ? nested.parentElement.closest('.fmt-pop') : null;
+    closePops();
+    if (parent) {
+      parent.classList.add('open');
+      if (parent._openerBtn) parent._openerBtn.classList.add('on');
+    }
+  }
   function closePops() {
     document.querySelectorAll('.fmt-pop').forEach(el => el.classList.remove('open'));
     document.querySelectorAll('[data-pop]').forEach(b => b.classList.remove('on'));
@@ -4227,22 +4408,42 @@
     btn.addEventListener('mousedown', ev => ev.preventDefault());
     btn.addEventListener('click', () => {
       const pop = $(btn.dataset.pop);
+      // 이 버튼이 다른 팝업 안에 있으면, 그 팝업은 열어둔 채로 둔다
+      const parentPop = btn.closest('.fmt-pop');
       // 같은 팝업이라도 '다른 버튼' 이 눌렀으면 그 버튼 자리로 옮겨 다시 연다
       const wasOpen = pop.classList.contains('open') && pop._owner === btn;
       closePops();
-      if (wasOpen) { pop._owner = null; return; }
+      if (wasOpen) {
+        pop._owner = null;
+        if (parentPop) {
+          parentPop.classList.add('open');
+          if (parentPop._openerBtn) parentPop._openerBtn.classList.add('on');
+        }
+        return;
+      }
       pop._owner = btn;
+      pop._openerBtn = btn;
       const bar = btn.closest('.fmt-bar');
       const fieldBar = bar && bar.classList.contains('field-fmt') ? bar : null;
+      // 다른 팝업(예: 제목) 안에서 열렸다면 그 팝업은 닫지 않고 그 안에 펼친다
+      if (parentPop) {
+        parentPop.classList.add('open');
+        if (parentPop._openerBtn) parentPop._openerBtn.classList.add('on');
+      }
       if (fieldBar) {
-        // 칸 전용 줄에서 열렸으면 그 칸(입력창) 다음에 끼워 넣는다
-        const group = fieldBar.closest('.field-group');
-        if (group) {
-          group.appendChild(pop);
+        if (parentPop) {
+          // 부모 팝업 안 — 버튼 줄 바로 다음에 끼운다
+          fieldBar.parentNode.insertBefore(pop, fieldBar.nextSibling);
         } else {
-          // 줄(.row) 안의 칸이면 줄 '다음' 에 (안에 넣으면 칸이 하나 더 생긴다)
-          const row = fieldBar.closest('.row');
-          if (row && row.parentNode) row.parentNode.insertBefore(pop, row.nextSibling);
+          // 칸 전용 줄에서 열렸으면 그 칸(입력창) 다음에 끼워 넣는다
+          const group = fieldBar.closest('.field-group');
+          if (group) {
+            group.appendChild(pop);
+          } else {
+            // 줄(.row) 안의 칸이면 줄 '다음' 에 (안에 넣으면 칸이 하나 더 생긴다)
+            const row = fieldBar.closest('.row');
+            if (row && row.parentNode) row.parentNode.insertBefore(pop, row.nextSibling);
+          }
         }
       } else {
         const home = popHome.get(pop.id);
@@ -4377,7 +4578,7 @@
     // 제목 줄 스타일
     const tEl = $('cardTitle');
     tEl.style.fontSize = ($('titleSizeRange').value * fontScale) + 'px';
-    tEl.style.color = $('titleColor').value;
+    tEl.style.color = $('textColor').value;   // 제목 색은 본문 글자색을 따르고, 다르게 하려면 서식으로
     tEl.style.marginBottom = $('titleGapRange').value + 'px';
     tEl.style.letterSpacing = $('titleLetterRange').value + 'px';
     tEl.style.textShadow = shadowCss;
@@ -4480,7 +4681,7 @@
   ['sizeRange','textColor','accentColor','lineHeightRange','letterRange','scaleRange',
    'gapRange','padRange','creditSizeRange','radiusRange','offsetRange','offsetXRange',
    'borderRange','borderColor','strokeRange','strokeColor',
-   'titleSizeRange','titleGapRange','titleLetterRange','titleColor',
+   'titleSizeRange','titleGapRange','titleLetterRange',
    'iconSizeRange','iconRadiusRange','iconXRange','iconYRange',
    'iconOpacityRange','iconBorderRange','iconBorderColor',
    'patternSizeRange','patternOpacityRange','patternAngleRange','patternColor','vignetteRange',
@@ -4488,9 +4689,11 @@
    'panelBorderRange','panelBorderColor',
    'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
    'shX','shY','shBlur','shColor','shAlpha',
-   'indentRange','sepWidthRange',
+   'sepWidthRange',
    'padTopRange','padBottomRange','padLeftRange','padRightRange']
     .forEach(id => $(id).addEventListener('input', applyStyle));
+  // 들여쓰기 폭은 문구를 다시 그려야 칸 너비가 바뀐다
+  $('indentRange').addEventListener('input', () => { applyStyle(); renderCard(); });
 
   // 정렬 버튼
   document.querySelectorAll('#alignSeg button').forEach(btn => {
@@ -4725,7 +4928,7 @@
       padTopRange: 56, padBottomRange: 56, padLeftRange: 56, padRightRange: 56,
       hlPadRange: 1, borderRange: 0, borderColor: '#1a1d24',
       strokeRange: 0, strokeColor: '#000000',
-      titleSizeRange: 13, titleGapRange: 18, titleLetterRange: 2, titleColor: '#ffffff',
+      titleSizeRange: 13, titleGapRange: 18, titleLetterRange: 0,
       iconSizeRange: 96, iconRadiusRange: 50, iconXRange: 50, iconYRange: 12,
       iconOpacityRange: 100, iconBorderRange: 0, iconBorderColor: '#ffffff',
       patternSizeRange: 16, patternOpacityRange: 12, patternAngleRange: 0,
@@ -6386,7 +6589,7 @@
       'letterRange','scaleRange','gapRange','padRange','creditSizeRange',
       'radiusRange','fontScaleRange','bgColor','dimColor','gradColor1','gradColor2',
       'borderRange','borderColor','strokeRange','strokeColor',
-      'titleSizeRange','titleGapRange','titleLetterRange','titleColor',
+      'titleSizeRange','titleGapRange','titleLetterRange',
       'iconSizeRange','iconRadiusRange','iconXRange','iconYRange',
       'iconOpacityRange','iconBorderRange','iconBorderColor',
       'patternSizeRange','patternOpacityRange','patternAngleRange','patternColor','vignetteRange',
@@ -6939,6 +7142,11 @@
         if (!t) return;
         // 【이름: 내용】 처럼 감싸 붙여넣은 줄은 괄호를 벗기고 해석한다
         if (t.startsWith('\u3010') && t.endsWith('\u3011')) t = t.slice(1, -1).trim();
+        // "//내용" = 가운데 시스템 알림 (카톡의 '메시지가 삭제되었습니다.' 같은 줄)
+        if (t.startsWith('//')) {
+          msgs.push({ sys: true, text: t.slice(2).trim() || '메시지가 삭제되었습니다.' });
+          return;
+        }
         // 『...』 = 게임 창 메시지 — [시스템]/[귓]/[파티] 같은 머리표를 알아듣는다.
         // 게임 프리셋이 켜져 있으면 『』 없이 [머리표]로 시작만 해도 게임 줄로 본다.
         const wrapped = t.startsWith('\u300E') && t.endsWith('\u300F');
@@ -6970,6 +7178,16 @@
           if (umatch && !unread) { unread = umatch[1]; body = body.slice(0, umatch.index); }
         }
         // ":1:" 홀로 있는 줄은 앞 화자(없으면 익명)의 이모티콘
+        // "(…)" 만 있는 줄 = 바로 앞 말풍선의 번역 (아이메시지 번역 표시처럼)
+        if (/^\([^\n]*\)$/.test(body)) {
+          const prev = msgs[msgs.length - 1];
+          if (prev && !prev.narr && !prev.game && !prev.sys && prev.sticker === undefined && !prev.trans) {
+            prev.trans = body.slice(1, -1).trim();
+            if (time && !prev.time) prev.time = time;
+            if (unread && !prev.unread) prev.unread = unread;
+            return;
+          }
+        }
         const stAlone = body.match(/^:(\d{1,2}):$/);
         if (stAlone) {
           msgs.push({ name: last || '', sticker: parseInt(stAlone[1], 10) - 1, time: time, unread: unread });
@@ -6997,7 +7215,7 @@
   function tkCollect(pages) {
     const seen = [];
     pages.forEach(p => p.forEach(m => {
-      if (m.narr || m.game || !m.name) return;   // 서술·게임 창 줄은 화자가 아니다
+      if (m.narr || m.game || m.sys || !m.name) return;   // 서술·게임 창·알림 줄은 화자가 아니다
       if (!seen.includes(m.name)) seen.push(m.name);
     }));
     seen.forEach((name, i) => {
@@ -7311,6 +7529,27 @@
         chat.appendChild(d);
         return;
       }
+      if (m.sys) {
+        // 가운데 알약 — 카톡의 시스템 알림 모양
+        const wrap = document.createElement('div');
+        wrap.className = 'msg-sys';
+        const pill = document.createElement('span');
+        pill.textContent = m.text;
+        // 배경이 어두우면 밝은 알약, 밝으면 어두운 알약
+        const bgHex = ($('tkBgColor').value || '#ffffff').replace('#', '');
+        const rr = parseInt(bgHex.slice(0, 2), 16) || 0;
+        const gg = parseInt(bgHex.slice(2, 4), 16) || 0;
+        const bb = parseInt(bgHex.slice(4, 6), 16) || 0;
+        const lum = (rr * 299 + gg * 587 + bb * 114) / 1000;
+        const darkBg = lum < 140;
+        pill.style.cssText = 'display:inline-block; padding:4px 12px; border-radius:999px;'
+          + 'font-size:0.72em; line-height:1.5;'
+          + 'background:' + (darkBg ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.13)') + ';'
+          + 'color:' + tkReadable($('tkBgColor').value) + '; opacity:0.9;';
+        wrap.appendChild(pill);
+        chat.appendChild(wrap);
+        return;
+      }
       if (m.narr) {
         const d = document.createElement('div');
         d.className = 'msg-narr';
@@ -7408,7 +7647,7 @@
         }
         const tx = document.createElement('span');
         if (m.small) tx.style.opacity = '0.68';
-        tx.textContent = m.text;
+        tx.textContent = m.text + (m.trans ? ' (' + m.trans + ')' : '');
         d.appendChild(tx);
         chat.appendChild(d);
         return;
@@ -7425,6 +7664,10 @@
       row.style.marginBottom = contRun ? Math.max(2, Math.round(gap * 0.25)) + 'px' : gap + 'px';
       const prev = msgs[i - 1];
       const firstOfRun = !(prev && !prev.narr && prev.name === m.name);
+      // 연속 발화의 마지막인지 — 아이메시지식 아래 꼬리는 마지막에만 붙는다
+      const nxRun2 = msgs[i + 1];
+      const lastOfRun = !(nxRun2 && !nxRun2.narr && !nxRun2.game && !nxRun2.sys
+                          && nxRun2.sticker === undefined && nxRun2.name === m.name);
       // 프사 칸은 '프사가 있는 화자' 에게만 — 없는 화자는 칸 자체가 없어서
       // 말풍선이 화면 가장자리에 자연스럽게 붙는다 (양쪽 여백이 유령 칸 때문에 달라지지 않게)
       if (tk.avatarOn && sp.avatar) {
@@ -7535,9 +7778,10 @@
           bub.appendChild(d);
         }
       } else if (tk.shape === 'tailbot') {
-        // 둥근 아래 꼬리 — 투명 캔버스에 구워 붙인다 (어떤 배경 위에서도 동작)
+        // 둥근 아래 꼬리 — 아이메시지처럼 연속 메시지의 '마지막' 에만 붙인다.
+        // (투명 캔버스에 구워서 어떤 배경 위에서도 동작)
         bub.style.borderRadius = rad + 'px';
-        if (firstOfRun) {
+        if (lastOfRun) {
           bub.style.position = 'relative';
           const img = document.createElement('img');
           img.src = bakeTailBot(sp.bubble, sp.side);
@@ -7547,8 +7791,6 @@
         }
       } else if (tk.shape === 'stack') {
         // 인스타 DM 처럼: 같은 사람 묶음에서 바깥쪽 모서리만 좁힌다
-        const nx2 = msgs[i + 1];
-        const lastOfRun = !(nx2 && !nx2.narr && !nx2.game && nx2.sticker === undefined && nx2.name === m.name);
         const R = rad + 'px', r2 = Math.min(rad, 4) + 'px';
         let tl, tr, br, bl;
         if (firstOfRun && lastOfRun) { tl = tr = br = bl = R; }        // 혼자면 다 둥글게
@@ -7586,6 +7828,15 @@
       if (m.small) txt.style.opacity = '0.68';   // 글자만 옅게 (말풍선 색은 그대로)
       txt.textContent = m.text;
       bub.appendChild(txt);
+      // 번역 — 원문 아래에 가는 선을 긋고 작고 옅게 (아이메시지 번역 표시)
+      if (m.trans) {
+        const tr = document.createElement('span');
+        tr.style.cssText = 'position:relative; display:block; margin-top:5px; padding-top:5px;'
+          + 'font-size:0.86em; opacity:0.68;'
+          + 'border-top:1px solid ' + hexToRgba(sp.text, 0.28) + ';';
+        tr.textContent = m.trans;
+        bub.appendChild(tr);
+      }
 
       // 시간·안읽음 — 말풍선 옆에 작게 (안읽음 노란 숫자가 위, 시간이 아래. 카톡처럼)
       if ((timeShown || m.unread) && tk.rowMode !== 'game') {
@@ -8071,6 +8322,13 @@
   // ============ 초기화 ============
   loadDraft();   // 지난번에 쓰던 문구·출처 복원
   // 옛 '캐릭터 이름 굵게' 설정을 서식(__굵게__)으로 한 번만 옮긴다
+  // 제목 자간 기본값이 0 으로 바뀌었다 — 예전 값이 남아 있으면 한 번만 맞춰준다
+  if (!data.titleLetterZeroed) {
+    const tl = $('titleLetterRange');
+    if (tl) { tl.value = 0; tl.dispatchEvent(new Event('input', { bubbles: true })); }
+    data.titleLetterZeroed = true;
+    saveData();
+  }
   if (!data.charBoldMoved) {
     migrateCharBold();
     data.charBoldMoved = true;
