@@ -805,6 +805,11 @@
     font-size: 12.5px;
   }
   .fmt-btn.fmt-ico .pop-caret { margin-left: 2px; }
+  /* 본문 툴바는 버튼이 많아 좁은 편집 패널에서 '정리' 가 다음 줄로 밀린다 — 조금씩 줄여 한 줄에 맞춘다 */
+  .fmt-bar:not(.field-fmt) .fmt-btn.fmt-ico { min-width: 23px; padding: 0 2px; }
+  .fmt-bar:not(.field-fmt) .fmt-btn.fmt-ico .pop-caret { margin-left: 1px; }
+  .fmt-bar:not(.field-fmt) .fmt-btn:not(.fmt-ico) { padding: 0 6px; }
+  .fmt-bar:not(.field-fmt) .fmt-gap { min-width: 2px; }
   /* 버튼 안에서 지금 고른 색을 미리 보여줌 */
   .fmt-btn .fb-hl {
     background: var(--hl-pick, #ffe17d);
@@ -1547,7 +1552,7 @@
           </div>
         </div>
         <div>
-          <label class="field-label">문구–출처 간격</label>
+          <label class="field-label">문구–구분선 간격</label>
           <div class="slider-row">
             <input type="range" id="gapRange" min="6" max="60" value="26">
             <span class="slider-val" id="gapVal">26px</span>
@@ -1584,6 +1589,13 @@
             <input type="range" id="sepThickRange" min="1" max="10" value="1">
             <span class="slider-val" id="sepThickVal">1px</span>
           </div>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">구분선–출처 간격</label>
+        <div class="slider-row">
+          <input type="range" id="sepGapRange" min="0" max="60" value="18">
+          <span class="slider-val" id="sepGapVal">18px</span>
         </div>
       </div>
     </div>
@@ -4632,9 +4644,11 @@
     }
     cardSep.style.marginTop = '';
     cardSep.style.marginBottom = '';
-    // 슬라이더는 '문구와의 거리'만 조절한다. 출처 쪽 간격은 18px 로 고정.
+    // 문구–구분선 거리와 구분선–출처 거리를 따로 조절한다.
+    const sepGap = $('sepGapRange').value;
     cardSep.style.marginBlockStart = gap + 'px';
-    cardSep.style.marginBlockEnd = '18px';
+    cardSep.style.marginBlockEnd = sepGap + 'px';
+    $('sepGapVal').textContent = sepGap + 'px';
 
     // 강조선 길이
     const sepW = $('sepWidthRange').value;
@@ -4688,7 +4702,7 @@
    'patternSizeRange','patternOpacityRange','patternAngleRange','patternColor','vignetteRange',
    'panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
    'panelBorderRange','panelBorderColor',
-   'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
+   'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','sepGapRange','vignetteColor',
    'shX','shY','shBlur','shColor','shAlpha',
    'sepWidthRange',
    'padTopRange','padBottomRange','padLeftRange','padRightRange']
@@ -4951,7 +4965,7 @@
       panelColor: '#000000', panelOpacityRange: 35,
       panelPadRange: 22, panelRadiusRange: 8,
       panelBorderRange: 0, panelBorderColor: '#ffffff', cornerColor: '#ffffff',
-      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1,
+      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18,
       shX: 0, shY: 2, shBlur: 8, shColor: '#000000', shAlpha: 45
     };
 
@@ -6609,7 +6623,7 @@
       'patternSizeRange','patternOpacityRange','patternAngleRange','patternColor','vignetteRange',
       'panelColor','panelOpacityRange','panelPadRange','panelRadiusRange',
       'panelBorderRange','panelBorderColor',
-      'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','vignetteColor',
+      'cornerColor','cornerSizeRange','cornerInsetRange','sepThickRange','sepGapRange','vignetteColor',
       'shX','shY','shBlur','shColor','shAlpha',
       'dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange',
       'offsetRange','offsetXRange','indentRange','sepWidthRange',
@@ -6740,6 +6754,8 @@
   function restoreSettings(s) {
     if (!s) return;
     if (s.sliders) {
+      // 이 슬라이더가 생기기 전에 저장한 기록은 예전 고정값(18px)으로
+      if (s.sliders.sepGapRange === undefined) $('sepGapRange').value = 18;
       Object.keys(s.sliders).forEach(id => {
         if ($(id)) $(id).value = s.sliders[id];
       });
