@@ -1336,6 +1336,7 @@
         <button class="fmt-btn fmt-ico" type="button" data-pop="quotePop" id="quoteBtn" title="인용부호로 감쌈 (Ctrl+Q 는 마지막 모양)">“”<span class="pop-caret">▾</span></button>
         <button class="fmt-btn fmt-ico" id="subLineBtn" type="button" title="이 줄을 번역 줄로 (작게) — 다시 누르면 해제">(가)</button>
         <button class="fmt-btn fmt-ico" id="indentBtn" type="button" title="문단 들여쓰기"><svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="2" width="14" height="2"/><rect x="7" y="7" width="8" height="2"/><rect x="1" y="12" width="14" height="2"/><path d="M1 6 L5 8 L1 10 Z"/></svg></button>
+        <button class="fmt-btn fmt-ico" id="barBtn" type="button" title="커서 자리에 ｜ 넣기">｜</button>
         <span class="fmt-gap"></span>
         <button class="fmt-btn" type="button" data-pop="tidyPop" title="붙여넣은 글 다듬기">정리<span class="pop-caret">▾</span></button>
       </div>
@@ -4744,6 +4745,19 @@
     commitQuoteEdit(v.slice(0, ls) + out + v.slice(le), ls, ls + out.length);
   }
   bindFmtBtn($('indentBtn'), toggleIndent);
+  // ｜ 넣기 — 직접 친 것과 똑같이 들어가므로 "이름｜" 자동 굵게도 그대로 돈다
+  bindFmtBtn($('barBtn'), () => {
+    const ta = $('quoteInput');
+    fmtTarget = 'quoteInput';
+    ta.focus();
+    let ok = false;
+    try { ok = document.execCommand('insertText', false, '｜'); } catch (e) { ok = false; }
+    if (!ok) {
+      const s0 = ta.selectionStart, s1 = ta.selectionEnd;
+      ta.setRangeText('｜', s0, s1, 'end');
+      ta.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: '｜' }));
+    }
+  });
 
   // 붙여넣은 글 다듬기
   bindFmtBtn($('tidySpace'), () => {
