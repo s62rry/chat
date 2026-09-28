@@ -1778,6 +1778,7 @@
         <button data-ratio="portrait">4:5</button>
         <button data-ratio="wide">16:9</button>
         <button data-ratio="header" title="트위터 헤더 1500×500">3:1</button>
+        <button data-ratio="fit" title="카드 높이가 문구 길이에 맞춰 늘고 줄어요 — 위아래 여백은 '여백' 으로">내용 맞춤</button>
       </div>
       <div class="field-group" style="margin-top:14px;">
         <label class="field-label" style="display:flex;align-items:center;">
@@ -2936,7 +2937,8 @@
     square:   { w: 680, h: 680 },
     portrait: { w: 600, h: 750 },
     wide:     { w: 800, h: 450 },
-    header:   { w: 1500, h: 500 }    // 트위터 헤더 규격
+    header:   { w: 1500, h: 500 },   // 트위터 헤더 규격
+    fit:      { w: 680, h: 680 }     // 너비만 고정, 높이는 내용 + 여백만큼 (세로쓰기는 1:1)
   };
 
   // 비율별 권장 편집값 — 3:1 처럼 극단적인 비율은 기본 여백·글자 크기가
@@ -4517,7 +4519,7 @@
     card.style.maxWidth = r.w + 'px';
     card.style.width = '100%';
     card.style.height = 'auto';
-    card.style.aspectRatio = r.w + ' / ' + r.h;
+    card.style.aspectRatio = (state.ratio === 'fit' && !state.vertical) ? 'auto' : r.w + ' / ' + r.h;
 
     // 본문 크기 = 슬라이더 크기 × 글씨체 보정 배율
     const realSize = size * fontScale;
@@ -5087,7 +5089,7 @@
       const hex = $('patternColor').value;
       const angle = parseInt($('patternAngleRange').value, 10) || 0;
       const r0 = RATIOS[state.ratio] || RATIOS.square;
-      const key = [pKind, size, alpha, hex, angle, r0.w, r0.h].join('|');
+      const key = [pKind, size, alpha, hex, angle, r0.w, r0.h, state.ratio === 'fit'].join('|');
       if (key !== patternCache) {
         if (angle === 0) {
           // 회전이 없으면 작은 타일을 반복해서 쓰는 게 가볍고 또렷하다
@@ -5097,11 +5099,14 @@
           pat.style.backgroundRepeat = 'repeat';
         } else {
           // 회전이 있으면 카드 크기 캔버스에 굽는다 (저장할 때 확대되니 3배로)
+          // 내용 맞춤은 높이가 계속 바뀌므로 세로로 넉넉히(3배) 구워 위에서부터 잘라 쓴다
           const SS = 3;
+          const fit = state.ratio === 'fit';
           const url = makeRotatedPatternURL(pKind, hex, size, alpha, angle,
-                                            r0.w * SS, r0.h * SS);
+                                            r0.w * SS, r0.h * (fit ? 3 : 1) * SS);
           pat.style.backgroundImage = url ? 'url(' + url + ')' : 'none';
-          pat.style.backgroundSize = '100% 100%';
+          pat.style.backgroundSize = fit ? '100% auto' : '100% 100%';
+          pat.style.backgroundPosition = fit ? '50% 0' : '';
           pat.style.backgroundRepeat = 'no-repeat';
         }
         patternCache = key;
