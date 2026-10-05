@@ -806,6 +806,12 @@
     color: var(--text-dim);
   }
   .multi-help .mh-label { font-weight: 600; color: var(--text-dim); }
+  .multi-help .mh-nav, .multi-help .mh-break { display: none; }
+  .multi-help.has-pages .mh-nav { display: flex; align-items: center; gap: 2px; margin-left: 8px; flex: 1; }
+  .multi-help.has-pages .mh-break { display: block; flex-basis: 100%; height: 0; }
+  .multi-help .mh-nav .page-ind { min-width: 44px; }
+  .multi-help .mh-nav #qPageEdit { margin-left: auto !important; }
+  .multi-help #qPageEdit.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .multi-help .mini-btn { height: 26px; }
   .multi-help b {
     font-weight: 700; color: var(--text);
@@ -1604,6 +1610,14 @@
       </div>
       <div class="multi-help">
         <span class="mh-label" title="문구 중간에 --- 만 있는 줄을 넣으면 거기서 장이 나뉘어요">여러 장</span>
+        <!-- 장이 둘 이상일 때만 — 미리보기 아래 넘기기와 같은 동작 -->
+        <span class="mh-nav" id="qPageNav">
+          <button class="page-btn" id="qPagePrev" type="button" title="이전 장">◀</button>
+          <span class="page-ind" id="qPageInd">1 / 1</span>
+          <button class="page-btn" id="qPageNext" type="button" title="다음 장">▶</button>
+          <button class="mini-btn" id="qPageEdit" type="button" title="입력창에 지금 보는 장만 보여줍니다">이 장만 편집</button>
+        </span>
+        <span class="mh-break"></span>
         <button class="mini-btn" id="insertSepBtn" type="button" title="커서 자리에 --- 줄을 넣어 장을 나눠요">장 나누기</button>
         <button class="mini-btn" id="stitchBtn" type="button"
                 title="나뉜 장들을 세로로 이어 한 장으로 저장">이어붙여 저장</button>
@@ -4112,6 +4126,8 @@
     $('quoteInput').value = getPages()[curPage] || '';
     $('pageEditToggle').classList.add('on');
     $('pageEditToggle').textContent = '\uC804\uCCB4 \uD3B8\uC9D1';
+    $('qPageEdit').classList.add('on');
+    $('qPageEdit').textContent = '전체 편집';
     renderCard();
   }
   function exitPageEdit() {
@@ -4120,6 +4136,8 @@
     $('quoteInput').value = pageEdit.master;
     $('pageEditToggle').classList.remove('on');
     $('pageEditToggle').textContent = '\uC774 \uC7A5\uB9CC \uD3B8\uC9D1';
+    $('qPageEdit').classList.remove('on');
+    $('qPageEdit').textContent = '이 장만 편집';
     renderCard();
   }
   // 입력창 내용(현재 장)을 전체 글에 되박아 넣는다
@@ -4151,6 +4169,10 @@
       if (curPage < 0) curPage = 0;
       $('pageInd').textContent = (curPage + 1) + ' / ' + pages.length;
     }
+    // 발췌 문구 칸의 넘기기도 같이
+    const mh = document.querySelector('.multi-help');
+    if (mh) mh.classList.toggle('has-pages', pages.length > 1);
+    if ($('qPageInd')) $('qPageInd').textContent = (curPage + 1) + ' / ' + pages.length;
   }
 
   function renderCard() {
@@ -4355,6 +4377,11 @@
   $('pageNext').addEventListener('click', () => {
     const pages = getPages();
     if (curPage < pages.length - 1) { curPage++; showPageInInput(); renderCard(); }
+  });
+  // 발췌 문구 칸의 넘기기 — 미리보기 아래 버튼을 그대로 누른다
+  [['qPagePrev', 'pagePrev'], ['qPageNext', 'pageNext'], ['qPageEdit', 'pageEditToggle']].forEach(([a, b]) => {
+    $(a).addEventListener('mousedown', ev => ev.preventDefault());   // 입력칸 커서 유지
+    $(a).addEventListener('click', () => $(b).click());
   });
   $('pageEditToggle').addEventListener('click', () => {
     if (pageEdit.on) exitPageEdit();
