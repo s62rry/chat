@@ -2609,6 +2609,7 @@
           <button data-tkp="imsg" type="button">아이메시지</button>
           <button data-tkp="line" type="button">라인</button>
           <button data-tkp="insta" type="button">인스타</button>
+          <button data-tkp="bubble" type="button">버블</button>
           <button data-tkp="disc" type="button">디코</button>
           <button data-tkp="game" type="button">게임</button>
           <button data-tkp="gamel" type="button">게임 (밝게)</button>
@@ -8490,7 +8491,7 @@
       return '<img src="' + bakeAvatar(sp) + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;display:block;">';
     }
     return '<span style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;display:flex;align-items:center;justify-content:center;'
-      + 'background:#c7ccd4;color:#fff;font-weight:700;font-size:' + Math.round(size * 0.42) + 'px;">' + escapeHtml((tk.room || nm || '?').slice(0, 1)) + '</span>';
+      + 'background:' + (tk.style === 'bubble' ? '#b9a6f7' : '#c7ccd4') + ';color:#fff;font-weight:700;font-size:' + Math.round(size * 0.42) + 'px;">' + escapeHtml((tk.room || nm || '?').slice(0, 1)) + '</span>';
   }
   function tkTopbarEl() {
     const bg = $('tkBgColor').value;
@@ -8513,6 +8514,13 @@
       html = '<span style="position:absolute; left:' + Math.max(10, padX) + 'px; top:50%; transform:translateY(-50%); color:#0b84ff; display:flex;">' + TK_ICON.back + '</span>'
         + tkTopAvatarHtml(34)
         + '<span style="font-size:0.72em;">' + room + ' ›</span>';
+    } else if (st === 'bubble') {
+      css += 'background:#ffffff; border-bottom:1px solid rgba(80,60,140,0.08); color:#222;';
+      html = '<span style="display:flex;">' + TK_ICON.back + '</span>' + tkTopAvatarHtml(32)
+        + '<span style="display:flex; flex-direction:column; gap:2px; flex:1; min-width:0;">'
+        + '<b style="font-size:0.95em;">' + room + '</b>'
+        + (sub ? '<span style="font-size:0.68em; color:#8e6cf1; font-weight:600;">' + sub + '</span>' : '') + '</span>'
+        + '<span style="display:flex; opacity:0.75;">' + TK_ICON.menu + '</span>';
     } else if (st === 'insta') {
       css += 'background:#ffffff; border-bottom:1px solid rgba(0,0,0,0.08); color:#111;';
       html = '<span style="display:flex;">' + TK_ICON.back + '</span>' + tkTopAvatarHtml(30)
@@ -8959,6 +8967,8 @@
       }
       if (m.big) bub.style.fontSize = '1.45em';
       if (m.small) bub.style.fontSize = '0.82em';
+      // 버블 — 흰 말풍선이 바탕에서 살짝 떠 보이게
+      if (tk.style === 'bubble' && !tk.rowMode) bub.style.boxShadow = '0 1px 4px rgba(90,70,150,0.13)';
       if (tk.shape === 'tailtop') {
         // 뾰족한 위 꼬리 — 눌러 돌린 사각형이 가시처럼 옆으로 뻗는다
         bub.style.borderRadius = rad + 'px';
@@ -9512,6 +9522,10 @@
     insta: { bg: '#ffffff', shape: 'stack', radius: 18, nameMode: 'off', avatarOn: true, avRadius: 50,
              left: { bubble: '#efefef', text: '#111111' }, right: { bubble: '#4f5bd5', text: '#ffffff' },
              sliders: { tkRadiusRange: 18, tkGapRange: 8 } },
+    // 버블(디어유) — 연보라빛 회색 바탕, 왼쪽(아티스트)은 그림자 진 흰 말풍선, 오른쪽(나)은 보라
+    bubble: { bg: '#f3f1f8', shape: 'plain', radius: 16, nameMode: 'left', avatarOn: true, avRadius: 50,
+              left: { bubble: '#ffffff', text: '#222222' }, right: { bubble: '#8e6cf1', text: '#ffffff' },
+              sliders: { tkRadiusRange: 16, tkGapRange: 10 } },
     disc:  { bg: '#313338', shape: 'plain', radius: 8, nameMode: 'all', avatarOn: true,
              left: { bubble: '#313338', text: '#dbdee1' }, right: { bubble: '#313338', text: '#dbdee1' },
              rowMode: 'disc',
@@ -9600,6 +9614,7 @@
     imsg:  ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
     line:  ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
     insta: ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
+    bubble: ['narr', 'sys', 'trans', 'time', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
     disc:  ['narr', 'sys', 'trans', 'time', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
     game:  ['narr', 'sys', 'game', 'trans', 'big', 'small', 'emo', 'page', 'date'],
     gamel: ['narr', 'sys', 'game', 'trans', 'big', 'small', 'emo', 'page', 'date']
