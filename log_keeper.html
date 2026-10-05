@@ -3602,7 +3602,8 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg) {
   for (let i = 0; i < parts.length; i++) parts[i] = parts[i].replace(/@@LKJOB(\d+)@@/g, (m, n) => res[+n] || "");
   // 본문 글씨는 색만 넣고 글꼴·크기·줄간격은 비워 둔다 (티스토리 글씨 크기 설정이 그대로 먹게)
   const head = "<p><b>" + escapeHtml((chat.emoji ? chat.emoji + " " : "") + (chat.title || "")) + "</b></p>";
-  return '<div style="max-width:720px;margin:0 auto;word-break:keep-all;overflow-wrap:anywhere">' +
+  // box-shadow:none 은 일부 스킨(ONE LOGIN 등)이 [[HTML]] 안의 <details> 를 자체 상태창으로 바꿔 버리는 걸 막는 표시
+  return '<div style="max-width:720px;margin:0 auto;word-break:keep-all;overflow-wrap:anywhere;box-shadow:none">' +
     head + parts.join('<hr style="border:0;border-top:1px dashed #dde1ea;margin:30px 0">') + "</div>";
 }
 function lsGetSafe(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
