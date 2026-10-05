@@ -1602,6 +1602,22 @@ function lkJsxSnapper() {
     if (el.style) for (var k = 0; k < el.style.length; k++) o[el.style[k]] = el.style.getPropertyValue(el.style[k]);
     return o;
   }
+  function authoredPseudo(el, which) {
+    if (ruleList === null) ruleList = collectRules();
+    var o = {}, re = which === "::before" ? /::?before\b/ : /::?after\b/;
+    for (var i = 0; i < ruleList.length; i++) {
+      var r = ruleList[i];
+      if (!re.test(r.selectorText)) continue;
+      var hit = r.selectorText.split(",").some(function (sel) {
+        if (!re.test(sel)) return false;
+        var base = sel.replace(/::?(before|after)\b/g, "").trim() || "*";
+        try { return el.matches(base); } catch (e) { return false; }
+      });
+      if (!hit) continue;
+      for (var j = 0; j < r.style.length; j++) o[r.style[j]] = r.style.getPropertyValue(r.style[j]);
+    }
+    return o;
+  }
   function sizeOf(el, cs, au) {
     if (el instanceof SVGElement && el.tagName.toLowerCase() !== "svg") return "";
     var media = /^(IMG|CANVAS|VIDEO)$/.test(el.tagName) || el.tagName.toLowerCase() === "svg";
@@ -1625,6 +1641,8 @@ function lkJsxSnapper() {
       var bm = p.match(/^border-(top|right|bottom|left)-color$/);
       if (bm && cs.getPropertyValue("border-" + bm[1] + "-style") === "none") continue;
       if (/^(column-rule-color|text-emphasis-color|text-decoration-color|-webkit-text-stroke-color|-webkit-text-fill-color|outline-color)$/.test(p) && v === cs.color) continue;
+      // top/right/bottom/left 는 코드에 적힌 것만 (안 적힌 쪽도 계산값이 px 로 나와서, 양쪽이 다 박히면 폭이 바뀔 때 어긋남)
+      if (/^(top|right|bottom|left)$/.test(p) && !au[p]) continue;
       // 위치·크기·여백 등은 코드에 %·calc 로 적혀 있으면 그 값을 쓴다
       if (au[p] && RELV.test(au[p]) && !/^(width|height)$/.test(p) && !/var\(/.test(au[p])) v = au[p];
       if (p === "position" && v === "fixed") v = "absolute";
@@ -1638,12 +1656,17 @@ function lkJsxSnapper() {
     var c = ps && ps.content;
     if (!c || c === "none" || c === "normal") return "";
     var m = c.match(/^["'](.*)["']$/), text = m ? m[1] : "";
-    var def = defOf(document.createElement("span")), out = [];
+    var def = defOf(document.createElement("span")), out = [], au = authoredPseudo(el, which);
     for (var i = 0; i < ps.length; i++) {
       var p = ps[i];
       if (p === "content" || /^(--|transition|animation)/.test(p)) continue;
+      var wh = /^(width|height)$/.test(p);
+      if (!wh && SKIP.test(p)) continue;
+      if (/^(top|right|bottom|left)$/.test(p) && !au[p]) continue;
+      if (wh && !au[p]) continue;
       var v = ps.getPropertyValue(p);
-      if (v === def[p]) continue;
+      if (au[p] && RELV.test(au[p]) && !/var\(/.test(au[p])) v = au[p];
+      else if (v === def[p] && !wh) continue;
       if (INHERIT.test(p) && pcs.getPropertyValue(p) === v) continue;
       out.push(p + ":" + v);
     }
@@ -1758,9 +1781,11 @@ function lkJsxSnapper() {
       if (tag === "summary" || el.disabled) continue;
       if (tag === "input" && !/^(checkbox|radio)$/.test(el.type)) continue;
       var p = rkProps(el);
-      var c = (p && (p.onClick || p.onMouseDown || p.onPointerDown || (tag === "input" && p.onChange))) || tag === "button" || el.getAttribute("role") === "tab";
-      if (!c) continue;
       var cs = getComputedStyle(el);
+      // React onClick 이 없어도 손가락 커서면 눌리는 것으로 본다 (addEventListener 로 단 버튼)
+      var ptr = cs.cursor === "pointer" && (!el.parentElement || getComputedStyle(el.parentElement).cursor !== "pointer");
+      var c = (p && (p.onClick || p.onMouseDown || p.onPointerDown || p.onPointerUp || p.onMouseUp || p.onTouchEnd || (tag === "input" && p.onChange))) || tag === "button" || el.getAttribute("role") === "tab" || ptr;
+      if (!c) continue;
       if (cs.display === "none" || cs.visibility === "hidden") continue;
       cand.push(el);
     }
@@ -1776,7 +1801,13 @@ function lkJsxSnapper() {
     el.dispatchEvent(new MouseEvent("mouseup", o));
     el.click();
   }
-  function sig() { return document.getElementById("root").innerHTML; }
+  var sigMode = 0;
+  function sig() {
+    var h = document.getElementById("root").innerHTML;
+    if (sigMode >= 1) h = h.replace(/ style="[^"]*"/g, "");
+    if (sigMode >= 2) h = h.replace(/\d+/g, "#");
+    return h;
+  }
   async function remount() { window.__lkRemount(); await tick(); }
   async function goTo(path) {
     await remount();
@@ -1795,10 +1826,15 @@ function lkJsxSnapper() {
     document.head.appendChild(still);
     exploreStill = still;
     try {
-      await remount();
-      var s0 = sig();
-      await wait(120);
-      if (sig() !== s0) { return [snapAll()]; }       // 혼자 계속 바뀌는 상태창(시계·타자효과 등)은 지금 모습만
+      // 혼자 계속 바뀌는 부분(시계·움직이는 style)이 있으면 그걸 빼고 비교한다. 그래도 계속 바뀌면 지금 모습만
+      var s0 = null;
+      for (sigMode = 0; sigMode < 3; sigMode++) {
+        await remount();
+        s0 = sig();
+        await wait(150);
+        if (sig() === s0) break;
+      }
+      if (sigMode >= 3) { sigMode = 0; return [snapAll()]; }
       var MAXS = 30, deadline = Date.now() + 15000;
       var states = [{ path: [], sig: s0 }], trans = [], at = 0;
       for (var s = 0; s < states.length; s++) {
@@ -3601,7 +3637,7 @@ function exInteractive(states, extra, inline) {
   return fonts + '<div class="' + uid + '"><style>' + css + "</style>" + divs + "</div>";
 }
 // 화면 밖에서 새로 그려서 버튼/탭을 하나씩 눌러 보고, 화면별 모습을 라디오+CSS 로 묶는다
-const EX_VER = "ex3";
+const EX_VER = "ex4";
 const _exMem = new Map();
 async function snapJsxForExport(src, chat, inline) {
   const nm = (src.match(/^\s*<\s*([A-Za-z_$][\w$]*)/) || [])[1];
