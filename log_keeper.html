@@ -1711,14 +1711,14 @@ function lkJsxSnapper() {
     el.click();
   }
   function sig() { return document.getElementById("root").innerHTML; }
-  async function remount() { window.__lkRemount(); await wait(70); }
+  async function remount() { window.__lkRemount(); await wait(16); }
   async function goTo(path) {
     await remount();
     for (var i = 0; i < path.length; i++) {
       var cl = clickables();
       if (!cl[path[i]]) return false;
       fire(cl[path[i]]);
-      await wait(50);
+      await wait(16);
     }
     return true;
   }
@@ -1730,9 +1730,9 @@ function lkJsxSnapper() {
     try {
       await remount();
       var s0 = sig();
-      await wait(150);
+      await wait(120);
       if (sig() !== s0) { return [snapAll()]; }       // 혼자 계속 바뀌는 상태창(시계·타자효과 등)은 지금 모습만
-      var MAXS = 12, deadline = Date.now() + 12000;
+      var MAXS = 10, deadline = Date.now() + 8000;
       var states = [{ path: [], sig: s0 }], trans = [], at = 0;
       for (var s = 0; s < states.length; s++) {
         if (at !== s) { await goTo(states[s].path); at = s; }
@@ -1743,7 +1743,7 @@ function lkJsxSnapper() {
           var cl = clickables();
           if (!cl[k]) continue;
           fire(cl[k]);
-          await wait(50);
+          await wait(16);
           var g = sig(), t = -1;
           for (var q = 0; q < states.length; q++) if (states[q].sig === g) { t = q; break; }
           if (t < 0 && states.length < MAXS && states[s].path.length < 3) { t = states.length; states.push({ path: states[s].path.concat([k]), sig: g }); }
@@ -1820,7 +1820,7 @@ async function buildJsxDoc(src, chat) {
     "<script>" + esc(compP) + "<\/script>" +
     "<script>(function(){if(!window.__lkC){if(window.__lkErr&&!document.querySelector('.lk-err'))window.__lkErr('상태창 컴포넌트를 찾지 못했어요');return;}" +
     "var p=window.__lkP||{},q={};for(var k in p){var v=p[k];if(typeof v==='string'&&/^\\s*[\\[{]/.test(v)){try{v=JSON.parse(v)}catch(e){}}q[k]=v}" +
-    "try{var R=ReactDOM.createRoot(document.getElementById('root')),K=0;window.__lkRemount=function(){R.render(React.createElement(window.__lkC,Object.assign({},q,{key:'lk'+(++K)})))};R.render(React.createElement(window.__lkC,q));window.__lkOk=1}catch(e){window.__lkErr('상태창 오류: '+(e&&e.message||e))}" +
+    "try{var R=ReactDOM.createRoot(document.getElementById('root')),K=0;window.__lkRemount=function(){var el=React.createElement(window.__lkC,Object.assign({},q,{key:'lk'+(++K)}));if(ReactDOM.flushSync)ReactDOM.flushSync(function(){R.render(el)});else R.render(el)};R.render(React.createElement(window.__lkC,q));window.__lkOk=1}catch(e){window.__lkErr('상태창 오류: '+(e&&e.message||e))}" +
     "setTimeout(window.__lkPost,60);setTimeout(window.__lkPost,500);setTimeout(window.__lkPost,1500);})();<\/script></body></html>";
   return { doc };
 }
@@ -3511,11 +3511,11 @@ async function snapJsxForExport(src, chat) {
   ifr.style.cssText = "width:680px;height:3000px;border:0;";
   exportHost().appendChild(ifr);
   try {
-    for (let i = 0; i < 40; i++) {
-      await new Promise(r => setTimeout(r, 250));
+    for (let i = 0; i < 100; i++) {
+      await new Promise(r => setTimeout(r, 100));
       const r1 = await askJsxSnap(ifr, 2000);
       if (r1 && r1.ok) {
-        await new Promise(r => setTimeout(r, 300));   // 마운트 직후 바뀌는 값까지 반영
+        await new Promise(r => setTimeout(r, 150));   // 마운트 직후 바뀌는 값까지 반영
         const r2 = await askJsxSnap(ifr, 40000, "lk-jsx-explore");
         return exInteractive(r2 && r2.ok && r2.states && r2.states.length ? r2.states : [r1.html]);
       }
@@ -3559,10 +3559,9 @@ function exStatus(data) {
 async function buildTistoryHtml(chat, from, to, withNo, onProg) {
   const all = sortedTurns(chat);
   const turns = all.slice(from - 1, to);
-  const parts = [];
+  const parts = [], jobs = [];
   for (let ti = 0; ti < turns.length; ti++) {
     const turn = turns[ti];
-    onProg && onProg(ti + 1, turns.length);
     let h = "";
     let blocks;
     try { blocks = parseLog(turn.raw); } catch (e) { blocks = [{ kind: "prose", text: turn.raw || "" }]; }
@@ -3574,9 +3573,8 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg) {
         else if (b.kind === "status") h += exStatus(b.data);
         else if (b.kind === "htmlstatus") h += '<div style="margin:14px 0">' + sanitizeHtml(b.html) + "</div>";
         else if (b.kind === "jsx") {
-          const html = await snapJsxForExport(b.src, chat);
-          h += html ? '<div style="margin:16px 0">' + html + "</div>"
-                    : '<div style="margin:16px 0;padding:10px;border:1px dashed #ccc;border-radius:8px;font-size:12px;color:#999">(상태창을 그리지 못했어요)</div>';
+          h += "@@LKJOB" + jobs.length + "@@";
+          jobs.push(b.src);
         }
       } catch (e) { console.warn("export block failed", e); }
     }
@@ -3584,6 +3582,21 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg) {
     const label = withNo ? '<p style="color:#2f6df0"><b>TURN ' + (no != null ? no : (chat.turns.indexOf(turn) + 1)) + "</b></p>" : "";
     parts.push("<div>" + label + h + "</div>");
   }
+  // 상태창은 4개씩 동시에 그린다
+  const res = new Array(jobs.length);
+  let next = 0, done = 0;
+  onProg && onProg(0, jobs.length);
+  await Promise.all(Array.from({ length: Math.min(4, jobs.length) }, async () => {
+    while (next < jobs.length) {
+      const i = next++;
+      let html = null;
+      try { html = await snapJsxForExport(jobs[i], chat); } catch (e) { console.warn("export jsx failed", e); }
+      res[i] = html ? '<div style="margin:16px 0">' + html + "</div>"
+                    : '<div style="margin:16px 0;padding:10px;border:1px dashed #ccc;border-radius:8px;font-size:12px;color:#999">(상태창을 그리지 못했어요)</div>';
+      onProg && onProg(++done, jobs.length);
+    }
+  }));
+  for (let i = 0; i < parts.length; i++) parts[i] = parts[i].replace(/@@LKJOB(\d+)@@/g, (m, n) => res[+n] || "");
   // 본문 글씨는 색만 넣고 글꼴·크기·줄간격은 비워 둔다 (티스토리 글씨 크기 설정이 그대로 먹게)
   const head = "<p><b>" + escapeHtml((chat.emoji ? chat.emoji + " " : "") + (chat.title || "")) + "</b></p>";
   return '<div style="max-width:720px;margin:0 auto;word-break:keep-all;overflow-wrap:anywhere">' +
@@ -3616,7 +3629,7 @@ function openTistoryModal() {
     const to = Math.max(from, Math.min(n, parseInt($("exTo").value) || n));
     const prog = $("exProg");
     try {
-      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "만드는 중… " + i + " / " + t + "턴"; });
+      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "상태창 그리는 중… " + i + " / " + t; });
       const kb = Math.round(html.length / 1024);
       if (mode === "copy") {
         const wrap = $("exWrap").checked;
