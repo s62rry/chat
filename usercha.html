@@ -493,6 +493,13 @@
   }
   .field textarea { resize: vertical; min-height: 60px; line-height: 1.5; }
   .field-row { display: flex; gap: 10px; }
+  /* 라벨 오른쪽 끝에 작은 버튼 */
+  .field label.label-with-btn { display: flex; align-items: center; }
+  .mini-copy {
+    margin-left: auto; padding: 2px 9px; font-size: 10.5px; font-weight: 600;
+    border-radius: 999px; line-height: 1.5;
+  }
+  .mini-copy.copied { color: var(--accent); border-color: var(--accent); }
   .field-row .field { flex: 1; }
   /* ===== AU 탭 (편집·상세 공용) ===== */
   .ver-tabs {
@@ -1030,6 +1037,12 @@
         <label>설정</label>
         <textarea id="fMemo" placeholder="페르소나 정보 — 설정·성격·말투·세계관 등 자유롭게 적어두세요" rows="4"></textarea>
       </div>
+      <div class="field">
+        <label class="label-with-btn">프롬프트
+          <button type="button" class="mini-copy" id="fPromptCopy" title="프롬프트 복사">복사</button>
+        </label>
+        <textarea id="fPrompt" placeholder="AI 에 그대로 붙여넣을 프롬프트 — 복사 버튼으로 바로 가져가요" rows="4"></textarea>
+      </div>
       <div class="field" style="margin-bottom:0;">
         <label>태그</label>
         <div class="char-input-row">
@@ -1282,6 +1295,7 @@
       tagline: p.tagline || '',
       chars: Array.isArray(p.chars) ? p.chars : [],
       memo: p.memo || '',
+      prompt: p.prompt || '',
       tags: Array.isArray(p.tags) ? p.tags : [],
       hasImg: !!p.hasImg
     };
@@ -2167,7 +2181,7 @@
       vid: uid(), isOrig: !!isOrig, catId: '', label: '', subLabel: '',
       hideTop: false,
       name: '', age: '', height: '', gender: '',
-      tagline: '', chars: [], memo: '', tags: [],
+      tagline: '', chars: [], memo: '', prompt: '', tags: [],
       hasImg: false, _img: ''
     };
   }
@@ -2267,6 +2281,7 @@
     v.gender = $('fGender').value.trim();
     v.tagline = $('fTagline').value.trim();
     v.memo = $('fMemo').value;
+    v.prompt = $('fPrompt').value;
   }
   function ensureFirstOrig() {
     if (editVersions.length && !editVersions[0].isOrig) {
@@ -2333,6 +2348,7 @@
     $('fGender').value = v.gender || '';
     $('fTagline').value = v.tagline || '';
     $('fMemo').value = v.memo || '';
+    $('fPrompt').value = v.prompt || '';
     $('fCharInput').value = '';
     $('fTagInput').value = '';
     fillCategorySelect(v.catId || '');
@@ -2623,6 +2639,7 @@
       tagline: v.tagline || '',
       chars: (v.chars || []).slice(),
       memo: v.memo || '',
+      prompt: v.prompt || '',
       tags: (v.tags || []).slice(),
       hasImg: !!v._img
     }));
@@ -2823,6 +2840,13 @@
       cnt.textContent = v.memo.length + '자';
       body.appendChild(cnt);
     }
+    if (v.prompt) {
+      body.appendChild(makeSection('프롬프트', v.prompt));
+      const cnt2 = document.createElement('div');
+      cnt2.className = 'detail-charcount';
+      cnt2.textContent = v.prompt.length + '자';
+      body.appendChild(cnt2);
+    }
   }
   function makeTagSection(arr) {
     const sec = document.createElement('div');
@@ -2882,6 +2906,20 @@
     sec.appendChild(t);
     return sec;
   }
+  // 편집 창의 프롬프트 복사
+  $('fPromptCopy').addEventListener('click', () => {
+    const text = $('fPrompt').value;
+    if (!text.trim()) { toast('프롬프트가 비어 있어요'); return; }
+    const btn = $('fPromptCopy');
+    const done = () => {
+      btn.textContent = '복사됨!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '복사'; btn.classList.remove('copied'); }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, () => { fallbackCopy(text); done(); });
+    } else { fallbackCopy(text); done(); }
+  });
   function fallbackCopy(text) {
     const ta = document.createElement('textarea');
     ta.value = text;
@@ -3009,6 +3047,7 @@
               tagline: rv.tagline || '',
               chars: Array.isArray(rv.chars) ? rv.chars : [],
               memo: rv.memo || '',
+              prompt: rv.prompt || '',
               tags: Array.isArray(rv.tags) ? rv.tags : [],
               hasImg: !!(rv.img && rv.img.indexOf
                 && rv.img.indexOf('data:') === 0)
@@ -3034,6 +3073,7 @@
             tagline: rp.tagline || '',
             chars: Array.isArray(rp.chars) ? rp.chars : [],
             memo: rp.memo || '',
+            prompt: rp.prompt || '',
             tags: Array.isArray(rp.tags) ? rp.tags : [],
             hasImg: !!(rp.img && rp.img.indexOf
               && rp.img.indexOf('data:') === 0)
