@@ -210,23 +210,23 @@
     background: var(--accent); color: #fff;
     box-shadow: 0 1px 3px rgba(0,0,0,0.15);
   }
-  .ed-tabs .ed-undo {
+  .ed-undo {
     flex: 0 0 auto; width: 26px; height: 26px; padding: 0;
     display: flex; align-items: center; justify-content: center;
     border-radius: 7px; color: var(--text-dim);
   }
-  .ed-tabs .ed-undo svg { width: 13px; height: 13px; }
-  .ed-tabs .ed-undo:not(:disabled) {
+  .ed-undo svg { width: 13px; height: 13px; }
+  .ed-undo:not(:disabled) {
     background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent);
   }
-  .ed-tabs .ed-undo:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .ed-tabs .ed-undo:disabled {
+  .ed-undo:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ed-undo:disabled {
     background: color-mix(in srgb, var(--panel) 55%, transparent);
     border-color: color-mix(in srgb, var(--border) 60%, transparent);
     color: var(--text-dim);
     cursor: default; transform: none;
   }
-  .ed-tabs .ed-undo:disabled svg { opacity: 0.45; }
+  .ed-undo:disabled svg { opacity: 0.45; }
   .editor .section.tab-hide { display: none; }
   /* 미리보기를 눌러 찾아간 영역을 잠깐 표시 */
   .editor .section.sec-flash { box-shadow: 0 0 0 2px var(--accent); transition: box-shadow 0.2s ease; }
@@ -654,6 +654,7 @@
   }
   .ps-frame {
     position: relative; overflow: hidden;
+    isolation: isolate;          /* 흐리게(opacity) 할 때 안쪽 겹침 순서가 바깥으로 새지 않게 */
     border-radius: 6px;
     outline: 2px solid transparent; outline-offset: 2px;
     box-shadow: 0 3px 10px rgba(0,0,0,0.2);
@@ -692,6 +693,31 @@
   .preview-stack.spread .ps-item:not(.cur):hover { opacity: 0.85; }
   .preview-stack.spread .ps-item.cur .ps-frame { outline-color: transparent; }
   .preview-stack.spread .ps-item:hover .ps-frame { transform: none; }
+  /* 메시지 쪽 — 같은 모아보기 */
+  .tk-stack {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    width: 100%;
+  }
+  .ps-frame > #chat {
+    position: absolute !important; left: 0; top: 0; z-index: 0;
+    transform-origin: 0 0; margin: 0 !important;
+    pointer-events: none;
+  }
+  .tk-stack.spread > .chat-shell {
+    position: absolute; left: 0; top: 0;
+    visibility: hidden; pointer-events: none;
+  }
+  .tk-stack.spread > .page-strip { order: -1; gap: 18px; padding: 8px 8px 14px; align-items: flex-start; }
+  .tk-stack.spread .ps-frame { border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.28); }
+  .tk-stack.spread .ps-item { transition: opacity 0.25s ease; }
+  .tk-stack.spread .ps-item:not(.cur) { opacity: 0.6; }
+  .tk-stack.spread .ps-item:not(.cur):hover { opacity: 0.85; }
+  .tk-stack.spread .ps-item.cur .ps-frame { outline-color: transparent; }
+  .tk-stack.spread .ps-item:hover .ps-frame { transform: none; }
+  .tk-stack .page-strip { align-items: flex-start; }
+  #tkStripToggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .section-title .ed-undo { width: 24px; height: 24px; }
 
   /* 발췌 카드 */
   #card {
@@ -2584,7 +2610,14 @@
     </div>
 
     <div class="section">
-      <div class="section-title">화면</div>
+      <div class="section-title">화면
+        <button type="button" class="ed-undo" id="tkUndoBtn" title="화면 설정 되돌리기 (대본 칸 밖에서 Ctrl+Z)" disabled style="margin-left:auto;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>
+        </button>
+        <button type="button" class="ed-undo" id="tkRedoBtn" title="화면 설정 다시 하기 (Ctrl+Shift+Z)" disabled style="margin-left:3px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>
+        </button>
+      </div>
       <div class="field-group">
         <label class="field-label">프리셋</label>
         <div class="seg" id="tkPresetSeg">
@@ -2793,12 +2826,22 @@
       <!-- 모아보기 — 장마다 카드를 작게 복제해 나란히 (누르면 그 장으로) -->
       <div class="page-strip" id="pageStrip"></div>
     </div>
-    <div class="chat-shell" id="chatWrap" style="display:none;"><div id="chat"></div></div>
-    <div class="page-nav" id="tkNav" style="display:none;">
+    <!-- 메시지 화면 + 장 넘기기 + 모아보기를 세로로 묶음 -->
+    <div class="tk-stack" id="tkStack" style="display:none;">
+      <div class="chat-shell" id="chatWrap" style="display:none;"><div id="chat"></div></div>
+      <div class="page-nav" id="tkNav" style="display:none;">
         <button class="page-btn" id="tkPrev" type="button">◀</button>
         <span class="page-ind" id="tkInd">1 / 1</span>
         <button class="page-btn" id="tkNext" type="button">▶</button>
+        <button class="mini-btn" id="tkStripToggle" type="button" style="margin-left:9px;"
+                title="모든 장을 옆으로 나란히 보여줍니다">모아보기</button>
+        <span class="seg ps-size" id="tkStripSizeSeg">
+          <button type="button" data-psz="small" title="아래에 작게">작게</button>
+          <button type="button" data-psz="big" title="미리보기 자리에 크게 나란히">크게</button>
+        </span>
       </div>
+      <div class="page-strip" id="tkStrip"></div>
+    </div>
   </div>
 </main>
 
@@ -8936,6 +8979,7 @@
     $('talkEditor').style.display = talk ? '' : 'none';
     document.querySelector('.preview-stack').style.display = talk ? 'none' : '';
     $('chatWrap').style.display = talk ? '' : 'none';
+    $('tkStack').style.display = talk ? '' : 'none';
     if (talk) { $('pageNav').style.display = 'none'; tkRender(); }
     else renderCard();
     try { localStorage.setItem('quotecard:mode', m); } catch (e) {}
@@ -9049,6 +9093,163 @@
   $('tkNext').addEventListener('click', () => { if (tk.page < tkPages().length - 1) { tk.page++; tkRender(); } });
   $('tkClearBtn').addEventListener('click', () => { $('tkScript').value = ''; tkRenderAll(); tkPersist(); });
 
+  // ===== 메시지 화면 설정 되돌리기 — 대본은 입력칸 자체 실행취소가 맡는다 =====
+  const tkHist = { undo: [], redo: [], cur: null, timer: null, applying: false };
+  function tkSnapKey() { return JSON.stringify(tkSnapshot()); }
+  function tkHistBtns() {
+    $('tkUndoBtn').disabled = !tkHist.undo.length;
+    $('tkRedoBtn').disabled = !tkHist.redo.length;
+  }
+  function tkHistSoon(ev) {
+    if (tkHist.applying) return;
+    if (ev && ev.target && ev.target.closest && ev.target.closest('#tkScript, #tkUndoBtn, #tkRedoBtn')) return;
+    clearTimeout(tkHist.timer);
+    tkHist.timer = setTimeout(() => {
+      const now = tkSnapKey();
+      if (tkHist.cur !== null && now !== tkHist.cur) {
+        tkHist.undo.push(tkHist.cur);
+        if (tkHist.undo.length > 60) tkHist.undo.shift();
+        tkHist.redo = [];
+      }
+      tkHist.cur = now;
+      tkHistBtns();
+    }, 450);
+  }
+  function tkHistStep(redo) {
+    clearTimeout(tkHist.timer);
+    const from = redo ? tkHist.redo : tkHist.undo;
+    const to = redo ? tkHist.undo : tkHist.redo;
+    if (!from.length) { toast(redo ? '다시 할 설정이 없어요' : '되돌릴 설정이 없어요'); return; }
+    to.push(tkHist.cur !== null ? tkHist.cur : tkSnapKey());
+    const key = from.pop();
+    tkHist.applying = true;
+    try {
+      tk.speakers = {};             // 합치지 않고 그때 그대로
+      tkApplySnapshot(JSON.parse(key));
+    } finally { tkHist.applying = false; }
+    tkHist.cur = key;
+    tkHistBtns();
+    toast(redo ? '화면 설정을 다시 적용했어요' : '화면 설정을 되돌렸어요');
+  }
+  $('tkUndoBtn').addEventListener('click', () => tkHistStep(false));
+  $('tkRedoBtn').addEventListener('click', () => tkHistStep(true));
+  ['input', 'change', 'click', 'pointerup'].forEach(t =>
+    $('talkEditor').addEventListener(t, tkHistSoon, true));
+  window.addEventListener('keydown', ev => {
+    if (uiMode !== 'talk') return;
+    if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+    const k = (ev.key || '').toLowerCase();
+    if (k !== 'z' && k !== 'y') return;
+    const a = document.activeElement;
+    if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+    ev.preventDefault();
+    tkHistStep(k === 'y' || ev.shiftKey);
+  });
+
+  // ===== 메시지 모아보기 — 발췌 쪽과 같은 방식 (장마다 그려서 화면 복제) =====
+  const TK_STRIP_KEY = 'quotecard:tkStrip';
+  let tkStripOn = false, tkStripSize = 'small', tkStripTimer = null, tkStripBuilding = false;
+  try {
+    tkStripOn = localStorage.getItem(TK_STRIP_KEY) === '1';
+    tkStripSize = localStorage.getItem(TK_STRIP_KEY + 'Size') === 'big' ? 'big' : 'small';
+  } catch (e) {}
+  function tkCenterCur(smooth) {
+    const strip = $('tkStrip');
+    const cur = strip.querySelector('.ps-item.cur');
+    if (!cur) return;
+    strip.scrollTo({ left: cur.offsetLeft + cur.offsetWidth / 2 - strip.clientWidth / 2,
+                     behavior: smooth ? 'smooth' : 'auto' });
+  }
+  function tkMarkCur() {
+    $('tkStrip').querySelectorAll('.ps-item').forEach((it, i) => it.classList.toggle('cur', i === tk.page));
+    if (tkStripSize === 'big') tkCenterCur(true);
+    else {
+      const cur = $('tkStrip').querySelector('.ps-item.cur');
+      if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    }
+  }
+  function tkBuildStrip() {
+    const strip = $('tkStrip');
+    const pages = tkPages();
+    const show = tkStripOn && uiMode === 'talk' && pages.length > 1;
+    const big = show && tkStripSize === 'big';
+    strip.classList.toggle('on', show);
+    $('tkStripToggle').classList.toggle('on', tkStripOn);
+    $('tkStripSizeSeg').classList.toggle('show', tkStripOn);
+    $('tkStripSizeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.psz === tkStripSize));
+    $('tkStack').classList.toggle('spread', big);
+    if (!show) { strip.innerHTML = ''; strip.style.paddingLeft = strip.style.paddingRight = ''; return; }
+    const chat = $('chat');
+    const keep = tk.page;
+    const W = chat.offsetWidth || 420;
+    const TW = big ? W : 110;
+    const sc = TW / W;
+    const items = [];
+    tkStripBuilding = true;
+    try {
+      for (let i = 0; i < pages.length; i++) {
+        tk.page = i;
+        tkRender();
+        const H = chat.offsetHeight;
+        const clone = chat.cloneNode(true);
+        clone.style.width = W + 'px';
+        clone.style.maxWidth = 'none';
+        clone.style.transform = 'scale(' + sc + ')';
+        clone.setAttribute('aria-hidden', 'true');
+        clone.inert = true;
+        const item = document.createElement('div');
+        item.className = 'ps-item' + (i === keep ? ' cur' : '');
+        item.title = (i + 1) + '장으로';
+        const frame = document.createElement('div');
+        frame.className = 'ps-frame';
+        frame.style.width = TW + 'px';
+        frame.style.height = Math.round(H * sc) + 'px';
+        frame.appendChild(clone);
+        const num = document.createElement('span');
+        num.className = 'ps-num';
+        num.textContent = (i + 1) + ' / ' + pages.length;
+        item.appendChild(frame);
+        item.appendChild(num);
+        item.addEventListener('click', () => { tk.page = i; tkRender(); tkMarkCur(); });
+        items.push(item);
+      }
+    } finally {
+      tk.page = keep;
+      tkRender();
+      tkStripBuilding = false;
+    }
+    const sl = strip.scrollLeft;
+    strip.innerHTML = '';
+    items.forEach(it => strip.appendChild(it));
+    strip.style.paddingLeft = strip.style.paddingRight = big ? 'calc(50% - ' + (TW / 2) + 'px)' : '';
+    strip.scrollLeft = sl;
+    if (big) tkCenterCur(false);
+  }
+  function tkStripSoon() {
+    if (!tkStripOn || tkStripBuilding) return;
+    clearTimeout(tkStripTimer);
+    tkStripTimer = setTimeout(tkBuildStrip, 450);
+  }
+  $('tkStripToggle').addEventListener('click', () => {
+    tkStripOn = !tkStripOn;
+    try { localStorage.setItem(TK_STRIP_KEY, tkStripOn ? '1' : '0'); } catch (e) {}
+    tkBuildStrip();
+  });
+  $('tkStripSizeSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    tkStripSize = b.dataset.psz;
+    try { localStorage.setItem(TK_STRIP_KEY + 'Size', tkStripSize); } catch (e) {}
+    tkBuildStrip();
+  }));
+  ['input', 'change', 'pointerup'].forEach(t => document.addEventListener(t, ev => {
+    if (ev.target.closest && ev.target.closest('#tkStrip')) return;
+    tkStripSoon();
+  }, true));
+  document.addEventListener('click', ev => {
+    if (ev.target.closest('#tkPrev, #tkNext') && tkStripOn) setTimeout(tkMarkCur, 0);
+    if (ev.target.closest('#modeSeg')) setTimeout(tkBuildStrip, 0);
+  }, true);
+  window.addEventListener('resize', tkStripSoon);
+
   tkRestore();
   tkFillStickers();
   tkLoadHistory().then(tkRenderHistory);
@@ -9057,6 +9258,8 @@
   try {
     if (localStorage.getItem('quotecard:mode') === 'talk') setUiMode('talk');
   } catch (e) {}
+  tkHist.cur = tkSnapKey();
+  setTimeout(tkBuildStrip, 300);
 
 })();
 
