@@ -649,6 +649,8 @@
   }
   .grp-head span { font-size: 10.5px; font-weight: 400; color: var(--text-dim); }
   .tk-style-grid { grid-template-columns: repeat(4, 1fr); }
+  #tkTopSeg button { height: 22px; padding: 0 10px; font-size: 11px; }
+  #tkTopOpts input { width: 100%; }
   .tk-bar .fmt-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
   /* 모아보기 줄 */
@@ -2626,7 +2628,12 @@
         <button type="button" class="fmt-btn" data-tk="big" title="+ — 이 말풍선 글자 크게">크게</button>
         <button type="button" class="fmt-btn" data-tk="small" title="- — 이 말풍선 글자 작고 옅게">작게</button>
         <button type="button" class="fmt-btn" data-tk="emo" title=":번호: — 올린 이모티콘 넣기 (이모티콘 칸에서 고르기)">이모티콘</button>
+        <button type="button" class="fmt-btn" data-tk="date" title="== 날짜 — 이 줄 위에 날짜 구분선">날짜</button>
+        <button type="button" class="fmt-btn" data-tk="reply" title="> 이름: 원래 말 — 이 말풍선을 윗줄 말에 대한 답장으로">답장</button>
+        <button type="button" class="fmt-btn" data-tk="photo" title="[사진 1] — 사진 메시지 넣기">사진</button>
+        <button type="button" class="fmt-btn" data-tk="react" title="~❤️ — 이 말풍선에 반응 이모지">반응</button>
       </div>
+      <input type="file" id="tkPhotoFile" accept="image/*" style="display:none;">
       <div class="hint">
         <b>이름: 내용</b> 한 줄 = 말풍선 하나 (이름 없으면 앞사람이 이어 말함).
         버튼은 커서가 있는 줄에 붙고, 한 번 더 누르면 빠져요. 버튼 위에 마우스를 올리면 직접 쓰는 기호가 보여요.
@@ -2684,14 +2691,28 @@
         <button class="mini-btn" id="tkPresetSave" type="button" style="margin:7px 0 0;">+ 내 프리셋</button>
       </div>
       <!-- ① 화면 틀 — 대화 전체를 감싸는 판 -->
-      <div class="grp-head">화면 틀 <span>대화 전체를 감싸는 판</span></div>
-      <div class="row">
-        <div class="col-swatch">
-          <label class="field-label">배경 색</label>
-          <input type="color" class="swatch-input" id="tkBgColor" value="#b2c7da" style="height:31px; width:100%;">
+      <div class="grp-head">화면 틀</div>
+      <!-- 상단바 — 방 이름·뒤로가기 줄 (화면 종류에 맞는 모양) -->
+      <div class="field-group">
+        <label class="field-label" style="display:flex;align-items:center;">
+          상단바
+          <span class="seg" id="tkTopSeg" style="margin-left:auto; width:auto;">
+            <button type="button" data-top="off" class="active">끄기</button>
+            <button type="button" data-top="on">켜기</button>
+          </span>
+        </label>
+        <div class="row" id="tkTopOpts" style="display:none; margin:6px 0 0;">
+          <div><input type="text" id="tkRoomName" placeholder="방 이름" autocomplete="off" maxlength="30"></div>
+          <div><input type="text" id="tkRoomSub" placeholder="옆 글자 (인원·활동 중)" autocomplete="off" maxlength="20"></div>
         </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">배경 색</label>
+        <input type="color" class="swatch-input" id="tkBgColor" value="#b2c7da" style="height:31px; width:100%;">
+      </div>
+      <div class="field-group">
         <div>
-          <label class="field-label">틀 모서리 둥글기</label>
+          <label class="field-label">화면 모서리</label>
           <div class="slider-row">
             <input type="range" id="tkShellRange" min="0" max="30" value="0">
             <span class="slider-val" id="tkShellVal">0px</span>
@@ -2765,7 +2786,7 @@
       </div>
 
       <!-- ② 말풍선 — 말 하나하나 -->
-      <div class="grp-head">말풍선 <span>말 하나하나의 모양</span></div>
+      <div class="grp-head">말풍선</div>
       <div class="field-group">
         <label class="field-label">모양</label>
         <div class="seg" id="tkShapeSeg">
@@ -7999,10 +8020,19 @@
                avRadius: 50,     // 프사 모서리(%) — 50=원, 카톡은 42(둥근 네모)
                unreadColor: '#ffe000',   // 안읽음 숫자 색 (카톡만 노랑, 다른 프리셋은 회색)
                font: '', bgImg: '', stickers: [], page: 0,
-               style: '' };      // 고른 화면 종류 (카톡·라인…) — 대본 버튼 구성을 정한다
+               style: '',        // 고른 화면 종류 (카톡·라인…) — 대본 버튼 구성을 정한다
+               topbar: false, room: '', roomSub: '',   // 상단바
+               photos: {} };     // 사진 메시지 [사진 N] 그림들 (카톡·라인…) — 대본 버튼 구성을 정한다
   let uiMode = 'quote';
 
   let tkSaveTimer = null;
+  // 대본에 실제로 쓰인 사진만 저장한다
+  function tkUsedPhotos() {
+    const out = {};
+    const v = $('tkScript').value;
+    Object.keys(tk.photos || {}).forEach(id => { if (v.indexOf('[사진 ' + id + ']') !== -1) out[id] = tk.photos[id]; });
+    return out;
+  }
   function tkPersist() {
     clearTimeout(tkSaveTimer);
     tkSaveTimer = setTimeout(() => {
@@ -8017,6 +8047,8 @@
           font: tk.font,
           bgImg: tk.bgImg,
           stickers: tk.stickers,
+          topbar: tk.topbar, room: tk.room, roomSub: tk.roomSub,
+          photos: tkUsedPhotos(),
           rowMode: tk.rowMode,
           avRadius: tk.avRadius,
           unreadColor: tk.unreadColor,
@@ -8045,6 +8077,8 @@
       tk.font = d.font || '';
       tk.bgImg = d.bgImg || '';
       tk.stickers = Array.isArray(d.stickers) ? d.stickers : [];
+      tk.topbar = !!d.topbar; tk.room = d.room || ''; tk.roomSub = d.roomSub || '';
+      tk.photos = d.photos || {};
       tk.rowMode = d.rowMode || (d.gameRow ? 'game' : '');   // 옛 저장본 이관
       tk.avRadius = d.avRadius || 50;
       tk.unreadColor = d.unreadColor || '#ffe000';
@@ -8064,6 +8098,13 @@
       b.classList.toggle('active', b.dataset.shape === tk.shape));
     document.querySelectorAll('#tkPresetSeg button').forEach(b =>
       b.classList.toggle('active', b.dataset.tkp === tk.style));
+    document.querySelectorAll('#tkTopSeg button').forEach(b =>
+      b.classList.toggle('active', (b.dataset.top === 'on') === !!tk.topbar));
+    if ($('tkTopOpts')) {
+      $('tkTopOpts').style.display = tk.topbar ? '' : 'none';
+      if ($('tkRoomName').value !== tk.room) $('tkRoomName').value = tk.room || '';
+      if ($('tkRoomSub').value !== tk.roomSub) $('tkRoomSub').value = tk.roomSub || '';
+    }
     if (typeof tkUpdateBar === 'function') tkUpdateBar();
   }
 
@@ -8073,11 +8114,21 @@
     return raw.split(/\n(?:[ \t]*\n){2,}|\n[ \t]*-{3,}[ \t]*\n/).map(pt => {
       const msgs = [];
       let last = null;
+      let pendingReply = null;
       pt.split('\n').forEach(line => {
         let t = line.trim();
         if (!t) return;
         // 【이름: 내용】 처럼 감싸 붙여넣은 줄은 괄호를 벗기고 해석한다
         if (t.startsWith('\u3010') && t.endsWith('\u3011')) t = t.slice(1, -1).trim();
+        // "== 날짜" = 날짜 구분선
+        if (t.startsWith('==')) { msgs.push({ date: true, text: t.replace(/^=+\s*/, '') }); return; }
+        // "> 이름: 원래 말" = 바로 다음 말풍선이 이 말에 답장
+        if (t.startsWith('>')) {
+          const q = t.replace(/^>+\s*/, '');
+          const qm = q.match(/^([^:：]{1,20})[:：]\s*(.*)$/);
+          pendingReply = qm ? { name: qm[1].trim(), text: qm[2] } : { name: '', text: q };
+          return;
+        }
         // "//내용" = 가운데 시스템 알림 (카톡의 '메시지가 삭제되었습니다.' 같은 줄)
         if (t.startsWith('//')) {
           msgs.push({ sys: true, text: t.slice(2).trim() || '메시지가 삭제되었습니다.' });
@@ -8107,7 +8158,10 @@
         // "@3:15" 도, "@오후 3:15" 처럼 앞에 한 단어가 붙은 것도 먹는다.
         // "!1" 은 카톡 안읽음 숫자. 시간과 순서 상관없이 끝에 붙이면 된다.
         let unread = '';
-        for (let k = 0; k < 2; k++) {
+        let react = '';
+        for (let k = 0; k < 3; k++) {
+          const rmatch = body.match(/\s+~([^\s~]{1,8})$/);       // "~❤️" = 반응 이모지
+          if (rmatch && !react) { react = rmatch[1]; body = body.slice(0, rmatch.index); continue; }
           const tmatch = body.match(/\s+@((?:[^\s@]{1,6}[ ])?[0-9]{1,2}:[0-9]{2})$/);
           if (tmatch && !time) { time = tmatch[1]; body = body.slice(0, tmatch.index); continue; }
           const umatch = body.match(/\s+!([0-9]{1,2}|읽음|전송됨)$/);   // 숫자(카톡) 또는 읽음·전송됨
@@ -8136,10 +8190,14 @@
         if (name2 !== null) {
           const st = content.match(/^:(\d{1,2}):$/);          // ":1:" 한 줄 = 이모티콘
           if (st) { msgs.push({ name: name2, sticker: parseInt(st[1], 10) - 1, time: time, unread: unread }); return; }
+          const reply = pendingReply; pendingReply = null;
+          const ph = content.match(/^\[사진 (\d+)\]$/);     // "[사진 1]" = 사진 메시지
+          if (ph) { msgs.push({ name: name2, photo: ph[1], time: time, unread: unread, react: react, reply: reply }); return; }
           let big = false, small = false;
           if (content.startsWith('+ ')) { big = true; content = content.slice(2); }        // "+ " = 크게
           else if (content.startsWith('- ')) { small = true; content = content.slice(2); } // "- " = 작고 옅게
-          msgs.push({ name: name2, text: content, time: time, unread: unread, big: big, small: small });
+          msgs.push({ name: name2, text: content, time: time, unread: unread, big: big, small: small,
+                      react: react, reply: reply });
         } else {
           msgs.push({ narr: true, text: t });
         }
@@ -8414,6 +8472,102 @@
     const r = parseInt(h.slice(0, 2), 16) || 0, g = parseInt(h.slice(2, 4), 16) || 0, b = parseInt(h.slice(4, 6), 16) || 0;
     return (r * 299 + g * 587 + b * 114) / 1000 >= 140;
   }
+  // 상단바 — 화면 종류마다 실제 앱의 맨 윗줄처럼 (방 이름·뒤로가기·아이콘)
+  const TK_ICON = {
+    back: '<svg viewBox="0 0 24 24" width="1.25em" height="1.25em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 5 8 12 15 19"/></svg>',
+    search: '<svg viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><line x1="16" y1="16" x2="21" y2="21"/></svg>',
+    menu: '<svg viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>',
+    phone: '<svg viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>',
+    video: '<svg viewBox="0 0 24 24" width="1.25em" height="1.25em" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="M16 10l5-3v10l-5-3z"/></svg>',
+    hash: '<svg viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="9" y1="4" x2="7" y2="20"/><line x1="17" y1="4" x2="15" y2="20"/><line x1="4" y1="9" x2="20" y2="9"/><line x1="3" y1="15" x2="19" y2="15"/></svg>'
+  };
+  function tkTopAvatarHtml(size) {
+    // 왼쪽 화자 중 프사가 있으면 그걸, 없으면 이름 첫 글자 동그라미
+    const names = Object.keys(tk.speakers);
+    const nm = names.find(n => tk.speakers[n].side !== 'right') || names[0] || '';
+    const sp = tk.speakers[nm];
+    if (sp && sp.avatar) {
+      return '<img src="' + bakeAvatar(sp) + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;display:block;">';
+    }
+    return '<span style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;display:flex;align-items:center;justify-content:center;'
+      + 'background:#c7ccd4;color:#fff;font-weight:700;font-size:' + Math.round(size * 0.42) + 'px;">' + escapeHtml((tk.room || nm || '?').slice(0, 1)) + '</span>';
+  }
+  function tkTopbarEl() {
+    const bg = $('tkBgColor').value;
+    const ink = tkReadable(bg);
+    const padY = parseInt($('tkPadRange').value, 10) || 0;
+    const padX = parseInt($('tkPadXRange').value, 10) || 0;
+    const room = escapeHtml(tk.room || '채팅방');
+    const sub = escapeHtml(tk.roomSub || '');
+    const bar = document.createElement('div');
+    bar.className = 'tk-topbar';
+    let css = 'position:relative; display:flex; align-items:center; gap:8px;'
+      + 'margin:' + (-padY) + 'px ' + (-padX) + 'px ' + Math.max(10, padY) + 'px;'
+      + 'padding:10px ' + Math.max(12, padX) + 'px; font-size:0.95em; line-height:1.2;';
+    let html = '';
+    const st = tk.style;
+    if (st === 'imsg') {
+      // 가운데 프사 + 작은 이름, 왼쪽 파란 뒤로가기
+      css += 'flex-direction:column; gap:3px; padding-top:12px; padding-bottom:8px;'
+        + 'background:rgba(246,246,248,0.96); border-bottom:1px solid rgba(0,0,0,0.08); color:#111;';
+      html = '<span style="position:absolute; left:' + Math.max(10, padX) + 'px; top:50%; transform:translateY(-50%); color:#0b84ff; display:flex;">' + TK_ICON.back + '</span>'
+        + tkTopAvatarHtml(34)
+        + '<span style="font-size:0.72em;">' + room + ' ›</span>';
+    } else if (st === 'insta') {
+      css += 'background:#ffffff; border-bottom:1px solid rgba(0,0,0,0.08); color:#111;';
+      html = '<span style="display:flex;">' + TK_ICON.back + '</span>' + tkTopAvatarHtml(30)
+        + '<span style="display:flex; flex-direction:column; gap:1px; flex:1; min-width:0;">'
+        + '<b style="font-size:0.95em;">' + room + '</b>'
+        + (sub ? '<span style="font-size:0.7em; color:#8e8e8e;">' + sub + '</span>' : '') + '</span>'
+        + '<span style="display:flex; gap:14px;">' + TK_ICON.phone + TK_ICON.video + '</span>';
+    } else if (st === 'disc') {
+      css += 'background:rgba(0,0,0,0.18); border-bottom:1px solid rgba(0,0,0,0.25); color:' + ink + ';';
+      html = '<span style="display:flex; opacity:0.6;">' + TK_ICON.hash + '</span>'
+        + '<b style="flex:1;">' + room + '</b>'
+        + (sub ? '<span style="font-size:0.75em; opacity:0.55;">' + sub + '</span>' : '')
+        + '<span style="display:flex; gap:12px; opacity:0.7;">' + TK_ICON.search + TK_ICON.menu + '</span>';
+    } else {
+      // 카톡·라인 — 배경색 그대로, 뒤로가기 + 방 이름 + 인원, 오른쪽 검색·메뉴
+      css += 'background:' + (st === 'line' ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.035)') + '; color:' + ink + ';';
+      html = '<span style="display:flex;">' + TK_ICON.back + '</span>'
+        + '<b style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + room
+        + (sub ? ' <span style="font-weight:400; opacity:0.55; font-size:0.85em;">' + sub + '</span>' : '') + '</b>'
+        + '<span style="display:flex; gap:14px; opacity:0.85;">' + TK_ICON.search + TK_ICON.menu + '</span>';
+    }
+    if (parseInt($('tkShellRange').value, 10)) css += 'border-radius:0;';
+    bar.style.cssText = css;
+    bar.innerHTML = html;
+    return bar;
+  }
+  // 반응 이모지 — 말풍선 아래 모서리에 걸친 작은 알약
+  function tkReactEl(m, sp) {
+    const r = document.createElement('div');
+    r.className = 'tk-react';
+    r.textContent = m.react;
+    const dark = !tkIsLightBg();
+    r.style.cssText = 'position:absolute; bottom:-13px; font-size:0.78em; line-height:1;'
+      + 'padding:3px 5px; border-radius:999px; white-space:nowrap; z-index:2;'
+      + 'background:' + (dark ? '#2b2d31' : '#ffffff') + ';'
+      + 'box-shadow:0 1px 3px rgba(0,0,0,0.18);'
+      + (sp.side === 'right' ? 'right:6px;' : 'left:6px;');
+    return r;
+  }
+  // 답장 — 말풍선 위쪽에 '누구에게 답장 / 원래 말' 을 작게
+  function tkReplyEl(m, sp) {
+    const q = document.createElement('div');
+    q.className = 'tk-reply';
+    q.style.cssText = 'position:relative; display:block; margin-bottom:5px; padding-bottom:5px;'
+      + 'font-size:0.8em; line-height:1.4;'
+      + 'border-bottom:1px solid ' + hexToRgba(sp.text || '#000000', 0.22) + ';';
+    const who = document.createElement('div');
+    who.style.cssText = 'font-weight:600; opacity:0.85;';
+    who.textContent = (m.reply.name ? m.reply.name + '에게 답장' : '답장');
+    const what = document.createElement('div');
+    what.style.cssText = 'opacity:0.6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px;';
+    what.textContent = m.reply.text || '';
+    q.appendChild(who); q.appendChild(what);
+    return q;
+  }
   // 아이메시지·인스타 — 말풍선 옆에 시간이 없고, 시간은 가운데 회색 줄, 읽음은 말풍선 아래
   function tkReceiptStyle() { return tk.style === 'imsg' || tk.style === 'insta'; }
   function tkRender() {
@@ -8457,7 +8611,37 @@
       '귓': '#ff9ad5', '귓속말': '#ff9ad5',
       '파티': '#7fb2ff', '길드': '#7ee787', '전체': '#cfd6df'
     };
+    if (tk.topbar && tk.rowMode !== 'game') chat.appendChild(tkTopbarEl());
     msgs.forEach((m, i) => {
+      if (m.date) {
+        // 날짜 구분선 — 앱마다 실제 모양으로
+        const wrap = document.createElement('div');
+        wrap.className = 'msg-sys';
+        const ink = tkReadable($('tkBgColor').value);
+        if (tk.rowMode || tk.style === 'disc') {
+          // 디코·게임: 가는 줄 사이에 날짜
+          wrap.style.cssText = 'display:flex; align-items:center; gap:8px; margin:6px 0 12px;';
+          const line = () => { const l = document.createElement('span'); l.style.cssText = 'flex:1; height:1px; background:' + hexToRgba(ink.startsWith('#') ? ink : '#888888', 0.25) + ';'; return l; };
+          const tx = document.createElement('span');
+          tx.textContent = m.text;
+          tx.style.cssText = 'font-size:0.68em; font-weight:600; opacity:0.6; color:' + ink + ';';
+          wrap.appendChild(line()); wrap.appendChild(tx); wrap.appendChild(line());
+        } else if (tkReceiptStyle()) {
+          const tx = document.createElement('span');
+          tx.textContent = m.text;
+          tx.style.cssText = 'font-size:0.68em; font-weight:600; opacity:0.55; color:' + ink + ';';
+          wrap.appendChild(tx);
+        } else {
+          // 카톡·라인: 반투명 알약
+          const pill = document.createElement('span');
+          pill.textContent = m.text;
+          pill.style.cssText = 'display:inline-block; padding:4px 12px; border-radius:999px; font-size:0.7em; line-height:1.5;'
+            + 'background:' + (tkIsLightBg() ? 'rgba(0,0,0,0.13)' : 'rgba(255,255,255,0.14)') + '; color:' + ink + ';';
+          wrap.appendChild(pill);
+        }
+        chat.appendChild(wrap);
+        return;
+      }
       if (m.game) {
         const d = document.createElement('div');
         d.className = 'msg-game';
@@ -8568,7 +8752,22 @@
           }
           col.appendChild(head);
         }
-        if (m.sticker !== undefined) {
+        if (m.reply) {
+          const rq = document.createElement('div');
+          rq.style.cssText = 'font-size:0.74em; opacity:0.6; margin-bottom:2px;';
+          rq.style.color = spReal0.text || '#dbdee1';
+          rq.textContent = '↪ ' + (m.reply.name ? m.reply.name + ': ' : '') + (m.reply.text || '');
+          col.appendChild(rq);
+        }
+        if (m.photo !== undefined) {
+          const src = tk.photos[m.photo];
+          if (src) {
+            const img = document.createElement('img');
+            img.src = src;
+            img.style.cssText = 'max-width:min(260px, 100%); display:block; border-radius:8px; margin-top:2px;';
+            col.appendChild(img);
+          }
+        } else if (m.sticker !== undefined) {
           const src = tk.stickers[m.sticker];
           if (src) {
             const img = document.createElement('img');
@@ -8585,6 +8784,13 @@
           if (m.small) { tx.style.fontSize = '0.82em'; tx.style.opacity = '0.68'; }
           tx.textContent = m.text;
           col.appendChild(tx);
+        }
+        if (m.react) {
+          const rc = document.createElement('span');
+          rc.textContent = m.react;
+          rc.style.cssText = 'display:inline-block; align-self:flex-start; margin-top:4px; padding:2px 7px; border-radius:8px; font-size:0.78em;'
+            + 'background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12);';
+          col.appendChild(rc);
         }
         row.appendChild(col);
         chat.appendChild(row);
@@ -8607,7 +8813,7 @@
         }
         const tx = document.createElement('span');
         if (m.small) tx.style.opacity = '0.68';
-        tx.textContent = m.text + (m.trans ? ' (' + m.trans + ')' : '');
+        tx.textContent = (m.photo !== undefined ? '[사진]' : m.text) + (m.trans ? ' (' + m.trans + ')' : '');
         d.appendChild(tx);
         chat.appendChild(d);
         return;
@@ -8667,6 +8873,47 @@
         nmEl.textContent = m.name;
         nmEl.style.color = sp.nameColor || tkReadable($('tkBgColor').value);   // 안 정했으면 배경에 따라 자동
         body.appendChild(nmEl);
+      }
+      // 사진 메시지 — 말풍선 대신 둥근 사진 (시간·읽음·반응은 옆/아래에)
+      if (m.photo !== undefined) {
+        const src = tk.photos[m.photo];
+        const box = document.createElement('div');
+        box.style.cssText = 'position:relative; display:flex; align-items:flex-end; gap:4px;'
+          + (sp.side === 'right' ? 'flex-direction:row-reverse;' : '');
+        const holder = document.createElement('div');
+        holder.style.cssText = 'position:relative;';
+        if (src) {
+          const img = document.createElement('img');
+          img.src = src;
+          img.style.cssText = 'display:block; max-width:min(220px, 62vw); max-height:300px; border-radius:' + Math.max(rad, 8) + 'px;';
+          holder.appendChild(img);
+        } else {
+          const miss = document.createElement('div');
+          miss.className = 'bubble';
+          miss.textContent = '[사진 ' + m.photo + '] (사진 없음)';
+          miss.style.background = sp.bubble; miss.style.color = sp.text; miss.style.borderRadius = rad + 'px';
+          holder.appendChild(miss);
+        }
+        if (m.react) { holder.appendChild(tkReactEl(m, sp)); row.style.marginBottom = (gap + 14) + 'px'; }
+        box.appendChild(holder);
+        const side = [m.unread, timeShown].filter(Boolean);
+        if (side.length && !tkReceiptStyle()) {
+          const sc = document.createElement('div');
+          sc.style.cssText = 'display:flex; flex-direction:column; gap:1px; font-size:0.6em; white-space:nowrap;'
+            + 'align-items:' + (sp.side === 'right' ? 'flex-end' : 'flex-start') + ';';
+          side.forEach((t, k) => {
+            const d = document.createElement('div');
+            d.textContent = t;
+            d.style.color = (k === 0 && m.unread && /^[0-9]+$/.test(m.unread)) ? (tk.unreadColor || '#ffe000') : tkReadable($('tkBgColor').value);
+            if (!(k === 0 && m.unread && /^[0-9]+$/.test(m.unread))) d.style.opacity = '0.65';
+            sc.appendChild(d);
+          });
+          box.appendChild(sc);
+        }
+        body.appendChild(box);
+        row.appendChild(body);
+        chat.appendChild(row);
+        return;
       }
       // 이모티콘 — 말풍선 없이 그림만
       if (m.sticker !== undefined) {
@@ -8783,6 +9030,14 @@
         nmIn.textContent = m.name;
         bub.appendChild(nmIn);
       }
+      if (m.reply) {
+        if (tk.rowMode) {
+          const rq = document.createElement('span');
+          rq.style.cssText = 'position:relative; opacity:0.6; margin-right:5px; font-size:0.9em;';
+          rq.textContent = '↪ ' + (m.reply.name ? m.reply.name + ': ' : '') + (m.reply.text || '');
+          bub.appendChild(rq);
+        } else bub.appendChild(tkReplyEl(m, sp));
+      }
       const txt = document.createElement('span');
       txt.style.position = 'relative';
       if (m.small) txt.style.opacity = '0.68';   // 글자만 옅게 (말풍선 색은 그대로)
@@ -8840,6 +9095,11 @@
         body.appendChild(wrap);
       } else {
         body.appendChild(bub);
+      }
+      if (m.react) {
+        bub.style.position = 'relative';
+        bub.appendChild(tkReactEl(m, sp));
+        row.style.marginBottom = (parseInt(row.style.marginBottom, 10) || gap) + 14 + 'px';
       }
       row.appendChild(body);
       chat.appendChild(row);
@@ -9133,6 +9393,7 @@
       avatarOn: tk.avatarOn, nameMode: tk.nameMode, avPos: tk.avPos, shape: tk.shape,
       font: tk.font, bgImg: tk.bgImg, rowMode: tk.rowMode, avRadius: tk.avRadius,
       unreadColor: tk.unreadColor, style: tk.style,
+      topbar: tk.topbar, room: tk.room, roomSub: tk.roomSub,
       sliders: ['tkBgColor','tkFontRange','tkStickerRange','tkRadiusRange','tkGapRange',
                 'tkPadRange','tkPadXRange','tkShellRange','tkAvSizeRange',
                 'tkBgScale','tkBgX','tkBgY','tkDimRange','tkBgBlur']
@@ -9151,6 +9412,7 @@
     tk.avRadius = d.avRadius || 50;
     tk.unreadColor = d.unreadColor || '#ffe000';
     if (d.style !== undefined) tk.style = d.style || '';
+    if (d.topbar !== undefined) { tk.topbar = !!d.topbar; tk.room = d.room || ''; tk.roomSub = d.roomSub || ''; }
     Object.keys(d.sliders || {}).forEach(id => { if ($(id)) $(id).value = d.sliders[id]; });
     tkSyncSegs();
     tkRenderAll();
@@ -9334,13 +9596,13 @@
   // ===== 대본 문법 버튼 =====
   // 화면 종류마다 실제로 그려지는 것만 보여준다 (안 고른 상태면 전부)
   var TK_BAR_SETS = {
-    kakao: ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page'],
-    imsg:  ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page'],
-    line:  ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page'],
-    insta: ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page'],
-    disc:  ['narr', 'sys', 'trans', 'time', 'big', 'small', 'emo', 'page'],
-    game:  ['narr', 'sys', 'game', 'trans', 'big', 'small', 'emo', 'page'],
-    gamel: ['narr', 'sys', 'game', 'trans', 'big', 'small', 'emo', 'page']
+    kakao: ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
+    imsg:  ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
+    line:  ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
+    insta: ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
+    disc:  ['narr', 'sys', 'trans', 'time', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
+    game:  ['narr', 'sys', 'game', 'trans', 'big', 'small', 'emo', 'page', 'date'],
+    gamel: ['narr', 'sys', 'game', 'trans', 'big', 'small', 'emo', 'page', 'date']
   };
   // 같은 버튼이라도 앱마다 실제 모양대로 — 카톡은 안읽음 숫자, 나머지는 '읽음'
   function tkReadMark() { return tk.style === 'kakao' || !tk.style ? '1' : '읽음'; }
@@ -9401,6 +9663,10 @@
       const m = L.match(/\s+!([0-9]{1,2}|읽음|전송됨)$/);
       return m ? L.slice(0, m.index) : L + ' !' + tkReadMark();
     },
+    react(L) {
+      const m = L.match(/\s+~([^\s~]{1,8})(?=(\s+(@\S+|![0-9]{1,2}|!읽음|!전송됨))*$)/);
+      return m ? L.slice(0, m.index) + L.slice(m.index + m[0].length) : L + ' ~\u2764\uFE0F';
+    },
     big(L)   { return tkSizeMark(L, '+ '); },
     small(L) { return tkSizeMark(L, '- '); }
   };
@@ -9454,6 +9720,23 @@
         tkReplaceRange(a, a, label + '\n', a + label.length + 1);
         return;
       }
+      if (kind === 'date') {
+        const d = new Date();
+        const label = '== ' + d.getFullYear() + '년 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일 '
+          + '일월화수목금토'[d.getDay()] + '요일';
+        tkReplaceRange(a, a, label + '\n', a + label.length + 1);
+        return;
+      }
+      if (kind === 'reply') {
+        // 윗줄의 말을 그대로 인용해서 이 줄 위에 "> 이름: 말" 을 끼운다
+        const v = ta.value;
+        const above = v.slice(0, Math.max(0, a - 1)).split('\n').reverse()
+          .find(l => /^[^:：>\/*=『]{1,20}[:：]\s*\S/.test(l.trim()));
+        const q = above ? '> ' + above.trim().replace(/\s+(~\S+|@\S+(\s\S+)?|![0-9]{1,2}|!읽음|!전송됨)+$/, '') : '> 이름: ';
+        tkReplaceRange(a, a, q + '\n', above ? a + q.length + 1 : a + q.length);
+        return;
+      }
+      if (kind === 'photo') { $('tkPhotoFile').click(); return; }
       if (kind === 'trans') {
         // 아랫줄에 ( ) 를 만들고 괄호 안에 커서
         tkReplaceRange(b, b, '\n()', b + 2);
@@ -9463,6 +9746,40 @@
       tkReplaceRange(a, b, nl);
     });
   });
+
+  // 사진 메시지 — 줄여서 보관하고 커서 줄의 화자로 "[사진 N]" 을 넣는다
+  $('tkPhotoFile').addEventListener('change', ev => {
+    const f = ev.target.files && ev.target.files[0];
+    ev.target.value = '';
+    if (!f) return;
+    shrinkImage(f).then(url => {
+      const ids = Object.keys(tk.photos).map(Number);
+      ($('tkScript').value.match(/\[사진 (\d+)\]/g) || []).forEach(x => ids.push(parseInt(x.slice(4), 10)));
+      const id = String((ids.length ? Math.max.apply(null, ids) : 0) + 1);
+      tk.photos[id] = url;
+      const { a, b, line } = tkLineAt();
+      const nm = line.match(/^([^:：]{1,20})[:：]\s*(.*)$/);
+      const tok = '[사진 ' + id + ']';
+      if (nm && !nm[2].trim()) tkReplaceRange(b, b, tok);                    // "이름: " 뒤가 비어 있으면 거기에
+      else if (!line.trim()) tkReplaceRange(a, b, tok);
+      else tkReplaceRange(b, b, '\n' + (nm ? nm[1].trim() + ': ' : '') + tok);   // 아니면 다음 줄에 같은 화자로
+      toast('사진을 넣었어요');
+    }).catch(() => toast('사진을 읽지 못했어요'));
+  });
+  // 상단바 켜기/끄기 · 방 이름
+  document.querySelectorAll('#tkTopSeg button').forEach(b => b.addEventListener('click', () => {
+    tk.topbar = b.dataset.top === 'on';
+    if (tk.topbar && !tk.room) {
+      const names = Object.keys(tk.speakers);
+      tk.room = names.find(n => tk.speakers[n].side !== 'right') || '채팅방';
+    }
+    tkSyncSegs(); tkRender(); tkPersist();
+  }));
+  ['tkRoomName', 'tkRoomSub'].forEach(id => $(id).addEventListener('input', () => {
+    tk.room = $('tkRoomName').value;
+    tk.roomSub = $('tkRoomSub').value;
+    tkRender(); tkPersist();
+  }));
 
   // ===== 메시지 화면 설정 되돌리기 — 대본은 입력칸 자체 실행취소가 맡는다 =====
   const tkHist = { undo: [], redo: [], cur: null, timer: null, applying: false };
