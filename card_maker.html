@@ -4145,7 +4145,12 @@
   // Ctrl+Z 가 안 먹는다. 편집 명령(insertText)으로 바꿔야 기록이 남는다.
   function commitQuoteEdit(text, selStart, selEnd) {
     const ta = fmtEl();
-    ta.focus();
+    // 전체를 골라 바꿔 넣으면 입력창이 맨 위로 튄다 — 보던 자리를 기억했다가 되돌린다
+    const keepTop = ta.scrollTop;
+    const ed = ta.closest('.editor');
+    const keepEd = ed ? ed.scrollTop : 0;
+    const keepWin = window.scrollY;
+    ta.focus({ preventScroll: true });
     if (ta.value !== text) {
       ta.setSelectionRange(0, ta.value.length);
       let ok = false;
@@ -4157,6 +4162,10 @@
       // execCommand 는 input 이벤트를 스스로 내므로 여기서 또 부르지 않는다
     }
     ta.setSelectionRange(selStart, selEnd);
+    ta.scrollTop = keepTop;
+    if (ed) ed.scrollTop = keepEd;
+    if (window.scrollY !== keepWin) window.scrollTo(window.scrollX, keepWin);
+    if ($('quoteMirror') && ta.id === 'quoteInput') $('quoteMirror').scrollTop = ta.scrollTop;
   }
 
   // 서식 버튼 — mousedown 을 막아야 입력창 선택이 풀리지 않는다
