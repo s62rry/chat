@@ -1592,11 +1592,13 @@ function lkJsxSnapper() {
   }
   function styleOf(el, pcs, isRoot) {
     var cs = getComputedStyle(el), def = defOf(el), out = [];
+    // 버튼·입력칸은 글자색/글꼴을 부모에게서 물려받지 않으므로(span 으로 바뀌니까) 물려받는 값도 그대로 적는다
+    var form = /^(button|input|textarea|select)$/i.test(el.tagName);
     for (var i = 0; i < cs.length; i++) {
       var p = cs[i];
       if (SKIP.test(p)) continue;
       var v = cs.getPropertyValue(p);
-      if (v === def[p]) continue;
+      if (v === def[p] && !(form && INHERIT.test(p))) continue;
       if (!isRoot && pcs && INHERIT.test(p) && pcs.getPropertyValue(p) === v) continue;
       var bm = p.match(/^border-(top|right|bottom|left)-color$/);
       if (bm && cs.getPropertyValue("border-" + bm[1] + "-style") === "none") continue;
@@ -1635,6 +1637,14 @@ function lkJsxSnapper() {
     if (cs.display === "none" && !inD) return "";
     if (tag === "canvas") { try { return '<img src="' + n.toDataURL() + '" style="' + esc(st) + '">'; } catch (e) { return ""; } }
     if (tag === "img") return '<img src="' + esc(n.currentSrc || n.src || "") + '" alt="' + esc(n.alt || "") + '" style="' + esc(st) + '">';
+    if (n.__lkTo != null) {
+      // 누르면 다른 화면으로 바뀌는 버튼/탭 → 숨긴 라디오를 고르는 label (스크립트 없이 동작)
+      var lab = '<label for="@@LKX@@-' + n.__lkTo + '" style="' + esc("display:" + (cs.display === "inline" ? "inline-block" : cs.display) + ";cursor:pointer;") + '">';
+      n.__lkTo = null;
+      var body = snap(n, pcs, isRoot, inD);
+      n.__lkTo = null;
+      return lab + body + "</label>";
+    }
     if (/^(input|textarea|select)$/.test(tag)) {
       var v = n.value;
       if (tag === "select" && n.selectedOptions && n.selectedOptions[0]) v = n.selectedOptions[0].text;
@@ -1671,8 +1681,100 @@ function lkJsxSnapper() {
     finally { fr.remove(); still.remove(); }
     return html;
   }
+  // ── 펼치기/탭 같은 상호작용을 미리 눌러 보고 화면별로 찍어 둔다 ──
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function rkProps(el) { for (var k in el) if (k.indexOf("__reactProps$") === 0) return el[k]; return null; }
+  function clickables() {
+    var all = document.getElementById("root").querySelectorAll("*"), cand = [];
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i], tag = el.tagName.toLowerCase();
+      if (el instanceof SVGElement && tag !== "svg") continue;
+      if (tag === "summary" || el.disabled) continue;
+      if (tag === "input" && !/^(checkbox|radio)$/.test(el.type)) continue;
+      var p = rkProps(el);
+      var c = (p && (p.onClick || p.onMouseDown || p.onPointerDown || (tag === "input" && p.onChange))) || tag === "button" || el.getAttribute("role") === "tab";
+      if (!c) continue;
+      var cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden") continue;
+      cand.push(el);
+    }
+    // 바깥 카드 전체가 눌리는 경우보다 안쪽 버튼을 우선 (label 안에 label 이 생기지 않게)
+    var out = cand.filter(function (el) { return !cand.some(function (o) { return o !== el && el.contains(o); }); });
+    return out.slice(0, 16);
+  }
+  function fire(el) {
+    var o = { bubbles: true, cancelable: true, view: window, button: 0 };
+    try { el.dispatchEvent(new PointerEvent("pointerdown", o)); } catch (e) {}
+    el.dispatchEvent(new MouseEvent("mousedown", o));
+    try { el.dispatchEvent(new PointerEvent("pointerup", o)); } catch (e) {}
+    el.dispatchEvent(new MouseEvent("mouseup", o));
+    el.click();
+  }
+  function sig() { return document.getElementById("root").innerHTML; }
+  async function remount() { window.__lkRemount(); await wait(70); }
+  async function goTo(path) {
+    await remount();
+    for (var i = 0; i < path.length; i++) {
+      var cl = clickables();
+      if (!cl[path[i]]) return false;
+      fire(cl[path[i]]);
+      await wait(50);
+    }
+    return true;
+  }
+  async function explore() {
+    if (typeof window.__lkRemount !== "function") return [snapAll()];
+    var still = document.createElement("style");
+    still.textContent = "*,*::before,*::after{animation:none!important;transition:none!important}";
+    document.head.appendChild(still);
+    try {
+      await remount();
+      var s0 = sig();
+      await wait(150);
+      if (sig() !== s0) { return [snapAll()]; }       // 혼자 계속 바뀌는 상태창(시계·타자효과 등)은 지금 모습만
+      var MAXS = 12, deadline = Date.now() + 12000;
+      var states = [{ path: [], sig: s0 }], trans = [], at = 0;
+      for (var s = 0; s < states.length; s++) {
+        if (at !== s) { await goTo(states[s].path); at = s; }
+        var n = clickables().length;
+        trans[s] = [];
+        for (var k = 0; k < n && Date.now() < deadline; k++) {
+          if (at !== s) { if (!(await goTo(states[s].path))) break; at = s; }
+          var cl = clickables();
+          if (!cl[k]) continue;
+          fire(cl[k]);
+          await wait(50);
+          var g = sig(), t = -1;
+          for (var q = 0; q < states.length; q++) if (states[q].sig === g) { t = q; break; }
+          if (t < 0 && states.length < MAXS && states[s].path.length < 3) { t = states.length; states.push({ path: states[s].path.concat([k]), sig: g }); }
+          trans[s][k] = t;
+          at = t;          // -1 이면 모르는 화면 → 다음 번에 다시 돌아감
+        }
+      }
+      var out = [];
+      for (var i = 0; i < states.length; i++) {
+        await goTo(states[i].path);
+        var cl2 = clickables();
+        for (var j = 0; j < cl2.length; j++) {
+          var tt = trans[i] && trans[i][j];
+          if (tt != null && tt >= 0 && tt !== i) cl2[j].__lkTo = tt;
+        }
+        out.push(snapAll());
+      }
+      await remount();
+      return out;
+    } finally { still.remove(); }
+  }
   window.addEventListener("message", function (e) {
     var d = e.data;
+    if (d && d.type === "lk-jsx-explore") {
+      (async function () {
+        var ok = !!window.__lkOk && !document.querySelector(".lk-err"), states = [];
+        try { if (ok) states = await explore(); } catch (err) { ok = false; try { console.warn("[lk-explore]", err && err.stack || err); } catch (e2) {} }
+        try { parent.postMessage({ type: "lk-jsx-snapped", id: d.id, ok: ok && !!states[0], states: states, html: states[0] || "" }, "*"); } catch (err) {}
+      })();
+      return;
+    }
     if (!d || d.type !== "lk-jsx-snap") return;
     var html = "", ok = !!window.__lkOk && !document.querySelector(".lk-err");
     try { if (ok) html = snapAll(); } catch (err) { ok = false; try { console.warn("[lk-snap]", err && err.stack || err); } catch (e2) {} }
@@ -1718,7 +1820,7 @@ async function buildJsxDoc(src, chat) {
     "<script>" + esc(compP) + "<\/script>" +
     "<script>(function(){if(!window.__lkC){if(window.__lkErr&&!document.querySelector('.lk-err'))window.__lkErr('상태창 컴포넌트를 찾지 못했어요');return;}" +
     "var p=window.__lkP||{},q={};for(var k in p){var v=p[k];if(typeof v==='string'&&/^\\s*[\\[{]/.test(v)){try{v=JSON.parse(v)}catch(e){}}q[k]=v}" +
-    "try{ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(window.__lkC,q));window.__lkOk=1}catch(e){window.__lkErr('상태창 오류: '+(e&&e.message||e))}" +
+    "try{var R=ReactDOM.createRoot(document.getElementById('root')),K=0;window.__lkRemount=function(){R.render(React.createElement(window.__lkC,Object.assign({},q,{key:'lk'+(++K)})))};R.render(React.createElement(window.__lkC,q));window.__lkOk=1}catch(e){window.__lkErr('상태창 오류: '+(e&&e.message||e))}" +
     "setTimeout(window.__lkPost,60);setTimeout(window.__lkPost,500);setTimeout(window.__lkPost,1500);})();<\/script></body></html>";
   return { doc };
 }
@@ -3363,7 +3465,7 @@ $("copyAllBtn").addEventListener("click", copyAll);
    채팅방을 글자색·상태창 디자인째로 HTML 하나로 묶는다. 티스토리 글쓰기의 HTML 모드에 붙여넣으면 그대로 보인다.
    JSX 상태창은 실제로 그린 뒤 계산된 스타일째로 굳혀서 넣는다 (화면에 펼쳐 둔 상태창은 펼친 모습 그대로). */
 let _snapSeq = 0;
-function askJsxSnap(ifr, ms) {
+function askJsxSnap(ifr, ms, type) {
   return new Promise(res => {
     const id = "s" + (++_snapSeq), win = ifr.contentWindow;
     let tm = null;
@@ -3375,7 +3477,7 @@ function askJsxSnap(ifr, ms) {
     const done = v => { clearTimeout(tm); window.removeEventListener("message", on); res(v); };
     window.addEventListener("message", on);
     tm = setTimeout(() => done(null), ms);
-    try { win.postMessage({ type: "lk-jsx-snap", id }, "*"); } catch (e) { done(null); }
+    try { win.postMessage({ type: type || "lk-jsx-snap", id }, "*"); } catch (e) { done(null); }
   });
 }
 function exportHost() {
@@ -3388,11 +3490,21 @@ function exportHost() {
   }
   return h;
 }
-async function snapJsxForExport(src, chat, liveIfr) {
-  if (liveIfr && liveIfr.contentWindow) {
-    const r = await askJsxSnap(liveIfr, 5000);
-    if (r && r.ok) return r.html;
-  }
+let _exUid = 0;
+function exInteractive(states) {
+  const uid = "lkx" + Date.now().toString(36) + (++_exUid);
+  const fix = h => h.split("@@LKX@@").join(uid);
+  if (states.length < 2) return fix(states[0]);
+  let css = "", inputs = "", divs = "";
+  states.forEach((h, i) => {
+    inputs += '<input type="radio" name="' + uid + '" id="' + uid + "-" + i + '"' + (i ? "" : " checked") + ' style="display:none">';
+    divs += '<div class="' + uid + "-s" + i + '"' + (i ? ' style="display:none"' : "") + ">" + fix(h) + "</div>";
+    if (i) css += "#" + uid + "-" + i + ":checked~." + uid + "-s" + i + "{display:block!important}#" + uid + "-" + i + ":checked~." + uid + "-s0{display:none!important}";
+  });
+  return "<div><style>" + css + "</style>" + inputs + divs + "</div>";
+}
+// 화면 밖에서 새로 그려서 버튼/탭을 하나씩 눌러 보고, 화면별 모습을 라디오+CSS 로 묶는다
+async function snapJsxForExport(src, chat) {
   const b = await buildJsxDoc(src, chat);
   if (b.error) return null;
   const ifr = makeJsxFrame(b.doc);
@@ -3403,9 +3515,9 @@ async function snapJsxForExport(src, chat, liveIfr) {
       await new Promise(r => setTimeout(r, 250));
       const r1 = await askJsxSnap(ifr, 2000);
       if (r1 && r1.ok) {
-        await new Promise(r => setTimeout(r, 400));   // 마운트 직후 바뀌는 값까지 반영
-        const r2 = await askJsxSnap(ifr, 2000);
-        return (r2 && r2.ok ? r2.html : r1.html);
+        await new Promise(r => setTimeout(r, 300));   // 마운트 직후 바뀌는 값까지 반영
+        const r2 = await askJsxSnap(ifr, 40000, "lk-jsx-explore");
+        return exInteractive(r2 && r2.ok && r2.states && r2.states.length ? r2.states : [r1.html]);
       }
     }
     return null;
@@ -3418,7 +3530,7 @@ function exInline(line, isUser, chat) {
   while (i < line.length) {
     if (line[i] === "*") {
       const c = line.indexOf("*", i + 1);
-      if (c !== -1) { out += '<span style="color:' + nar + ';font-style:italic">' + escapeHtml(line.slice(i + 1, c)) + "</span>"; i = c + 1; continue; }
+      if (c !== -1) { out += '<span style="color:' + nar + '">' + escapeHtml(line.slice(i + 1, c)) + "</span>"; i = c + 1; continue; }
       out += "*"; i++; continue;
     }
     let nx = line.indexOf("*", i);
@@ -3432,7 +3544,7 @@ function exInline(line, isUser, chat) {
 function exProse(text, isUser, chat) {
   return text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
     .map(para => para.split("\n").map(l => l.trim()).filter(Boolean)
-      .map(l => '<p style="margin:0 0 14px;line-height:1.8">' + exInline(l, isUser, chat) + "</p>").join("")).join("");
+      .map(l => '<p>' + exInline(l, isUser, chat) + "</p>").join("")).join("");
 }
 function exStatus(data) {
   const body = data.items.map(it =>
@@ -3451,47 +3563,48 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg) {
   for (let ti = 0; ti < turns.length; ti++) {
     const turn = turns[ti];
     onProg && onProg(ti + 1, turns.length);
-    const liveSlots = [...document.querySelectorAll(".turn")].filter(el => el.dataset.tid === turn.id)
-      .flatMap(el => [...el.querySelectorAll(".jsx-slot")]);
-    let jsxIdx = 0, h = "";
+    let h = "";
     let blocks;
     try { blocks = parseLog(turn.raw); } catch (e) { blocks = [{ kind: "prose", text: turn.raw || "" }]; }
     for (const b of blocks) {
       try {
         if (b.kind === "prose") h += exProse(b.text, false, chat);
         else if (b.kind === "user") h += '<div style="margin:0 0 20px">' + exProse(b.text, true, chat) + "</div>";
-        else if (b.kind === "code") h += '<pre style="white-space:pre-wrap;background:#f4f5f8;border-radius:8px;padding:10px 12px;font-size:13px">' + escapeHtml(b.text.trim()) + "</pre>";
+        else if (b.kind === "code") h += '<pre style="white-space:pre-wrap;background:#f4f5f8;border-radius:8px;padding:10px 12px">' + escapeHtml(b.text.trim()) + "</pre>";
         else if (b.kind === "status") h += exStatus(b.data);
         else if (b.kind === "htmlstatus") h += '<div style="margin:14px 0">' + sanitizeHtml(b.html) + "</div>";
         else if (b.kind === "jsx") {
-          const slot = liveSlots[jsxIdx++];
-          const live = slot && slot.querySelector("iframe");
-          const html = await snapJsxForExport(b.src, chat, live);
+          const html = await snapJsxForExport(b.src, chat);
           h += html ? '<div style="margin:16px 0">' + html + "</div>"
                     : '<div style="margin:16px 0;padding:10px;border:1px dashed #ccc;border-radius:8px;font-size:12px;color:#999">(상태창을 그리지 못했어요)</div>';
         }
       } catch (e) { console.warn("export block failed", e); }
     }
     const no = effectiveTurnNo(chat, turn);
-    const label = withNo ? '<div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#2f6df0;margin:0 0 10px">TURN ' + (no != null ? no : (chat.turns.indexOf(turn) + 1)) + "</div>" : "";
+    const label = withNo ? '<p style="color:#2f6df0"><b>TURN ' + (no != null ? no : (chat.turns.indexOf(turn) + 1)) + "</b></p>" : "";
     parts.push("<div>" + label + h + "</div>");
   }
-  const head = '<div style="font-size:20px;font-weight:700;color:#1a1d24;margin:0 0 24px">' + escapeHtml((chat.emoji ? chat.emoji + " " : "") + (chat.title || "")) + "</div>";
-  return '<div style="max-width:720px;margin:0 auto;font-family:\'Pretendard\',-apple-system,BlinkMacSystemFont,\'Malgun Gothic\',sans-serif;font-size:15px;line-height:1.8;color:#41454f;word-break:keep-all;overflow-wrap:anywhere">' +
+  // 본문 글씨는 색만 넣고 글꼴·크기·줄간격은 비워 둔다 (티스토리 글씨 크기 설정이 그대로 먹게)
+  const head = "<p><b>" + escapeHtml((chat.emoji ? chat.emoji + " " : "") + (chat.title || "")) + "</b></p>";
+  return '<div style="max-width:720px;margin:0 auto;word-break:keep-all;overflow-wrap:anywhere">' +
     head + parts.join('<hr style="border:0;border-top:1px dashed #dde1ea;margin:30px 0">') + "</div>";
 }
+function lsGetSafe(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSetSafe(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 function openTistoryModal() {
   const chat = getActive();
   if (!chat || !chat.turns.length) { toast("내보낼 로그가 없어요"); return; }
   const n = chat.turns.length;
   openModal("티스토리용 내보내기", '' +
-    '<p class="desc">대사 색과 상태창 디자인을 살린 HTML 로 내보내요. 티스토리 글쓰기에서 오른쪽 위 <b>기본모드 → HTML</b> 로 바꾼 뒤 붙여넣으면 돼요. ' +
-    '상태창은 움직이는 효과 없이 지금 모습으로 고정되고, 화면에서 펼쳐 둔 상태창은 펼친 모습으로 들어가요.</p>' +
+    '<p class="desc">대사 색과 상태창 디자인을 살린 HTML 로 내보내요. 상태창의 <b>펼치기·탭 버튼은 미리 눌러 본 화면으로 바꿔 넣어서</b> 스크립트 없이도 눌려요. ' +
+    '(누를 때마다 숫자가 바뀌는 것처럼 미리 정해 둘 수 없는 동작은 처음 모습으로 고정돼요)</p>' +
     '<div class="bm-block"><div class="bm-step">범위</div>' +
     '<p class="bm-hint" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
     '<input id="exFrom" type="number" min="1" max="' + n + '" value="1" style="width:80px"> 번째 턴부터 ' +
     '<input id="exTo" type="number" min="1" max="' + n + '" value="' + n + '" style="width:80px"> 번째 턴까지 (전체 ' + n + '턴, 지금 정렬 순서 기준)</p>' +
-    '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exNo" checked> 턴 번호 표시</label></div>' +
+    '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exNo" checked> 턴 번호 표시</label>' +
+    '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exWrap"' + (lsGetSafe("lk_exWrap") === "0" ? "" : " checked") + '> ' +
+    '<span><b>[[HTML]] … [[/HTML]]</b> 로 감싸서 한 줄로 (스킨이 기본 칸의 [[HTML]] 을 그려 주는 경우 · 끄면 티스토리 HTML 모드용)</span></label></div>' +
     '<p class="bm-hint" id="exProg" style="min-height:18px;color:var(--accent)"></p>',
     [{ label: "HTML 복사", id: "exCopy", primary: true }, { label: "파일로 저장", id: "exSave" }, { label: "닫기", close: true }]
   );
@@ -3506,8 +3619,11 @@ function openTistoryModal() {
       const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "만드는 중… " + i + " / " + t + "턴"; });
       const kb = Math.round(html.length / 1024);
       if (mode === "copy") {
-        copyText(html);
-        if (prog) prog.textContent = "복사했어요! (" + kb + "KB) 티스토리 HTML 모드에 붙여넣으세요.";
+        const wrap = $("exWrap").checked;
+        lsSetSafe("lk_exWrap", wrap ? "1" : "0");
+        // 기본 칸에 붙이면 줄바꿈마다 문단이 갈라지므로 한 줄로 (<style> 안은 공백, 나머지는 &#10;)
+        copyText(wrap ? "[[HTML]]" + html.replace(/<style>[\s\S]*?<\/style>/g, m => m.replace(/\r?\n/g, " ")).replace(/\r?\n/g, "&#10;") + "[[/HTML]]" : html);
+        if (prog) prog.textContent = "복사했어요! (" + kb + "KB) " + (wrap ? "글쓰기 기본 칸에 그대로 붙여넣으세요." : "티스토리 HTML 모드에 붙여넣으세요.");
       } else {
         const doc = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
           escapeHtml(chat.title || "로그") + '</title></head><body style="margin:0;padding:24px 16px;background:#fff">' + html + "</body></html>";
