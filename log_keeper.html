@@ -1886,6 +1886,31 @@ function lkJsxSnapper() {
   });
 }
 
+// 상태창 iframe 문서의 공통 부분 (로그보관함·티스토리 스킨 코드가 같이 씀)
+function jsxDocParts() {
+  return {
+    pre: '<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">' +
+    "<style>html,body{margin:0;padding:0;box-sizing:border-box;background:transparent;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#222;font-size:13px}" +
+    ".lk-err{color:#d11;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;padding:8px}</style></head><body><div id=\"root\"></div>" +
+    '<script src="' + JSX_REACT + '"><\/script><script src="' + JSX_REACTDOM + '"><\/script>',
+    setup: "<script>(function(){" +
+    "function post(){try{parent.postMessage({type:'lk-jsx-h',h:Math.ceil(document.body.scrollHeight)},'*')}catch(e){}}" +
+    "window.__lkPost=post;if(window.ResizeObserver)new ResizeObserver(post).observe(document.body);" +
+    "window.__lkErr=function(m){var r=document.getElementById('root');r.innerHTML='<div class=\"lk-err\"></div>';r.firstChild.textContent=m;post();};" +
+    "window.addEventListener('error',function(e){if(!window.__lkOk)window.__lkErr('상태창 오류: '+(e&&e.message||e));});" +
+    "if(typeof React==='undefined'){window.__lkErr('React 를 불러오지 못했어요 (인터넷 연결 확인)');return;}" +
+    "['useState','useEffect','useMemo','useRef','useCallback','useReducer','useContext','useLayoutEffect','useImperativeHandle','useId','useTransition','useDeferredValue','useSyncExternalStore'].forEach(function(n){if(typeof React[n]==='function')window[n]=React[n];});" +
+    "window.sendToChat=function(){};window.sendToReroll=function(){};window.getPrevUserMessage=function(){return ''};window.getPrevCharMessage=function(){return ''};" +
+    "var P={x:0,y:0,dx:0,dy:0,down:false,buttons:0};window.getPointerState=function(){return P};window.isPointerDown=function(){return false};" +
+    "if(!window.ThreeCanvas)window.ThreeCanvas=function(p){var ref=React.useRef(null),h=p&&p.height!=null?p.height:300;React.useEffect(function(){if(!ref.current||typeof THREE==='undefined')return;var w=ref.current.clientWidth||300,r=new THREE.WebGLRenderer({antialias:true,alpha:true});r.setSize(w,h);ref.current.appendChild(r.domElement);var sc=new THREE.Scene(),cam=new THREE.PerspectiveCamera(50,w/h,0.1,1000);cam.position.z=3;try{p.onInit&&p.onInit({THREE:THREE,scene:sc,camera:cam,renderer:r})}catch(e){}return function(){try{r.dispose()}catch(e){}}},[]);return React.createElement('div',{ref:ref,style:{width:'100%',height:h}})};" +
+    "window.__lkSetComp=function(c){window.__lkC=c};window.__lkSetProps=function(p){window.__lkP=p};" +
+    "})();<\/script>",
+    tail: "<script>(function(){if(!window.__lkC){if(window.__lkErr&&!document.querySelector('.lk-err'))window.__lkErr('상태창 컴포넌트를 찾지 못했어요');return;}" +
+    "var p=window.__lkP||{},q={};for(var k in p){var v=p[k];if(typeof v==='string'&&/^\\s*[\\[{]/.test(v)){try{v=JSON.parse(v)}catch(e){}}q[k]=v}" +
+    "try{var R=ReactDOM.createRoot(document.getElementById('root')),K=0;window.__lkRemount=function(){var el=React.createElement(window.__lkC,Object.assign({},q,{key:'lk'+(++K)}));if(ReactDOM.flushSync)ReactDOM.flushSync(function(){R.render(el)});else R.render(el)};R.render(React.createElement(window.__lkC,q));window.__lkOk=1}catch(e){window.__lkErr('상태창 오류: '+(e&&e.message||e))}" +
+    "setTimeout(window.__lkPost,60);setTimeout(window.__lkPost,500);setTimeout(window.__lkPost,1500);})();<\/script></body></html>"
+  };
+}
 // [[JSX]] 한 덩어리를 iframe 문서로 만든다. 실패하면 { error } 를 돌려준다
 async function buildJsxDoc(src, chat) {
   const nm = (src.match(/^\s*<\s*([A-Za-z_$][\w$]*)/) || [])[1];
@@ -1903,30 +1928,10 @@ async function buildJsxDoc(src, chat) {
   } catch (e) { return { error: "상태창을 변환하지 못했어요: " + (e && e.message ? e.message : e) }; }
   const esc = t => String(t).replace(/<\/script/gi, "<\\/script");
   const three = /THREE|ThreeCanvas/.test(code) ? '<script src="https://unpkg.com/three@0.160.0/build/three.min.js"><\/script>' : "";
-  const doc = '<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">' +
-    "<style>html,body{margin:0;padding:0;box-sizing:border-box;background:transparent;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#222;font-size:13px}" +
-    ".lk-err{color:#d11;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;padding:8px}</style></head><body><div id=\"root\"></div>" +
-    '<script src="' + JSX_REACT + '"><\/script><script src="' + JSX_REACTDOM + '"><\/script>' + three +
-    "<script>(function(){" +
-    "function post(){try{parent.postMessage({type:'lk-jsx-h',h:Math.ceil(document.body.scrollHeight)},'*')}catch(e){}}" +
-    "window.__lkPost=post;if(window.ResizeObserver)new ResizeObserver(post).observe(document.body);" +
-    "window.__lkErr=function(m){var r=document.getElementById('root');r.innerHTML='<div class=\"lk-err\"></div>';r.firstChild.textContent=m;post();};" +
-    "window.addEventListener('error',function(e){if(!window.__lkOk)window.__lkErr('상태창 오류: '+(e&&e.message||e));});" +
-    "if(typeof React==='undefined'){window.__lkErr('React 를 불러오지 못했어요 (인터넷 연결 확인)');return;}" +
-    "['useState','useEffect','useMemo','useRef','useCallback','useReducer','useContext','useLayoutEffect','useImperativeHandle','useId','useTransition','useDeferredValue','useSyncExternalStore'].forEach(function(n){if(typeof React[n]==='function')window[n]=React[n];});" +
-    "window.sendToChat=function(){};window.sendToReroll=function(){};window.getPrevUserMessage=function(){return ''};window.getPrevCharMessage=function(){return ''};" +
-    "var P={x:0,y:0,dx:0,dy:0,down:false,buttons:0};window.getPointerState=function(){return P};window.isPointerDown=function(){return false};" +
-    "if(!window.ThreeCanvas)window.ThreeCanvas=function(p){var ref=React.useRef(null),h=p&&p.height!=null?p.height:300;React.useEffect(function(){if(!ref.current||typeof THREE==='undefined')return;var w=ref.current.clientWidth||300,r=new THREE.WebGLRenderer({antialias:true,alpha:true});r.setSize(w,h);ref.current.appendChild(r.domElement);var sc=new THREE.Scene(),cam=new THREE.PerspectiveCamera(50,w/h,0.1,1000);cam.position.z=3;try{p.onInit&&p.onInit({THREE:THREE,scene:sc,camera:cam,renderer:r})}catch(e){}return function(){try{r.dispose()}catch(e){}}},[]);return React.createElement('div',{ref:ref,style:{width:'100%',height:h}})};" +
-    "window.__lkSetComp=function(c){window.__lkC=c};window.__lkSetProps=function(p){window.__lkP=p};" +
-    "})();<\/script>" +
-    "<script>(" + lkJsxSnapper.toString() + ")();<\/script>" +
-    "<script>" + esc(compC) + "<\/script>" +
-    "<script>" + esc(compP) + "<\/script>" +
-    "<script>(function(){if(!window.__lkC){if(window.__lkErr&&!document.querySelector('.lk-err'))window.__lkErr('상태창 컴포넌트를 찾지 못했어요');return;}" +
-    "var p=window.__lkP||{},q={};for(var k in p){var v=p[k];if(typeof v==='string'&&/^\\s*[\\[{]/.test(v)){try{v=JSON.parse(v)}catch(e){}}q[k]=v}" +
-    "try{var R=ReactDOM.createRoot(document.getElementById('root')),K=0;window.__lkRemount=function(){var el=React.createElement(window.__lkC,Object.assign({},q,{key:'lk'+(++K)}));if(ReactDOM.flushSync)ReactDOM.flushSync(function(){R.render(el)});else R.render(el)};R.render(React.createElement(window.__lkC,q));window.__lkOk=1}catch(e){window.__lkErr('상태창 오류: '+(e&&e.message||e))}" +
-    "setTimeout(window.__lkPost,60);setTimeout(window.__lkPost,500);setTimeout(window.__lkPost,1500);})();<\/script></body></html>";
-  return { doc };
+  const P = jsxDocParts();
+  const doc = P.pre + three + P.setup + "<script>(" + lkJsxSnapper.toString() + ")();<\/script>" +
+    "<script>" + esc(compC) + "<\/script>" + "<script>" + esc(compP) + "<\/script>" + P.tail;
+  return { doc, compC, compP, three: !!three };
 }
 function makeJsxFrame(doc) {
   const ifr = document.createElement("iframe");
@@ -3595,6 +3600,44 @@ function exportHost() {
   return h;
 }
 let _exUid = 0;
+const b64u = t => btoa(unescape(encodeURIComponent(t)));
+// 스킨이 진짜 상태창(iframe)으로 바꿔 끼울 자리. 스킨 코드가 없으면 안의 첫 화면이 그대로 보인다
+async function liveJsxForExport(src, chat, inline, defs) {
+  const nm = (src.match(/^\s*<\s*([A-Za-z_$][\w$]*)/) || [])[1];
+  const b = await buildJsxDoc(src, chat);
+  if (b.error) return null;
+  defs[nm] = b.compC;
+  const fb = await snapJsxForExport(src, chat, inline, true);
+  return '<div class="lk-live" data-lk-name="' + escapeHtml(nm) + '" data-lk-props="' + b64u(b.compP) + '"><div class="lk-fb">' + (fb || "") + "</div></div>";
+}
+// 스킨 skin.html 의 </body> 바로 앞에 넣을 코드: .lk-live 자리를 찾아 sandbox iframe 으로 진짜 상태창을 띄운다
+function lkSkinSnippet() {
+  const P = jsxDocParts();
+  const T = '<script src="https://unpkg.com/three@0.160.0/build/three.min.js"><\/script>';
+  const SC = "<" + "/script>";
+  const js = "(function(){\n" +
+    "if(window.__lkLive)return;window.__lkLive=1;\n" +
+    "var P=" + JSON.stringify(P) + ",T=" + JSON.stringify(T) + ",defs={},frames=[];\n" +
+    "function d64(s){try{return decodeURIComponent(escape(atob(String(s||'').replace(/\\s+/g,''))))}catch(e){return ''}}\n" +
+    "function esc(t){return String(t).replace(/<\\/script/gi,'<\\\\/script')}\n" +
+    "function roots(){var r=[document],a=document.querySelectorAll('*');for(var i=0;i<a.length;i++)if(a[i].shadowRoot)r.push(a[i].shadowRoot);return r}\n" +
+    "function scan(){var rs=roots();\n" +
+    " rs.forEach(function(r){r.querySelectorAll('[data-lk-def]').forEach(function(d){var n=d.getAttribute('data-lk-def');if(!defs[n])defs[n]=d64(d.textContent)})});\n" +
+    " rs.forEach(function(r){r.querySelectorAll('.lk-live:not([data-lk-on])').forEach(function(el){\n" +
+    "  var n=el.getAttribute('data-lk-name'),c=defs[n];if(!c)return;el.setAttribute('data-lk-on','1');\n" +
+    "  var f=document.createElement('iframe'),fb=el.querySelector('.lk-fb');\n" +
+    "  f.setAttribute('sandbox','allow-scripts');f.setAttribute('title',n);\n" +
+    "  f.style.cssText='display:block;width:100%;border:0;background:transparent;height:0';\n" +
+    "  f.srcdoc=P.pre+(/THREE|ThreeCanvas/.test(c)?T:'')+P.setup+'<script>'+esc(c)+'<\\/script><script>'+esc(d64(el.getAttribute('data-lk-props')))+'<\\/script>'+P.tail;\n" +
+    "  frames.push({f:f,fb:fb});el.insertBefore(f,el.firstChild);\n" +
+    " })})}\n" +
+    "window.addEventListener('message',function(e){var d=e.data;if(!d||d.type!=='lk-jsx-h'||!(d.h>0))return;\n" +
+    " for(var i=0;i<frames.length;i++){var x=frames[i];if(x.f.contentWindow===e.source){x.f.style.height=d.h+'px';if(x.fb)x.fb.style.display='none';break}}});\n" +
+    "var k=0,t=setInterval(function(){scan();if(++k>60)clearInterval(t)},500);\n" +
+    "if(document.readyState!=='loading')scan();else document.addEventListener('DOMContentLoaded',scan);\n" +
+    "})();";
+  return "<!-- 로그보관함: 티팟 상태창을 진짜로 띄우기 -->\n<script>\n" + js.split(SC).join("<\\/script>") + "\n" + SC;
+}
 // 같은 style="..." 이 수백 번 반복되므로 class 로 모아 용량을 줄인다 (inline=true 면 그대로 둠: 티스토리 HTML 모드용)
 function exCompress(html, uid) {
   const map = new Map();
@@ -3639,23 +3682,23 @@ function exInteractive(states, extra, inline) {
 // 화면 밖에서 새로 그려서 버튼/탭을 하나씩 눌러 보고, 화면별 모습을 라디오+CSS 로 묶는다
 const EX_VER = "ex4";
 const _exMem = new Map();
-async function snapJsxForExport(src, chat, inline) {
+async function snapJsxForExport(src, chat, inline, quick) {
   const nm = (src.match(/^\s*<\s*([A-Za-z_$][\w$]*)/) || [])[1];
-  const key = "snap-" + EX_VER + "-" + jsxHash(src + "\u0000" + ((nm && jsxDefsFor(chat)[nm]) || ""));
+  const key = "snap-" + EX_VER + (quick ? "q" : "") + "-" + jsxHash(src + "\u0000" + ((nm && jsxDefsFor(chat)[nm]) || ""));
   let got = _exMem.get(key);
   if (!got) {
     const hit = await jsxCacheGet(key);
     if (hit) { try { got = JSON.parse(hit); } catch (e) {} }
   }
   if (!got) {
-    got = await snapJsxRaw(src, chat);
+    got = await snapJsxRaw(src, chat, quick);
     if (got) jsxCachePut(key, JSON.stringify(got));
   }
   if (!got) return null;
   _exMem.set(key, got);
   return exInteractive(got.states, got.extra, inline);
 }
-async function snapJsxRaw(src, chat) {
+async function snapJsxRaw(src, chat, quick) {
   const b = await buildJsxDoc(src, chat);
   if (b.error) return null;
   const ifr = makeJsxFrame(b.doc);
@@ -3667,6 +3710,7 @@ async function snapJsxRaw(src, chat) {
       const r1 = await askJsxSnap(ifr, 2000);
       if (r1 && r1.ok) {
         await new Promise(r => setTimeout(r, 150));   // 마운트 직후 바뀌는 값까지 반영
+        if (quick) { const q = await askJsxSnap(ifr, 3000); return { states: [q && q.ok ? q.html : r1.html], extra: null }; }
         const r2 = await askJsxSnap(ifr, 40000, "lk-jsx-explore");
         return r2 && r2.ok && r2.states && r2.states.length ? { states: r2.states, extra: { css: r2.css, fonts: r2.fonts } } : { states: [r1.html], extra: null };
       }
@@ -3707,7 +3751,7 @@ function exStatus(data) {
     '<summary style="cursor:pointer;font-weight:600">🪪 ' + escapeHtml(data.summary) + "</summary>" +
     '<div style="margin-top:8px;line-height:1.7">' + body + "</div></details>";
 }
-async function buildTistoryHtml(chat, from, to, withNo, onProg, inline) {
+async function buildTistoryHtml(chat, from, to, withNo, onProg, inline, live) {
   const all = sortedTurns(chat);
   const turns = all.slice(from - 1, to);
   const parts = [], jobs = [];
@@ -3734,14 +3778,14 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg, inline) {
     parts.push("<div>" + label + h + "</div>");
   }
   // 상태창은 6개씩 동시에 그린다
-  const res = new Array(jobs.length);
+  const res = new Array(jobs.length), liveDefs = {};
   let next = 0, done = 0;
   onProg && onProg(0, jobs.length);
   await Promise.all(Array.from({ length: Math.min(6, jobs.length) }, async () => {
     while (next < jobs.length) {
       const i = next++;
       let html = null;
-      try { html = await snapJsxForExport(jobs[i], chat, inline); } catch (e) { console.warn("export jsx failed", e); }
+      try { html = live ? await liveJsxForExport(jobs[i], chat, inline, liveDefs) : await snapJsxForExport(jobs[i], chat, inline); } catch (e) { console.warn("export jsx failed", e); }
       // 상태창 안의 absolute 장식이 아래 상태창을 덮지 않도록 블록마다 가둔다
       res[i] = html ? '<div style="margin:16px 0;position:relative;isolation:isolate;overflow:clip;overflow-clip-margin:16px">' + html + "</div>"
                     : '<div style="margin:16px 0;padding:10px;border:1px dashed #ccc;border-radius:8px;font-size:12px;color:#999">(상태창을 그리지 못했어요)</div>';
@@ -3750,7 +3794,8 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg, inline) {
   }));
   for (let i = 0; i < parts.length; i++) parts[i] = parts[i].replace(/@@LKJOB(\d+)@@/g, (m, n) => res[+n] || "");
   // 본문 글씨는 색만 넣고 글꼴·크기·줄간격은 비워 둔다 (티스토리 글씨 크기 설정이 그대로 먹게)
-  const head = "<p><b>" + escapeHtml((chat.emoji ? chat.emoji + " " : "") + (chat.title || "")) + "</b></p>";
+  const head = "<p><b>" + escapeHtml((chat.emoji ? chat.emoji + " " : "") + (chat.title || "")) + "</b></p>" +
+    Object.keys(liveDefs).map(n => '<div data-lk-def="' + escapeHtml(n) + '" style="display:none">' + b64u(liveDefs[n]) + "</div>").join("");
   // box-shadow:none 은 일부 스킨(ONE LOGIN 등)이 [[HTML]] 안의 <details> 를 자체 상태창으로 바꿔 버리는 걸 막는 표시
   // 글꼴·크기는 스킨 읽기 도구 값(--reader-size / --reader-font / --font)을 따르고, 없으면 바깥 글씨를 그대로 물려받는다
   return '<div style="max-width:720px;margin:0 auto;word-break:keep-all;overflow-wrap:anywhere;box-shadow:none;' +
@@ -3764,8 +3809,14 @@ function openTistoryModal() {
   if (!chat || !chat.turns.length) { toast("내보낼 로그가 없어요"); return; }
   const n = chat.turns.length;
   openModal("티스토리용 내보내기", '' +
-    '<p class="desc">대사 색과 상태창 디자인을 살린 HTML 로 내보내요. 상태창의 <b>펼치기·탭 버튼은 미리 눌러 본 화면으로 바꿔 넣어서</b> 스크립트 없이도 눌려요. ' +
-    '(누를 때마다 숫자가 바뀌는 것처럼 미리 정해 둘 수 없는 동작은 처음 모습으로 고정돼요)</p>' +
+    '<p class="desc">대사 색과 상태창 디자인을 살린 HTML 로 내보내요.</p>' +
+    '<div class="bm-block"><div class="bm-step">상태창</div>' +
+    '<label class="bm-hint" style="display:flex;gap:6px;align-items:flex-start"><input type="radio" name="exMode" value="live"' + (lsGetSafe("lk_exMode") === "snap" ? "" : " checked") + '> ' +
+    '<span><b>티팟이랑 똑같이 (추천)</b> — 블로그에서 진짜 상태창 코드를 돌려요. 버튼·탭·움직임 전부 그대로. ' +
+    '스킨에 코드를 <b>한 번만</b> 넣으면 돼요 → <a href="#" id="exSkin">스킨 코드 복사</a><br>' +
+    '<span style="opacity:.75">스킨 → html 편집 → HTML 탭 맨 아래 <code>&lt;/body&gt;</code> 바로 위에 붙여넣고 적용. 코드가 없는 곳에선 첫 화면 그림으로 보여요.</span></span></label>' +
+    '<label class="bm-hint" style="display:flex;gap:6px;align-items:flex-start"><input type="radio" name="exMode" value="snap"' + (lsGetSafe("lk_exMode") === "snap" ? " checked" : "") + '> ' +
+    '<span><b>스크립트 없이</b> — 버튼을 미리 눌러 본 화면으로 바꿔 넣어요. 스킨 수정 없이 되지만 느리고, 숫자가 계속 바뀌는 동작은 안 돼요.</span></label></div>' +
     '<div class="bm-block"><div class="bm-step">범위</div>' +
     '<p class="bm-hint" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
     '<input id="exFrom" type="number" min="1" max="' + n + '" value="1" style="width:80px"> 번째 턴부터 ' +
@@ -3786,7 +3837,9 @@ function openTistoryModal() {
     try {
       // HTML 모드에 바로 붙일 때는 페이지 CSS 에 지지 않게 style 을 그대로 둔다
       const inline = mode === "copy" && !$("exWrap").checked;
-      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "상태창 그리는 중… " + i + " / " + t; }, inline);
+      const live = (document.querySelector('input[name="exMode"]:checked') || {}).value !== "snap";
+      lsSetSafe("lk_exMode", live ? "live" : "snap");
+      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "상태창 그리는 중… " + i + " / " + t; }, inline, live);
       const kb = Math.round(html.length / 1024);
       if (mode === "copy") {
         const wrap = $("exWrap").checked;
@@ -3810,6 +3863,7 @@ function openTistoryModal() {
     } finally { busy = false; }
   };
   $("exCopy").addEventListener("click", () => run("copy"));
+  $("exSkin").addEventListener("click", e => { e.preventDefault(); copyText(lkSkinSnippet()); toast("스킨 코드를 복사했어요 — </body> 바로 위에 붙여넣으세요"); });
   $("exSave").addEventListener("click", () => run("save"));
 }
 $("tistoryBtn").addEventListener("click", openTistoryModal);
