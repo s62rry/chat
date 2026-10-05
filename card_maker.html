@@ -1304,6 +1304,8 @@
     padding: 0;
   }
   .history-del:hover { background: #e0556b; color: #fff; }
+  /* 메시지 화면은 세로로 길어서 위쪽(첫 대화)이 보이게 */
+  .history-thumb.tkh-thumb { width: 38px; height: 48px; background-position: top center; }
   .history-empty {
     font-size: 11.5px; color: var(--text-dim);
     text-align: center; padding: 14px 0;
@@ -9331,14 +9333,14 @@
       a.href = cv.toDataURL('image/png');
       a.click();
       toast('대화 화면을 저장했어요');
-      tkAddHistory();
+      tkAddHistory(cv);
     }).catch(() => toast('저장에 실패했어요'));
   }
   function tkCopyImage() {
     tkCanvas().then(cv => {
       cv.toBlob(blob => {
         navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-          .then(() => { toast('복사했어요'); tkAddHistory(); })
+          .then(() => { toast('복사했어요'); tkAddHistory(cv); })
           .catch(() => toast('복사가 안 되는 브라우저예요'));
       });
     });
@@ -9373,10 +9375,26 @@
       } catch (e) {}
     });
   }
-  function tkAddHistory() {
+  // 저장한 화면을 작게 줄인 그림 — 히스토리 목록에서 어떤 화면이었는지 바로 보이게
+  function tkThumb(cv) {
+    try {
+      if (!cv || !cv.width) return '';
+      const w = 150, h = Math.min(220, Math.round(cv.height * w / cv.width));
+      const t = document.createElement('canvas');
+      t.width = w; t.height = h;
+      const x = t.getContext('2d');
+      x.fillStyle = $('tkBgColor').value || '#ffffff';
+      x.fillRect(0, 0, w, h);
+      // 세로로 길면 위쪽만 (첫 대화가 보이게)
+      x.drawImage(cv, 0, 0, cv.width, Math.round(h * cv.width / w), 0, 0, w, h);
+      return t.toDataURL('image/jpeg', 0.78);
+    } catch (e) { return ''; }
+  }
+  function tkAddHistory(cv) {
     const script = $('tkScript').value.trim();
     if (!script) return;
     const settings = tkSnapshot();
+    const thumb = tkThumb(cv);
     const now = new Date();
     const stamp = (now.getMonth() + 1) + '월 ' + now.getDate() + '일 '
       + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
@@ -9385,8 +9403,9 @@
       // 같은 대본을 다시 저장하면 새 기록 대신 화면 설정만 최신으로
       top.settings = settings;
       top.stamp = stamp;
+      if (thumb) top.thumb = thumb;
     } else {
-      tkHistCache.unshift({ stamp: stamp, script: script, settings: settings });
+      tkHistCache.unshift({ stamp: stamp, script: script, settings: settings, thumb: thumb });
       tkHistCache = tkHistCache.slice(0, 20);
     }
     tkSaveHistory();
@@ -9397,16 +9416,31 @@
     const list = tkHistList();
     box.innerHTML = '';
     $('tkHistEmpty').style.display = list.length ? 'none' : '';
+    box.className = 'history-list';
     list.forEach((h, i) => {
+      // 발췌 히스토리와 같은 모양 — 왼쪽에 그때 화면 그림, 오른쪽에 첫 줄·시간
       const item = document.createElement('div');
-      item.style.cssText = 'display:flex; align-items:center; gap:8px; padding:7px 9px;'
-        + 'border:1px solid var(--border); border-radius:6px; margin-bottom:6px; cursor:pointer;';
-      const first = h.script.split('\n')[0].slice(0, 26);
-      item.innerHTML = '<div style="flex:1; min-width:0;">'
-        + '<div style="font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + first.replace(/</g, '&lt;') + '</div>'
-        + '<div style="font-size:10.5px; color:var(--text-dim); margin-top:1px;">' + h.stamp
-        + (h.settings ? ' · 화면 설정 포함' : '') + '</div></div>'
-        + '<button class="mini-btn tkh-del" type="button" style="margin-left:0;">×</button>';
+      item.className = 'history-item';
+      const th = document.createElement('div');
+      th.className = 'history-thumb tkh-thumb';
+      if (h.thumb) th.style.backgroundImage = 'url(' + h.thumb + ')';
+      else if (h.settings && h.settings.sliders) th.style.background = h.settings.sliders.tkBgColor || '';
+      const info = document.createElement('div');
+      info.className = 'history-info';
+      const tx = document.createElement('div');
+      tx.className = 'history-text';
+      tx.textContent = h.script.split('\n')[0];
+      const meta = document.createElement('div');
+      meta.className = 'history-meta';
+      const lines = h.script.split('\n').filter(l => l.trim()).length;
+      meta.textContent = [h.stamp, lines + '줄', h.settings ? '화면 포함' : ''].filter(Boolean).join(' · ');
+      info.appendChild(tx); info.appendChild(meta);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'history-del tkh-del';
+      del.title = '기록 삭제';
+      del.textContent = '×';
+      item.appendChild(th); item.appendChild(info); item.appendChild(del);
       item.addEventListener('click', ev => {
         if (ev.target.classList.contains('tkh-del')) {
           tkHistCache.splice(i, 1);
