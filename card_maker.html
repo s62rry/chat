@@ -633,13 +633,47 @@
     max-width: 540px;
   }
 
-  /* 메시지 대본 문법 버튼 — 5칸씩 두 줄 */
+  /* 메시지 대본 문법 버튼 — 넣는 기호를 앞에 보여주는 알약들 */
   .tk-bar {
-    display: grid; grid-template-columns: repeat(5, 1fr);
-    gap: 3px; margin: 7px 0 2px;
+    display: flex; flex-wrap: wrap;
+    gap: 4px; margin: 8px 0 4px;
   }
-  .tk-bar .fmt-btn { height: 26px; padding: 0; justify-content: center; font-size: 11.5px; min-width: 0; }
-  .tk-style-grid button { height: 30px; font-size: 12px; }
+  .tk-bar .fmt-btn {
+    height: 25px; padding: 0 9px 0 7px; gap: 5px;
+    border-radius: 999px; font-size: 11.5px;
+    background: var(--field); border-color: var(--border);
+  }
+  .tk-bar .fmt-btn .tk-sym {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 10px; font-weight: 700; color: var(--accent);
+    min-width: 12px; text-align: center; letter-spacing: -0.03em;
+  }
+  .tk-bar .fmt-btn:hover .tk-sym { color: inherit; }
+  /* 화면 종류 — 앱 색으로 그린 작은 미리보기 카드 */
+  .tk-style-grid { gap: 6px; }
+  .tk-style-grid button {
+    height: auto; padding: 6px 4px 6px; flex-direction: column; gap: 5px;
+    font-size: 11px; font-weight: 600; border-radius: 9px;
+  }
+  .tk-style-grid button.active,
+  .tk-style-grid button.active:hover {
+    background: var(--accent-soft); color: var(--accent);
+    border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent);
+  }
+  .sty-prev {
+    position: relative; display: block; width: 100%; height: 30px;
+    border-radius: 6px; overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+  }
+  .sty-prev i {
+    position: absolute; height: 7px; border-radius: 4px;
+  }
+  .sty-prev i:nth-child(1) { left: 6px; top: 6px; width: 46%; }
+  .sty-prev i:nth-child(2) { right: 6px; top: 17px; width: 36%; }
+  .sty-prev.rows i { height: 3px; border-radius: 2px; left: 6px; right: auto; }
+  .sty-prev.rows i:nth-child(1) { top: 8px; width: 60%; }
+  .sty-prev.rows i:nth-child(2) { top: 15px; width: 72%; }
+  .sty-prev.rows i:nth-child(3) { top: 22px; width: 48%; }
   /* 메시지 '화면' 칸 묶음 제목 — 틀 / 말풍선 / 프사·이름 */
   .grp-head {
     display: flex; align-items: baseline; gap: 6px;
@@ -649,6 +683,7 @@
   }
   .grp-head span { font-size: 10.5px; font-weight: 400; color: var(--text-dim); }
   .tk-style-grid { grid-template-columns: repeat(4, 1fr); }
+  .tk-bar .fmt-btn .tk-lbl { pointer-events: none; }
   #tkTopSeg button { height: 22px; padding: 0 10px; font-size: 11px; }
   #tkTopOpts input { width: 100%; }
   .tk-bar .fmt-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
@@ -2637,7 +2672,7 @@
       <input type="file" id="tkPhotoFile" accept="image/*" style="display:none;">
       <div class="hint">
         <b>이름: 내용</b> 한 줄 = 말풍선 하나 (이름 없으면 앞사람이 이어 말함).
-        버튼은 커서가 있는 줄에 붙고, 한 번 더 누르면 빠져요. 버튼 위에 마우스를 올리면 직접 쓰는 기호가 보여요.
+        버튼은 커서가 있는 줄에 붙고, 한 번 더 누르면 빠져요. 파란 기호를 직접 써도 돼요.
       </div>
     </div>
 
@@ -9541,6 +9576,30 @@
              rowMode: 'game', nameColors: ['#ffd75e', '#7ee787', '#79c0ff', '#ff9d9d', '#d2a8ff'],
              sliders: { tkGapRange: 3, tkPadRange: 10, tkPadXRange: 10, tkRadiusRange: 3, tkShellRange: 6 } }
   };
+  // 화면 종류 버튼에 그 앱 색으로 작은 미리보기를 그려 넣는다
+  document.querySelectorAll('#tkPresetSeg button').forEach(btn => {
+    const pz = TK_PRESETS[btn.dataset.tkp];
+    if (!pz || btn.querySelector('.sty-prev')) return;
+    const prev = document.createElement('span');
+    prev.className = 'sty-prev' + (pz.rowMode ? ' rows' : '');
+    prev.style.background = pz.bg;
+    if (pz.rowMode) {
+      (pz.nameColors || ['#999', '#aaa', '#bbb']).slice(0, 3).forEach(c => {
+        const i = document.createElement('i'); i.style.background = c; prev.appendChild(i);
+      });
+    } else {
+      [pz.left.bubble, pz.right.bubble].forEach(c => {
+        const i = document.createElement('i'); i.style.background = c;
+        if (c.toLowerCase() === pz.bg.toLowerCase() || c.toLowerCase() === '#ffffff') i.style.boxShadow = '0 0 0 1px rgba(0,0,0,0.1)';
+        prev.appendChild(i);
+      });
+    }
+    const lbl = document.createElement('span');
+    lbl.textContent = btn.textContent;
+    btn.textContent = '';
+    btn.appendChild(prev);
+    btn.appendChild(lbl);
+  });
   document.querySelectorAll('#tkPresetSeg button').forEach(btn => {
     btn.addEventListener('click', () => {
       const pz = TK_PRESETS[btn.dataset.tkp];
@@ -9608,6 +9667,20 @@
   $('tkClearBtn').addEventListener('click', () => { $('tkScript').value = ''; tkRenderAll(); tkPersist(); });
 
   // ===== 대본 문법 버튼 =====
+  // 각 버튼 앞에 실제로 넣는 기호를 작게 보여준다
+  const TK_SYM = { narr: '*', sys: '//', trans: '( )', game: '『』', page: '---', time: '@', unread: '!',
+                   big: '+', small: '−', emo: ':1:', date: '==', reply: '>', photo: '[ ]', react: '~' };
+  document.querySelectorAll('#tkBar [data-tk]').forEach(b => {
+    const lbl = document.createElement('span');
+    lbl.className = 'tk-lbl';
+    lbl.textContent = b.textContent;
+    const sym = document.createElement('b');
+    sym.className = 'tk-sym';
+    sym.textContent = TK_SYM[b.dataset.tk] || '';
+    b.textContent = '';
+    b.appendChild(sym);
+    b.appendChild(lbl);
+  });
   // 화면 종류마다 실제로 그려지는 것만 보여준다 (안 고른 상태면 전부)
   var TK_BAR_SETS = {
     kakao: ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page', 'date', 'reply', 'photo', 'react'],
@@ -9628,7 +9701,8 @@
     });
     const ub = document.querySelector('#tkBar [data-tk="unread"]');
     if (ub) {
-      ub.textContent = tkReadMark() === '1' ? '안읽음' : '읽음';
+      const ul = ub.querySelector('.tk-lbl') || ub;
+      ul.textContent = tkReadMark() === '1' ? '안읽음' : '읽음';
       ub.title = tkReadMark() === '1' ? '!1 — 줄 끝에 안읽음 숫자' : '!읽음 — 이 말풍선에 읽음 표시';
     }
     const tb = document.querySelector('#tkBar [data-tk="time"]');
