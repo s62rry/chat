@@ -633,6 +633,41 @@
     max-width: 540px;
   }
 
+  /* 모아보기 줄 */
+  .page-strip {
+    display: none;
+    width: 100%;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 6px 6px 10px;
+    scroll-snap-type: x proximity;
+  }
+  .page-strip.on { display: flex; }
+  .ps-item {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    cursor: pointer;
+    scroll-snap-align: center;
+  }
+  .ps-frame {
+    position: relative; overflow: hidden;
+    border-radius: 6px;
+    outline: 2px solid transparent; outline-offset: 2px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+    transition: outline-color 0.15s ease, transform 0.15s ease;
+  }
+  .ps-item:hover .ps-frame { transform: translateY(-2px); }
+  .ps-item.cur .ps-frame { outline-color: var(--accent); }
+  .ps-frame > #card {
+    position: absolute; left: 0; top: 0;
+    transform-origin: 0 0;
+    box-shadow: none !important; margin: 0 !important;
+    pointer-events: none;
+  }
+  .ps-num { font-size: 11px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .ps-item.cur .ps-num { color: var(--accent); }
+  #pageStripToggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
   /* 발췌 카드 */
   #card {
     width: 100%;
@@ -2723,7 +2758,11 @@
         <button class="page-btn" id="pageNext" type="button">▶</button>
         <button class="mini-btn" id="pageEditToggle" type="button" style="margin-left:9px;"
                 title="입력창에 지금 보는 장만 보여줍니다">이 장만 편집</button>
+        <button class="mini-btn" id="pageStripToggle" type="button" style="margin-left:4px;"
+                title="모든 장을 옆으로 나란히 보여줍니다">모아보기</button>
       </div>
+      <!-- 모아보기 — 장마다 카드를 작게 복제해 나란히 (누르면 그 장으로) -->
+      <div class="page-strip" id="pageStrip"></div>
     </div>
     <div class="chat-shell" id="chatWrap" style="display:none;"><div id="chat"></div></div>
     <div class="page-nav" id="tkNav" style="display:none;">
@@ -9069,6 +9108,98 @@
   ['input', 'change', 'click', 'pointerup'].forEach(t =>
     document.addEventListener(t, saveLastSoon, true));
   window.addEventListener('pagehide', saveLastNow);
+
+  // ============ 모아보기 ============
+  // 장마다 잠깐 그 장으로 그려서 카드를 통째로 복제한다 (같은 렌더링이라 미리보기와 똑같이 보인다)
+  const STRIP_KEY = 'quotecard:pageStrip';
+  let stripOn = false;
+  let stripTimer = null;
+  let stripBuilding = false;
+  try { stripOn = localStorage.getItem(STRIP_KEY) === '1'; } catch (e) {}
+  function buildStrip() {
+    const strip = $('pageStrip');
+    const pages = getPages();
+    const show = stripOn && pages.length > 1 && $('talkEditor').style.display === 'none';
+    strip.classList.toggle('on', show);
+    $('pageStripToggle').classList.toggle('on', stripOn);
+    if (!show) { strip.innerHTML = ''; return; }
+    const keep = curPage;
+    const W = card.offsetWidth || 540;
+    const TW = 132;
+    const sc = TW / W;
+    const items = [];
+    stripBuilding = true;
+    try {
+      for (let i = 0; i < pages.length; i++) {
+        curPage = i;
+        renderCard();
+        try { applyPageBg(); applyPanel(); } catch (e) {}
+        const H = card.offsetHeight;
+        const clone = card.cloneNode(true);
+        clone.style.width = W + 'px';
+        clone.style.maxWidth = 'none';
+        clone.style.height = H + 'px';
+        clone.style.transform = 'scale(' + sc + ')';
+        clone.setAttribute('aria-hidden', 'true');
+        clone.inert = true;
+        const item = document.createElement('div');
+        item.className = 'ps-item' + (i === keep ? ' cur' : '');
+        item.title = (i + 1) + '장으로';
+        const frame = document.createElement('div');
+        frame.className = 'ps-frame';
+        frame.style.width = TW + 'px';
+        frame.style.height = Math.round(H * sc) + 'px';
+        frame.appendChild(clone);
+        const num = document.createElement('span');
+        num.className = 'ps-num';
+        num.textContent = (i + 1) + ' / ' + pages.length;
+        item.appendChild(frame);
+        item.appendChild(num);
+        item.addEventListener('click', () => {
+          curPage = i;
+          showPageInInput();
+          renderCard();
+          markStripCur();
+        });
+        items.push(item);
+      }
+    } finally {
+      curPage = keep;
+      renderCard();
+      try { applyPageBg(); applyPanel(); } catch (e) {}
+      stripBuilding = false;
+    }
+    const sl = strip.scrollLeft;
+    strip.innerHTML = '';
+    items.forEach(it => strip.appendChild(it));
+    strip.scrollLeft = sl;
+  }
+  function markStripCur() {
+    $('pageStrip').querySelectorAll('.ps-item').forEach((it, i) => it.classList.toggle('cur', i === curPage));
+    const cur = $('pageStrip').querySelector('.ps-item.cur');
+    if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }
+  function stripSoon() {
+    if (!stripOn || stripBuilding) return;
+    clearTimeout(stripTimer);
+    stripTimer = setTimeout(buildStrip, 450);
+  }
+  $('pageStripToggle').addEventListener('click', () => {
+    stripOn = !stripOn;
+    try { localStorage.setItem(STRIP_KEY, stripOn ? '1' : '0'); } catch (e) {}
+    buildStrip();
+  });
+  // 무엇이든 바뀌면 잠시 뒤 다시 만든다 (장 넘기기만 했으면 표시만 옮김)
+  ['input', 'change', 'pointerup'].forEach(t => document.addEventListener(t, ev => {
+    if (ev.target.closest && ev.target.closest('#pageStrip')) return;
+    stripSoon();
+  }, true));
+  document.addEventListener('click', ev => {
+    if (!stripOn) return;
+    if (ev.target.closest('#pagePrev, #pageNext, #qPagePrev, #qPageNext')) setTimeout(markStripCur, 0);
+  }, true);
+  window.addEventListener('resize', stripSoon);
+  setTimeout(buildStrip, 300);
 
   // ============ 미리보기를 누르면 그 설정으로 ============
   (function setupPreviewNav() {
