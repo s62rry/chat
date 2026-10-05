@@ -640,6 +640,14 @@
   }
   .tk-bar .fmt-btn { height: 26px; padding: 0; justify-content: center; font-size: 11.5px; min-width: 0; }
   .tk-style-grid button { height: 30px; font-size: 12px; }
+  /* 메시지 '화면' 칸 묶음 제목 — 틀 / 말풍선 / 프사·이름 */
+  .grp-head {
+    display: flex; align-items: baseline; gap: 6px;
+    margin: 14px 0 8px; padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 11.5px; font-weight: 700; color: var(--text);
+  }
+  .grp-head span { font-size: 10.5px; font-weight: 400; color: var(--text-dim); }
   .tk-style-grid { grid-template-columns: repeat(4, 1fr); }
   .tk-bar .fmt-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
@@ -2675,6 +2683,37 @@
         <div id="tkMyPresets" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:7px;"></div>
         <button class="mini-btn" id="tkPresetSave" type="button" style="margin:7px 0 0;">+ 내 프리셋</button>
       </div>
+      <!-- ① 화면 틀 — 대화 전체를 감싸는 판 -->
+      <div class="grp-head">화면 틀 <span>대화 전체를 감싸는 판</span></div>
+      <div class="row">
+        <div class="col-swatch">
+          <label class="field-label">배경 색</label>
+          <input type="color" class="swatch-input" id="tkBgColor" value="#b2c7da" style="height:31px; width:100%;">
+        </div>
+        <div>
+          <label class="field-label">틀 모서리 둥글기</label>
+          <div class="slider-row">
+            <input type="range" id="tkShellRange" min="0" max="30" value="0">
+            <span class="slider-val" id="tkShellVal">0px</span>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="field-label">위아래 여백</label>
+          <div class="slider-row">
+            <input type="range" id="tkPadRange" min="6" max="60" value="22">
+            <span class="slider-val" id="tkPadVal">22px</span>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">좌우 여백</label>
+          <div class="slider-row">
+            <input type="range" id="tkPadXRange" min="4" max="60" value="14">
+            <span class="slider-val" id="tkPadXVal">14px</span>
+          </div>
+        </div>
+      </div>
       <div class="field-group">
         <label class="field-label" style="display:flex;align-items:center;">
           배경 이미지
@@ -2724,61 +2763,45 @@
           </div>
         </div>
       </div>
-      <div class="row">
-        <div class="col-swatch">
-          <label class="field-label">배경 색</label>
-          <input type="color" class="swatch-input" id="tkBgColor" value="#b2c7da" style="height:31px; width:100%;">
-        </div>
-        <div>
-          <label class="field-label">모양</label>
-          <div class="seg" id="tkShapeSeg">
+
+      <!-- ② 말풍선 — 말 하나하나 -->
+      <div class="grp-head">말풍선 <span>말 하나하나의 모양</span></div>
+      <div class="field-group">
+        <label class="field-label">모양</label>
+        <div class="seg" id="tkShapeSeg">
             <button data-shape="plain" class="active">둥근</button>
             <button data-shape="stack">묶음</button>
             <button data-shape="notch">모서리</button>
             <button data-shape="tailtop">위</button>
             <button data-shape="tailcut">꺾인</button>
             <button data-shape="tailbot">아래</button>
-          </div>
         </div>
       </div>
       <div class="row">
         <div>
-          <label class="field-label">둥글기</label>
+          <label class="field-label">말풍선 둥글기</label>
           <div class="slider-row">
             <input type="range" id="tkRadiusRange" min="0" max="22" value="12">
             <span class="slider-val" id="tkRadiusVal">12px</span>
           </div>
         </div>
         <div>
-          <label class="field-label">간격</label>
+          <label class="field-label">말풍선 사이 간격</label>
           <div class="slider-row">
             <input type="range" id="tkGapRange" min="2" max="26" value="10">
             <span class="slider-val" id="tkGapVal">10px</span>
           </div>
         </div>
       </div>
+
+      <!-- ③ 프사·이름 -->
+      <div class="grp-head">프사 · 이름</div>
       <div class="row">
         <div>
-          <label class="field-label">위아래</label>
-          <div class="slider-row">
-            <input type="range" id="tkPadRange" min="6" max="60" value="22">
-            <span class="slider-val" id="tkPadVal">22px</span>
-          </div>
-        </div>
-        <div>
-          <label class="field-label">좌우</label>
-          <div class="slider-row">
-            <input type="range" id="tkPadXRange" min="4" max="60" value="14">
-            <span class="slider-val" id="tkPadXVal">14px</span>
-          </div>
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label class="field-label">모서리</label>
-          <div class="slider-row">
-            <input type="range" id="tkShellRange" min="0" max="30" value="0">
-            <span class="slider-val" id="tkShellVal">0px</span>
+          <label class="field-label">프사</label>
+          <div class="seg" id="tkAvatarSeg">
+            <button data-av="on" class="active">보임</button>
+            <button data-av="off">숨김</button>
           </div>
         </div>
         <div>
@@ -2789,21 +2812,12 @@
           </div>
         </div>
       </div>
-      <div class="row" style="margin-bottom:0;">
-        <div>
-          <label class="field-label">프사 표시</label>
-          <div class="seg" id="tkAvatarSeg">
-            <button data-av="on" class="active">보임</button>
-            <button data-av="off">숨김</button>
-          </div>
-        </div>
-        <div>
-          <label class="field-label">이름</label>
-          <div class="seg" id="tkNameSeg">
+      <div class="field-group" style="margin-bottom:0;">
+        <label class="field-label">이름</label>
+        <div class="seg" id="tkNameSeg">
             <button data-nm="all">모두</button>
             <button data-nm="left" class="active">왼쪽만</button>
             <button data-nm="off">숨김</button>
-          </div>
         </div>
       </div>
     </div>
