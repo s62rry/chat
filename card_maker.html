@@ -667,6 +667,19 @@
   .ps-num { font-size: 11px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
   .ps-item.cur .ps-num { color: var(--accent); }
   #pageStripToggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .page-nav .ps-size { display: none; margin-left: 4px; width: auto; }
+  .page-nav .ps-size.show { display: inline-flex; }
+  .page-nav .ps-size button { padding: 3px 8px; font-size: 11px; }
+  /* 크게 — 카드는 자리만 지키고 숨긴 채, 장들을 미리보기 자리에 크게 나란히 */
+  .preview-stack { position: relative; }
+  .preview-stack.spread { max-width: none; }
+  .preview-stack.spread > #card {
+    position: absolute; left: 0; top: 0;
+    visibility: hidden; pointer-events: none;
+  }
+  .preview-stack.spread > .page-strip { order: -1; gap: 18px; padding: 8px 8px 14px; }
+  .preview-stack.spread .ps-frame { border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.28); }
+  .preview-stack.spread .ps-num { font-size: 12px; }
 
   /* 발췌 카드 */
   #card {
@@ -2760,6 +2773,10 @@
                 title="입력창에 지금 보는 장만 보여줍니다">이 장만 편집</button>
         <button class="mini-btn" id="pageStripToggle" type="button" style="margin-left:4px;"
                 title="모든 장을 옆으로 나란히 보여줍니다">모아보기</button>
+        <span class="seg ps-size" id="stripSizeSeg">
+          <button type="button" data-psz="small" title="미리보기 아래에 작게">작게</button>
+          <button type="button" data-psz="big" title="미리보기 자리에 크게 나란히">크게</button>
+        </span>
       </div>
       <!-- 모아보기 — 장마다 카드를 작게 복제해 나란히 (누르면 그 장으로) -->
       <div class="page-strip" id="pageStrip"></div>
@@ -5112,6 +5129,8 @@
     const r = RATIOS[state.ratio];
     card.style.width = '100%';
     card.style.maxWidth = r.w + 'px';
+    // 모아보기(크게) 중엔 미리보기 칸이 넓어져도 카드 폭은 원래대로 묶어 둔다
+    if (window.__spreadLockW) card.style.maxWidth = Math.min(r.w, window.__spreadLockW) + 'px';
     card.style.width = '100%';
     card.style.height = 'auto';
     card.style.aspectRatio = (state.ratio === 'fit' && !state.vertical) ? 'auto' : r.w + ' / ' + r.h;
@@ -9115,17 +9134,41 @@
   let stripOn = false;
   let stripTimer = null;
   let stripBuilding = false;
-  try { stripOn = localStorage.getItem(STRIP_KEY) === '1'; } catch (e) {}
+  let stripSize = 'small';
+  try {
+    stripOn = localStorage.getItem(STRIP_KEY) === '1';
+    stripSize = localStorage.getItem(STRIP_KEY + 'Size') === 'big' ? 'big' : 'small';
+  } catch (e) {}
+  const pvStack = document.querySelector('.preview-stack');
+  function setSpread(on) {
+    const was = pvStack.classList.contains('spread');
+    if (!on && !was) return;
+    if (was) {                       // 원래 폭부터 다시 잰다
+      pvStack.classList.remove('spread');
+      window.__spreadLockW = 0;
+      applyStyle();
+    }
+    if (on) {
+      window.__spreadLockW = card.offsetWidth || 540;
+      pvStack.classList.add('spread');
+      applyStyle();
+    }
+  }
   function buildStrip() {
     const strip = $('pageStrip');
     const pages = getPages();
     const show = stripOn && pages.length > 1 && $('talkEditor').style.display === 'none';
     strip.classList.toggle('on', show);
     $('pageStripToggle').classList.toggle('on', stripOn);
+    $('stripSizeSeg').classList.toggle('show', stripOn);
+    $('stripSizeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.psz === stripSize));
+    setSpread(show && stripSize === 'big');
     if (!show) { strip.innerHTML = ''; return; }
     const keep = curPage;
     const W = card.offsetWidth || 540;
-    const TW = 132;
+    const big = stripSize === 'big';
+    // 크게 — 카드 원래 폭의 85% 로 (보통 화면이면 두 장 가까이 한눈에)
+    const TW = big ? Math.round(W * 0.85) : 132;
     const sc = TW / W;
     const items = [];
     stripBuilding = true;
@@ -9184,6 +9227,11 @@
     clearTimeout(stripTimer);
     stripTimer = setTimeout(buildStrip, 450);
   }
+  $('stripSizeSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    stripSize = b.dataset.psz;
+    try { localStorage.setItem(STRIP_KEY + 'Size', stripSize); } catch (e) {}
+    buildStrip();
+  }));
   $('pageStripToggle').addEventListener('click', () => {
     stripOn = !stripOn;
     try { localStorage.setItem(STRIP_KEY, stripOn ? '1' : '0'); } catch (e) {}
@@ -9197,6 +9245,7 @@
   document.addEventListener('click', ev => {
     if (!stripOn) return;
     if (ev.target.closest('#pagePrev, #pageNext, #qPagePrev, #qPageNext')) setTimeout(markStripCur, 0);
+    if (ev.target.closest('#modeSeg')) setTimeout(buildStrip, 0);   // 메시지 모드로 가면 펼침도 걷는다
   }, true);
   window.addEventListener('resize', stripSoon);
   setTimeout(buildStrip, 300);
