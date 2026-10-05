@@ -3760,7 +3760,8 @@ function exStatus(data) {
     '<summary style="cursor:pointer;font-weight:600">🪪 ' + escapeHtml(data.summary) + "</summary>" +
     '<div style="margin-top:8px;line-height:1.7">' + body + "</div></details>";
 }
-async function buildTistoryHtml(chat, from, to, withNo, onProg, inline, live) {
+async function buildTistoryHtml(chat, from, to, withNo, onProg, inline, live, fmt) {
+  fmt = fmt || {};
   const all = sortedTurns(chat);
   const turns = all.slice(from - 1, to);
   const parts = [], jobs = [];
@@ -3796,7 +3797,7 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg, inline, live) {
       let html = null;
       try { html = live ? await liveJsxForExport(jobs[i], chat, inline, liveDefs) : await snapJsxForExport(jobs[i], chat, inline); } catch (e) { console.warn("export jsx failed", e); }
       // 상태창 안의 absolute 장식이 아래 상태창을 덮지 않도록 블록마다 가둔다
-      res[i] = html ? '<div style="margin:16px 0;position:relative;isolation:isolate;overflow:clip;overflow-clip-margin:16px">' + html + "</div>"
+      res[i] = html ? '<div style="margin:16px 0;position:relative;isolation:isolate;overflow:clip;overflow-clip-margin:16px;text-align:start;word-break:normal">' + html + "</div>"
                     : '<div style="margin:16px 0;padding:10px;border:1px dashed #ccc;border-radius:8px;font-size:12px;color:#999">(상태창을 그리지 못했어요)</div>';
       onProg && onProg(++done, jobs.length);
     }
@@ -3807,7 +3808,9 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg, inline, live) {
     Object.keys(liveDefs).map(n => '<div data-lk-def="' + escapeHtml(n) + '" style="display:none">' + b64u(liveDefs[n]) + "</div>").join("");
   // box-shadow:none 은 일부 스킨(ONE LOGIN 등)이 [[HTML]] 안의 <details> 를 자체 상태창으로 바꿔 버리는 걸 막는 표시
   // 글꼴·크기는 스킨 읽기 도구 값(--reader-size / --reader-font / --font)을 따르고, 없으면 바깥 글씨를 그대로 물려받는다
-  return '<div style="max-width:720px;margin:0 auto;word-break:keep-all;overflow-wrap:anywhere;box-shadow:none;' +
+  // 본문 정렬: 양쪽 맞춤 / 글자 단위로 자르기(break-all) 또는 단어 단위(keep-all)
+  return '<div style="max-width:720px;margin:0 auto;' + (fmt.justify ? "text-align:justify;" : "") +
+    "word-break:" + (fmt.breakAll ? "break-all" : "keep-all") + ';overflow-wrap:anywhere;box-shadow:none;' +
     'font-size:var(--reader-size,1em);font-family:var(--reader-font,var(--font));color:var(--tx)">' +
     head + parts.join('<hr style="border:0;border-top:1px dashed #dde1ea;margin:30px 0">') + "</div>";
 }
@@ -3831,6 +3834,8 @@ function openTistoryModal() {
     '<input id="exFrom" type="number" min="1" max="' + n + '" value="1" style="width:80px"> 번째 턴부터 ' +
     '<input id="exTo" type="number" min="1" max="' + n + '" value="' + n + '" style="width:80px"> 번째 턴까지 (전체 ' + n + '턴, 지금 정렬 순서 기준)</p>' +
     '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exNo" checked> 턴 번호 표시</label>' +
+    '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exJustify"' + (lsGetSafe("lk_exJustify") === "0" ? "" : " checked") + '> 본문 양쪽 맞춤</label>' +
+    '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exBreakAll"' + (lsGetSafe("lk_exBreakAll") === "0" ? "" : " checked") + '> 글자 단위로 자르기 (끄면 단어 단위)</label>' +
     '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exWrap"' + (lsGetSafe("lk_exWrap") === "0" ? "" : " checked") + '> ' +
     '<span><b>[[HTML]] … [[/HTML]]</b> 로 감싸서 한 줄로 (스킨이 기본 칸의 [[HTML]] 을 그려 주는 경우 · 끄면 티스토리 HTML 모드용)</span></label></div>' +
     '<p class="bm-hint" id="exProg" style="min-height:18px;color:var(--accent)"></p>',
@@ -3848,7 +3853,10 @@ function openTistoryModal() {
       const inline = mode === "copy" && !$("exWrap").checked;
       const live = (document.querySelector('input[name="exMode"]:checked') || {}).value !== "snap";
       lsSetSafe("lk_exMode", live ? "live" : "snap");
-      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "상태창 그리는 중… " + i + " / " + t; }, inline, live);
+      const fmt = { justify: $("exJustify").checked, breakAll: $("exBreakAll").checked };
+      lsSetSafe("lk_exJustify", fmt.justify ? "1" : "0");
+      lsSetSafe("lk_exBreakAll", fmt.breakAll ? "1" : "0");
+      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "상태창 그리는 중… " + i + " / " + t; }, inline, live, fmt);
       const kb = Math.round(html.length / 1024);
       if (mode === "copy") {
         const wrap = $("exWrap").checked;
