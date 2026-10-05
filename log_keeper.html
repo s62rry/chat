@@ -1559,7 +1559,7 @@ function parseJsxTag(src) {
 function lkJsxSnapper() {
   var SVGNS = "http://www.w3.org/2000/svg";
   var INHERIT = /^(color|font|font-.*|line-height|letter-spacing|word-spacing|text-align|text-indent|text-transform|text-shadow|white-space|word-break|overflow-wrap|word-wrap|visibility|cursor|list-style.*|direction|quotes|tab-size|hyphens|-webkit-text-fill-color|-webkit-text-stroke.*|text-rendering|font-kerning|-webkit-font-smoothing|caret-color|fill|stroke.*|paint-order|text-anchor|dominant-baseline)$/;
-  var SKIP = /^(--|transition|animation|will-change|-webkit-tap|-webkit-user|user-select|pointer-events|cursor|caret-color|outline|block-size|inline-size|min-block|min-inline|max-block|max-inline|inset-block|inset-inline|margin-block|margin-inline|padding-block|padding-inline|border-block|border-inline|border-start|border-end|overflow-block|overflow-inline|scroll|overscroll|contain-intrinsic|perspective-origin|transform-origin|-webkit-locale|-webkit-rtl|-webkit-ruby|-webkit-border-horizontal|-webkit-border-vertical|-webkit-logical|-webkit-mask-box|app-region|view-transition|anchor|position-try|interpolate-size|field-sizing|appearance|-webkit-appearance|width$|height$|d$|x$|y$|cx$|cy$|r$|rx$|ry$)/;
+  var SKIP = /^(--|transition|animation|will-change|-webkit-tap|-webkit-user|user-select|cursor|caret-color|outline|block-size|inline-size|min-block|min-inline|max-block|max-inline|inset-block|inset-inline|margin-block|margin-inline|padding-block|padding-inline|border-block|border-inline|border-start|border-end|overflow-block|overflow-inline|scroll(?!bar)|overscroll|contain-intrinsic|perspective-origin|transform-origin|-webkit-locale|-webkit-rtl|-webkit-ruby|-webkit-border-horizontal|-webkit-border-vertical|-webkit-logical|-webkit-mask-box|app-region|view-transition|anchor|position-try|interpolate-size|field-sizing|appearance|-webkit-appearance|width$|height$|d$|x$|y$|cx$|cy$|r$|rx$|ry$)/;
   var KEEP_SVG = /^(viewbox|d|x|y|x1|x2|y1|y2|cx|cy|r|rx|ry|points|transform|width|height|fill|stroke|stroke-width|offset|stop-color|stop-opacity|gradientunits|gradienttransform|preserveaspectratio|xmlns|href|xlink:href|id|text-anchor|font-size|opacity|fill-opacity|stroke-opacity|stroke-dasharray|stroke-dashoffset|stroke-linecap|stroke-linejoin|patternunits|clip-path|mask|filter|pathlength|fill-rule|clip-rule)$/i;
   var esc = function (t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); };
   var fr = null, fdoc = null, cache = {};
@@ -1574,24 +1574,46 @@ function lkJsxSnapper() {
     cache[k] = o;
     return o;
   }
-  function sizeOf(el, cs) {
+  // 스타일시트에서 width/height 를 정한 선택자 목록 (요소마다 레이아웃을 두 번 다시 재는 게 느려서, 정한 요소만 잰다)
+  // 코드에 적힌 값(인라인 style + <style> 규칙)을 모아 둔다.
+  // 계산된 값은 % 도 px 로 바뀌어서, 블로그 폭이 다르면 머리띠·탭 줄이 짧아지거나 도장 위치가 어긋난다 → %·calc·vw 등은 적힌 그대로 쓴다
+  var RELV = /%|calc\(|min\(|max\(|clamp\(|v(w|h|min|max)\b|\b(d|s|l)v(h|w)\b|\bauto\b|fit-content|max-content|min-content/;
+  var ruleList = null;
+  function collectRules() {
+    var out = [];
+    function walk(rules) {
+      for (var j = 0; j < rules.length; j++) {
+        var r = rules[j];
+        if (r.style && r.selectorText) out.push(r);
+        else if (r.cssRules && !r.selectorText) { try { walk(r.cssRules); } catch (e) {} }
+      }
+    }
+    for (var i = 0; i < document.styleSheets.length; i++) { try { walk(document.styleSheets[i].cssRules); } catch (e) {} }
+    return out;
+  }
+  function authored(el) {
+    if (ruleList === null) ruleList = collectRules();
+    var o = {};
+    for (var i = 0; i < ruleList.length; i++) {
+      var r = ruleList[i];
+      try { if (!el.matches(r.selectorText)) continue; } catch (e) { continue; }
+      for (var j = 0; j < r.style.length; j++) o[r.style[j]] = r.style.getPropertyValue(r.style[j]);
+    }
+    if (el.style) for (var k = 0; k < el.style.length; k++) o[el.style[k]] = el.style.getPropertyValue(el.style[k]);
+    return o;
+  }
+  function sizeOf(el, cs, au) {
     if (el instanceof SVGElement && el.tagName.toLowerCase() !== "svg") return "";
-    if (/^(IMG|CANVAS|VIDEO)$/.test(el.tagName) || el.tagName.toLowerCase() === "svg") return "width:" + cs.width + ";height:" + cs.height + ";";
+    var media = /^(IMG|CANVAS|VIDEO)$/.test(el.tagName) || el.tagName.toLowerCase() === "svg";
     var out = "";
     ["width", "height"].forEach(function (p) {
-      var v = cs.getPropertyValue(p);
-      if (!v || v === "auto") return;
-      var pv = el.style.getPropertyValue(p), pp = el.style.getPropertyPriority(p);
-      var r1 = el.getBoundingClientRect();
-      el.style.setProperty(p, "auto", "important");
-      var r2 = el.getBoundingClientRect();
-      if (pv) el.style.setProperty(p, pv, pp); else el.style.removeProperty(p);
-      if (Math.abs((p === "width" ? r1.width - r2.width : r1.height - r2.height)) > 0.5) out += p + ":" + v + ";";
+      if (au[p]) { out += p + ":" + (RELV.test(au[p]) && !/var\(/.test(au[p]) ? au[p] : cs.getPropertyValue(p)) + ";"; return; }
+      if (media) out += p + ":" + cs.getPropertyValue(p) + ";";
     });
     return out;
   }
   function styleOf(el, pcs, isRoot) {
-    var cs = getComputedStyle(el), def = defOf(el), out = [];
+    var cs = getComputedStyle(el), def = defOf(el), out = [], au = authored(el);
     // 버튼·입력칸은 글자색/글꼴을 부모에게서 물려받지 않으므로(span 으로 바뀌니까) 물려받는 값도 그대로 적는다
     var form = /^(button|input|textarea|select)$/i.test(el.tagName);
     for (var i = 0; i < cs.length; i++) {
@@ -1603,11 +1625,13 @@ function lkJsxSnapper() {
       var bm = p.match(/^border-(top|right|bottom|left)-color$/);
       if (bm && cs.getPropertyValue("border-" + bm[1] + "-style") === "none") continue;
       if (/^(column-rule-color|text-emphasis-color|text-decoration-color|-webkit-text-stroke-color|-webkit-text-fill-color|outline-color)$/.test(p) && v === cs.color) continue;
+      // 위치·크기·여백 등은 코드에 %·calc 로 적혀 있으면 그 값을 쓴다
+      if (au[p] && RELV.test(au[p]) && !/^(width|height)$/.test(p) && !/var\(/.test(au[p])) v = au[p];
       if (p === "position" && v === "fixed") v = "absolute";
       if (p === "position" && v === "sticky") v = "relative";
       out.push(p + ":" + v);
     }
-    return { cs: cs, css: out.join(";") + ";" + sizeOf(el, cs) };
+    return { cs: cs, css: out.join(";") + ";" + sizeOf(el, cs, au) };
   }
   function pseudo(el, which, pcs) {
     var ps; try { ps = getComputedStyle(el, which); } catch (e) { return ""; }
@@ -1635,6 +1659,8 @@ function lkJsxSnapper() {
     if (/^(script|style|noscript|template|link|meta)$/.test(tag)) return "";
     var r = styleOf(n, pcs, isRoot), cs = r.cs, st = r.css;
     if (n.__lkAnim) { st += n.__lkAnim; n.__lkAnim = null; }
+    if (/(auto|scroll)/.test(cs.overflowX + cs.overflowY) && (!cs.scrollbarWidth || cs.scrollbarWidth === "auto") && !/scrollbar-color/.test(st))
+      st += "scrollbar-width:thin;scrollbar-color:var(--pt,rgba(128,128,128,.5)) transparent;";
     if (cs.display === "none" && !inD) return "";
     if (tag === "canvas") { try { return '<img src="' + n.toDataURL() + '" style="' + esc(st) + '">'; } catch (e) { return ""; } }
     if (tag === "img") return '<img src="' + esc(n.currentSrc || n.src || "") + '" alt="' + esc(n.alt || "") + '" style="' + esc(st) + '">';
@@ -1700,6 +1726,7 @@ function lkJsxSnapper() {
   }
   var exploreStill = null;
   function snapAll() {
+    ruleList = null;
     // 눌러 보는 동안 멈춰 둔 애니메이션을 잠깐 풀고 값을 적는다
     if (exploreStill && exploreStill.sheet) exploreStill.sheet.disabled = true;
     try { noteAnims(document.getElementById("root")); }
@@ -1720,6 +1747,8 @@ function lkJsxSnapper() {
   }
   // ── 펼치기/탭 같은 상호작용을 미리 눌러 보고 화면별로 찍어 둔다 ──
   function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  // React 는 클릭 직후 바로 다시 그리므로 타이머(최소 4ms·숨은 iframe 에선 더 느림) 대신 메시지 한 번만 기다린다
+  function tick() { return new Promise(function (r) { var c = new MessageChannel(); c.port1.onmessage = function () { r(); }; c.port2.postMessage(0); }); }
   function rkProps(el) { for (var k in el) if (k.indexOf("__reactProps$") === 0) return el[k]; return null; }
   function clickables() {
     var all = document.getElementById("root").querySelectorAll("*"), cand = [];
@@ -1748,14 +1777,14 @@ function lkJsxSnapper() {
     el.click();
   }
   function sig() { return document.getElementById("root").innerHTML; }
-  async function remount() { window.__lkRemount(); await wait(16); }
+  async function remount() { window.__lkRemount(); await tick(); }
   async function goTo(path) {
     await remount();
     for (var i = 0; i < path.length; i++) {
       var cl = clickables();
       if (!cl[path[i]]) return false;
       fire(cl[path[i]]);
-      await wait(16);
+      await tick();
     }
     return true;
   }
@@ -1781,7 +1810,7 @@ function lkJsxSnapper() {
           var cl = clickables();
           if (!cl[k]) continue;
           fire(cl[k]);
-          await wait(16);
+          await tick();
           var g = sig(), t = -1;
           for (var q = 0; q < states.length; q++) if (states[q].sig === g) { t = q; break; }
           if (t < 0 && states.length < MAXS && states[s].path.length < 3) { t = states.length; states.push({ path: states[s].path.concat([k]), sig: g }); }
@@ -3554,13 +3583,15 @@ function exInteractive(states, extra, inline) {
   extra = extra || {};
   const fonts = [...new Set(extra.fonts || [])].map(f => '<link rel="stylesheet" href="' + escapeHtml(f) + '">').join("");
   const kf = fix(extra.css || "").replace(/<\/style/gi, "<\\/style");
-  if (states.length < 2 && !kf && !fonts) return fix(states[0]);
+  // scrollbar-width 를 모르는 옛 브라우저용 얇은 스크롤바
+  const sb = "." + uid + " ::-webkit-scrollbar{width:6px;height:6px}." + uid + " ::-webkit-scrollbar-thumb{background:rgba(128,128,128,.45);border-radius:3px}." + uid + " ::-webkit-scrollbar-track{background:transparent}";
+  if (states.length < 2 && inline && !kf && !fonts) return fix(states[0]);
   if (states.length < 2) {
     const c = inline ? { html: fix(states[0]), css: "" } : exCompress(fix(states[0]), uid);
-    return fonts + '<div class="' + uid + '"><style>' + kf + c.css + "</style>" + c.html + "</div>";
+    return fonts + '<div class="' + uid + '"><style>' + sb + kf + c.css + "</style>" + c.html + "</div>";
   }
   // <input>·<label>·id 를 지우는 스킨이 있어서 <details>(같은 name 끼리 하나만 열림) + :has() + class 로만 화면을 바꾼다
-  let css = "." + uid + " summary::-webkit-details-marker{display:none}." + uid + " summary::marker{content:''}" + kf, divs = "";
+  let css = "." + uid + " summary::-webkit-details-marker{display:none}." + uid + " summary::marker{content:''}" + sb + kf, divs = "";
   states.forEach((h, i) => {
     divs += '<div class="' + uid + "-s" + i + '"' + (i ? ' style="display:none"' : "") + ">" + fix(h) + "</div>";
     if (i) css += "." + uid + ":has(details." + uid + "-t" + i + "[open])>." + uid + "-s" + i + "{display:block!important}." +
@@ -3570,7 +3601,25 @@ function exInteractive(states, extra, inline) {
   return fonts + '<div class="' + uid + '"><style>' + css + "</style>" + divs + "</div>";
 }
 // 화면 밖에서 새로 그려서 버튼/탭을 하나씩 눌러 보고, 화면별 모습을 라디오+CSS 로 묶는다
+const EX_VER = "ex3";
+const _exMem = new Map();
 async function snapJsxForExport(src, chat, inline) {
+  const nm = (src.match(/^\s*<\s*([A-Za-z_$][\w$]*)/) || [])[1];
+  const key = "snap-" + EX_VER + "-" + jsxHash(src + "\u0000" + ((nm && jsxDefsFor(chat)[nm]) || ""));
+  let got = _exMem.get(key);
+  if (!got) {
+    const hit = await jsxCacheGet(key);
+    if (hit) { try { got = JSON.parse(hit); } catch (e) {} }
+  }
+  if (!got) {
+    got = await snapJsxRaw(src, chat);
+    if (got) jsxCachePut(key, JSON.stringify(got));
+  }
+  if (!got) return null;
+  _exMem.set(key, got);
+  return exInteractive(got.states, got.extra, inline);
+}
+async function snapJsxRaw(src, chat) {
   const b = await buildJsxDoc(src, chat);
   if (b.error) return null;
   const ifr = makeJsxFrame(b.doc);
@@ -3583,7 +3632,7 @@ async function snapJsxForExport(src, chat, inline) {
       if (r1 && r1.ok) {
         await new Promise(r => setTimeout(r, 150));   // 마운트 직후 바뀌는 값까지 반영
         const r2 = await askJsxSnap(ifr, 40000, "lk-jsx-explore");
-        return r2 && r2.ok && r2.states && r2.states.length ? exInteractive(r2.states, r2, inline) : exInteractive([r1.html], null, inline);
+        return r2 && r2.ok && r2.states && r2.states.length ? { states: r2.states, extra: { css: r2.css, fonts: r2.fonts } } : { states: [r1.html], extra: null };
       }
     }
     return null;
@@ -3648,16 +3697,17 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg, inline) {
     const label = withNo ? '<p style="color:#2f6df0"><b>TURN ' + (no != null ? no : (chat.turns.indexOf(turn) + 1)) + "</b></p>" : "";
     parts.push("<div>" + label + h + "</div>");
   }
-  // 상태창은 4개씩 동시에 그린다
+  // 상태창은 6개씩 동시에 그린다
   const res = new Array(jobs.length);
   let next = 0, done = 0;
   onProg && onProg(0, jobs.length);
-  await Promise.all(Array.from({ length: Math.min(4, jobs.length) }, async () => {
+  await Promise.all(Array.from({ length: Math.min(6, jobs.length) }, async () => {
     while (next < jobs.length) {
       const i = next++;
       let html = null;
       try { html = await snapJsxForExport(jobs[i], chat, inline); } catch (e) { console.warn("export jsx failed", e); }
-      res[i] = html ? '<div style="margin:16px 0">' + html + "</div>"
+      // 상태창 안의 absolute 장식이 아래 상태창을 덮지 않도록 블록마다 가둔다
+      res[i] = html ? '<div style="margin:16px 0;position:relative;isolation:isolate;overflow:clip;overflow-clip-margin:16px">' + html + "</div>"
                     : '<div style="margin:16px 0;padding:10px;border:1px dashed #ccc;border-radius:8px;font-size:12px;color:#999">(상태창을 그리지 못했어요)</div>';
       onProg && onProg(++done, jobs.length);
     }
