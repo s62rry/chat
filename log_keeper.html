@@ -1634,6 +1634,7 @@ function lkJsxSnapper() {
     var tag = n.tagName.toLowerCase();
     if (/^(script|style|noscript|template|link|meta)$/.test(tag)) return "";
     var r = styleOf(n, pcs, isRoot), cs = r.cs, st = r.css;
+    if (n.__lkAnim) { st += n.__lkAnim; n.__lkAnim = null; }
     if (cs.display === "none" && !inD) return "";
     if (tag === "canvas") { try { return '<img src="' + n.toDataURL() + '" style="' + esc(st) + '">'; } catch (e) { return ""; } }
     if (tag === "img") return '<img src="' + esc(n.currentSrc || n.src || "") + '" alt="' + esc(n.alt || "") + '" style="' + esc(st) + '">';
@@ -1668,7 +1669,41 @@ function lkJsxSnapper() {
     if (!svg) inner += pseudo(n, "::after", cs);
     return "<" + outTag + attrs + ' style="' + esc(st + (isRoot ? "max-width:100%;box-sizing:border-box;" : "")) + '">' + inner + "</" + outTag + ">";
   }
+  // CSS 애니메이션: 멈추기 전에 값을 적어 두고, 쓰인 @keyframes·글꼴을 같이 넘긴다 (이름은 블록마다 따로)
+  var kfUsed = {};
+  function kfName(n) { return "@@LKX@@-kf-" + String(n).replace(/[^\w-]/g, "_"); }
+  function noteAnims(root) {
+    var els = root.querySelectorAll("*");
+    for (var i = 0; i < els.length; i++) {
+      var c = getComputedStyle(els[i]);
+      if (!c.animationName || c.animationName === "none") continue;
+      var names = c.animationName.split(",").map(function (x) { x = x.trim(); if (x !== "none") kfUsed[x] = 1; return x === "none" ? x : kfName(x); });
+      els[i].__lkAnim = "animation-name:" + names.join(",") + ";animation-duration:" + c.animationDuration + ";animation-timing-function:" + c.animationTimingFunction +
+        ";animation-delay:" + c.animationDelay + ";animation-iteration-count:" + c.animationIterationCount + ";animation-direction:" + c.animationDirection +
+        ";animation-fill-mode:" + c.animationFillMode + ";";
+    }
+  }
+  function extraCss() {
+    var css = "", fonts = [];
+    for (var i = 0; i < document.styleSheets.length; i++) {
+      var rules; try { rules = document.styleSheets[i].cssRules; } catch (e) { continue; }
+      var owner = document.styleSheets[i].ownerNode;
+      if (owner && owner.tagName === "LINK" && /fonts\.googleapis\.com/.test(owner.href)) fonts.push(owner.href);
+      for (var j = 0; j < rules.length; j++) {
+        var r = rules[j];
+        if (window.CSSKeyframesRule && r instanceof CSSKeyframesRule && kfUsed[r.name]) css += r.cssText.replace(/^@(-webkit-)?keyframes\s+("[^"]*"|'[^']*'|[^\s{]+)/, "@keyframes " + kfName(r.name));
+        else if (window.CSSFontFaceRule && r instanceof CSSFontFaceRule) css += r.cssText;
+        else if (window.CSSImportRule && r instanceof CSSImportRule && /fonts\.googleapis\.com/.test(r.href)) fonts.push(r.href);
+      }
+    }
+    return { css: css, fonts: fonts };
+  }
+  var exploreStill = null;
   function snapAll() {
+    // 눌러 보는 동안 멈춰 둔 애니메이션을 잠깐 풀고 값을 적는다
+    if (exploreStill && exploreStill.sheet) exploreStill.sheet.disabled = true;
+    try { noteAnims(document.getElementById("root")); }
+    finally { if (exploreStill && exploreStill.sheet) exploreStill.sheet.disabled = false; }
     var still = document.createElement("style");
     still.textContent = "*,*::before,*::after{animation:none!important;transition:none!important}";
     document.head.appendChild(still);
@@ -1702,7 +1737,7 @@ function lkJsxSnapper() {
     }
     // 바깥 카드 전체가 눌리는 경우보다 안쪽 버튼을 우선 (label 안에 label 이 생기지 않게)
     var out = cand.filter(function (el) { return !cand.some(function (o) { return o !== el && el.contains(o); }); });
-    return out.slice(0, 16);
+    return out.slice(0, 24);
   }
   function fire(el) {
     var o = { bubbles: true, cancelable: true, view: window, button: 0 };
@@ -1729,12 +1764,13 @@ function lkJsxSnapper() {
     var still = document.createElement("style");
     still.textContent = "*,*::before,*::after{animation:none!important;transition:none!important}";
     document.head.appendChild(still);
+    exploreStill = still;
     try {
       await remount();
       var s0 = sig();
       await wait(120);
       if (sig() !== s0) { return [snapAll()]; }       // 혼자 계속 바뀌는 상태창(시계·타자효과 등)은 지금 모습만
-      var MAXS = 10, deadline = Date.now() + 8000;
+      var MAXS = 30, deadline = Date.now() + 15000;
       var states = [{ path: [], sig: s0 }], trans = [], at = 0;
       for (var s = 0; s < states.length; s++) {
         if (at !== s) { await goTo(states[s].path); at = s; }
@@ -1765,15 +1801,16 @@ function lkJsxSnapper() {
       }
       await remount();
       return out;
-    } finally { still.remove(); }
+    } finally { still.remove(); exploreStill = null; }
   }
   window.addEventListener("message", function (e) {
     var d = e.data;
     if (d && d.type === "lk-jsx-explore") {
       (async function () {
-        var ok = !!window.__lkOk && !document.querySelector(".lk-err"), states = [];
-        try { if (ok) states = await explore(); } catch (err) { ok = false; try { console.warn("[lk-explore]", err && err.stack || err); } catch (e2) {} }
-        try { parent.postMessage({ type: "lk-jsx-snapped", id: d.id, ok: ok && !!states[0], states: states, html: states[0] || "" }, "*"); } catch (err) {}
+        var ok = !!window.__lkOk && !document.querySelector(".lk-err"), states = [], ex = { css: "", fonts: [] };
+        kfUsed = {};
+        try { if (ok) { states = await explore(); ex = extraCss(); } } catch (err) { ok = false; try { console.warn("[lk-explore]", err && err.stack || err); } catch (e2) {} }
+        try { parent.postMessage({ type: "lk-jsx-snapped", id: d.id, ok: ok && !!states[0], states: states, html: states[0] || "", css: ex.css, fonts: ex.fonts }, "*"); } catch (err) {}
       })();
       return;
     }
@@ -3493,25 +3530,51 @@ function exportHost() {
   return h;
 }
 let _exUid = 0;
-function exInteractive(states) {
+// 같은 style="..." 이 수백 번 반복되므로 class 로 모아 용량을 줄인다 (inline=true 면 그대로 둠: 티스토리 HTML 모드용)
+function exCompress(html, uid) {
+  const map = new Map();
+  const unesc = t => t.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const out = html.replace(/<([a-z][\w-]*)((?:\s+[\w:-]+(?:="[^"]*")?)*)(\s*\/?)>/gi, (m, tag, attrs, end) => {
+    const sm = attrs.match(/\sstyle="([^"]*)"/);
+    if (!sm || !sm[1]) return m;
+    let k = map.get(sm[1]);
+    if (!k) { k = uid + "c" + map.size.toString(36); map.set(sm[1], k); }
+    let a = attrs.replace(sm[0], "");
+    const cm = a.match(/\sclass="([^"]*)"/);
+    a = cm ? a.replace(cm[0], ' class="' + cm[1] + " " + k + '"') : a + ' class="' + k + '"';
+    return "<" + tag + a + end + ">";
+  });
+  let css = "";
+  map.forEach((k, st) => { css += "." + uid + " ." + k + "{" + unesc(st) + "}"; });
+  return { html: out, css };
+}
+function exInteractive(states, extra, inline) {
   const uid = "lkx" + Date.now().toString(36) + (++_exUid);
   const fix = h => h.split("@@LKX@@").join(uid);
-  if (states.length < 2) return fix(states[0]);
+  extra = extra || {};
+  const fonts = [...new Set(extra.fonts || [])].map(f => '<link rel="stylesheet" href="' + escapeHtml(f) + '">').join("");
+  const kf = fix(extra.css || "").replace(/<\/style/gi, "<\\/style");
+  if (states.length < 2 && !kf && !fonts) return fix(states[0]);
+  if (states.length < 2) {
+    const c = inline ? { html: fix(states[0]), css: "" } : exCompress(fix(states[0]), uid);
+    return fonts + '<div class="' + uid + '"><style>' + kf + c.css + "</style>" + c.html + "</div>";
+  }
   // <input>·<label>·id 를 지우는 스킨이 있어서 <details>(같은 name 끼리 하나만 열림) + :has() + class 로만 화면을 바꾼다
-  let css = "." + uid + " summary::-webkit-details-marker{display:none}." + uid + " summary::marker{content:''}", divs = "";
+  let css = "." + uid + " summary::-webkit-details-marker{display:none}." + uid + " summary::marker{content:''}" + kf, divs = "";
   states.forEach((h, i) => {
     divs += '<div class="' + uid + "-s" + i + '"' + (i ? ' style="display:none"' : "") + ">" + fix(h) + "</div>";
     if (i) css += "." + uid + ":has(details." + uid + "-t" + i + "[open])>." + uid + "-s" + i + "{display:block!important}." +
       uid + ":has(details." + uid + "-t" + i + "[open])>." + uid + "-s0{display:none!important}";
   });
-  return '<div class="' + uid + '"><style>' + css + "</style>" + divs + "</div>";
+  if (!inline) { const c = exCompress(divs, uid); divs = c.html; css += c.css; }
+  return fonts + '<div class="' + uid + '"><style>' + css + "</style>" + divs + "</div>";
 }
 // 화면 밖에서 새로 그려서 버튼/탭을 하나씩 눌러 보고, 화면별 모습을 라디오+CSS 로 묶는다
-async function snapJsxForExport(src, chat) {
+async function snapJsxForExport(src, chat, inline) {
   const b = await buildJsxDoc(src, chat);
   if (b.error) return null;
   const ifr = makeJsxFrame(b.doc);
-  ifr.style.cssText = "width:680px;height:3000px;border:0;";
+  ifr.style.cssText = "width:680px;height:800px;border:0;";
   exportHost().appendChild(ifr);
   try {
     for (let i = 0; i < 100; i++) {
@@ -3520,7 +3583,7 @@ async function snapJsxForExport(src, chat) {
       if (r1 && r1.ok) {
         await new Promise(r => setTimeout(r, 150));   // 마운트 직후 바뀌는 값까지 반영
         const r2 = await askJsxSnap(ifr, 40000, "lk-jsx-explore");
-        return exInteractive(r2 && r2.ok && r2.states && r2.states.length ? r2.states : [r1.html]);
+        return r2 && r2.ok && r2.states && r2.states.length ? exInteractive(r2.states, r2, inline) : exInteractive([r1.html], null, inline);
       }
     }
     return null;
@@ -3559,7 +3622,7 @@ function exStatus(data) {
     '<summary style="cursor:pointer;font-weight:600">🪪 ' + escapeHtml(data.summary) + "</summary>" +
     '<div style="margin-top:8px;line-height:1.7">' + body + "</div></details>";
 }
-async function buildTistoryHtml(chat, from, to, withNo, onProg) {
+async function buildTistoryHtml(chat, from, to, withNo, onProg, inline) {
   const all = sortedTurns(chat);
   const turns = all.slice(from - 1, to);
   const parts = [], jobs = [];
@@ -3593,7 +3656,7 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg) {
     while (next < jobs.length) {
       const i = next++;
       let html = null;
-      try { html = await snapJsxForExport(jobs[i], chat); } catch (e) { console.warn("export jsx failed", e); }
+      try { html = await snapJsxForExport(jobs[i], chat, inline); } catch (e) { console.warn("export jsx failed", e); }
       res[i] = html ? '<div style="margin:16px 0">' + html + "</div>"
                     : '<div style="margin:16px 0;padding:10px;border:1px dashed #ccc;border-radius:8px;font-size:12px;color:#999">(상태창을 그리지 못했어요)</div>';
       onProg && onProg(++done, jobs.length);
@@ -3603,7 +3666,9 @@ async function buildTistoryHtml(chat, from, to, withNo, onProg) {
   // 본문 글씨는 색만 넣고 글꼴·크기·줄간격은 비워 둔다 (티스토리 글씨 크기 설정이 그대로 먹게)
   const head = "<p><b>" + escapeHtml((chat.emoji ? chat.emoji + " " : "") + (chat.title || "")) + "</b></p>";
   // box-shadow:none 은 일부 스킨(ONE LOGIN 등)이 [[HTML]] 안의 <details> 를 자체 상태창으로 바꿔 버리는 걸 막는 표시
-  return '<div style="max-width:720px;margin:0 auto;word-break:keep-all;overflow-wrap:anywhere;box-shadow:none">' +
+  // 글꼴·크기는 스킨 읽기 도구 값(--reader-size / --reader-font / --font)을 따르고, 없으면 바깥 글씨를 그대로 물려받는다
+  return '<div style="max-width:720px;margin:0 auto;word-break:keep-all;overflow-wrap:anywhere;box-shadow:none;' +
+    'font-size:var(--reader-size,1em);font-family:var(--reader-font,var(--font));color:var(--tx)">' +
     head + parts.join('<hr style="border:0;border-top:1px dashed #dde1ea;margin:30px 0">') + "</div>";
 }
 function lsGetSafe(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -3633,7 +3698,9 @@ function openTistoryModal() {
     const to = Math.max(from, Math.min(n, parseInt($("exTo").value) || n));
     const prog = $("exProg");
     try {
-      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "상태창 그리는 중… " + i + " / " + t; });
+      // HTML 모드에 바로 붙일 때는 페이지 CSS 에 지지 않게 style 을 그대로 둔다
+      const inline = mode === "copy" && !$("exWrap").checked;
+      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "상태창 그리는 중… " + i + " / " + t; }, inline);
       const kb = Math.round(html.length / 1024);
       if (mode === "copy") {
         const wrap = $("exWrap").checked;
