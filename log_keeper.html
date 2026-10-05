@@ -805,7 +805,7 @@
   .jsx-slot { margin: 14px 0; }
   .jsx-slot iframe { display: block; width: 100%; border: 0; background: transparent; }
   .jsx-loading { font-size: 12px; color: var(--text-dim); padding: 8px 2px; }
-  .jsx-missing { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+  .jsx-missing { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; white-space: pre-wrap; word-break: break-all; }
   /* 케이브덕 추출 모달 */
   .bm-block {
     margin-top: 14px; padding-top: 14px;
@@ -1452,7 +1452,20 @@ function compileJsxComponent(B, name, code) {
     .replace(/^\s*import\s[^\n]*\n/gm, "")
     .replace(/^\s*export\s+default\s+/m, "")
     .replace(/^\s*export\s+(?=(function|const|let|var|class)\b)/gm, "");
-  const out = B.transform(src + "\n;window.__lkSetComp(" + name + ");", { presets: ["react"] }).code;
+  const full = src + "\n;window.__lkSetComp(" + name + ");";
+  let out;
+  try { out = B.transform(full, { presets: ["react"] }).code; }
+  catch (e1) {
+    // 제작자 코드에 TypeScript 문법((e: any) => 등)이 섞인 경우 — 티팟처럼 TS 로 한 번 더 시도
+    try { out = B.transform(full, { filename: "status.tsx", presets: [["typescript", { isTSX: true, allExtensions: true }], "react"] }).code; }
+    catch (e2) {
+      const ln = e1 && e1.loc && e1.loc.line;
+      const lines = full.split("\n");
+      const near = ln ? lines.slice(Math.max(0, ln - 3), ln + 1).map((l, i) => (Math.max(0, ln - 3) + i + 1) + "| " + l.slice(0, 160)).join("\n") : "";
+      const err = new Error((e1 && e1.message ? e1.message.split("\n")[0] : String(e1)) + (near ? "\n" + near : ""));
+      throw err;
+    }
+  }
   _jsxCompCache[k] = out;
   return out;
 }
@@ -1541,7 +1554,7 @@ async function mountJsx(slot) {
     compP = "window.__lkSetProps({" + tag.attrs.map(a => JSON.stringify(a.name) + ":" +
       (a.kind === "str" ? JSON.stringify(a.value) : a.kind === "expr" ? "(" + a.value + ")" : "true")).join(",") + "});";
     if (tag.attrs.some(a => a.kind === "expr")) compP = B.transform(compP, { presets: ["react"] }).code;
-  } catch (e) { showRaw("상태창을 변환하지 못했어요: " + (e && e.message ? e.message.split("\n")[0] : e)); return; }
+  } catch (e) { showRaw("상태창을 변환하지 못했어요: " + (e && e.message ? e.message : e)); return; }
   const esc = t => String(t).replace(/<\/script/gi, "<\\/script");
   const three = /THREE|ThreeCanvas/.test(code) ? '<script src="https://unpkg.com/three@0.160.0/build/three.min.js"><\/script>' : "";
   const doc = '<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">' +
@@ -1611,7 +1624,8 @@ function parseLog(raw) {
       continue;
     }
     // 2단계: 일반 텍스트 — 남은 코드펜스 제거 후 <details> 분리
-    let t = stripCodeFences(topSeg.body);
+    // (티팟처럼 대사 속 <br> 은 줄바꿈으로)
+    let t = stripCodeFences(topSeg.body).replace(/<br\s*\/?>/gi, "\n");
     const detailsRe = /<details[\s\S]*?<\/details>/gi;
     let lastIndex = 0, m;
     const segments = [];
