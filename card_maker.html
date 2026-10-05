@@ -210,23 +210,23 @@
     background: var(--accent); color: #fff;
     box-shadow: 0 1px 3px rgba(0,0,0,0.15);
   }
-  .ed-undo {
+  :is(.ed-tabs, .section-title) .ed-undo {
     flex: 0 0 auto; width: 26px; height: 26px; padding: 0;
     display: flex; align-items: center; justify-content: center;
     border-radius: 7px; color: var(--text-dim);
   }
-  .ed-undo svg { width: 13px; height: 13px; }
-  .ed-undo:not(:disabled) {
+  :is(.ed-tabs, .section-title) .ed-undo svg { width: 13px; height: 13px; }
+  :is(.ed-tabs, .section-title) .ed-undo:not(:disabled) {
     background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent);
   }
-  .ed-undo:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .ed-undo:disabled {
+  :is(.ed-tabs, .section-title) .ed-undo:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+  :is(.ed-tabs, .section-title) .ed-undo:disabled {
     background: color-mix(in srgb, var(--panel) 55%, transparent);
     border-color: color-mix(in srgb, var(--border) 60%, transparent);
     color: var(--text-dim);
     cursor: default; transform: none;
   }
-  .ed-undo:disabled svg { opacity: 0.45; }
+  :is(.ed-tabs, .section-title) .ed-undo:disabled svg { opacity: 0.45; }
   .editor .section.tab-hide { display: none; }
   /* 미리보기를 눌러 찾아간 영역을 잠깐 표시 */
   .editor .section.sec-flash { box-shadow: 0 0 0 2px var(--accent); transition: box-shadow 0.2s ease; }
@@ -788,6 +788,11 @@
   #card .qblock { white-space: pre-wrap; }
   /* 번역 줄 — 본문보다 작고 윗줄에 바짝 붙는다.
      앞 줄바꿈을 흡수했으므로 블록으로 만들어 간격을 직접 준다. */
+  /* 문구 속 이미지 — 줄 하나를 차지, 정렬은 문단을 따라감 */
+  #card .qimg { display: block; line-height: 0; margin: 0.35em 0; }
+  #card .qimg img { display: inline-block; max-width: 100%; height: auto; border-radius: 4px; vertical-align: top; }
+  .tk-img { color: var(--accent); background: var(--accent-soft); border-radius: 3px; }
+  .ta-rich .rk-img { color: var(--accent); background: var(--accent-soft); border-radius: 3px; }
   #card .qsub {
     display: block;
     font-size: 0.76em;
@@ -1554,6 +1559,9 @@
     <div class="section" data-tab="text">
       <div class="section-title">
         발췌 문구
+        <input type="file" id="imgInsertFile" accept="image/*" style="display:none;">
+        <button class="mini-btn" id="imgInsertBtn" type="button"
+                title="커서 자리에 이미지 넣기 (입력칸에 이미지를 붙여넣어도 돼요)">이미지</button>
         <button class="mini-btn" id="richToggle" type="button"
                 title="서식 기호(__ · {#색|…} 등)를 숨기고 서식이 적용된 모습 그대로 편집">코드 숨김</button>
         <button class="mini-btn" id="titleBtn" type="button" data-pop="titlePop"
@@ -1704,6 +1712,14 @@
         <div class="pop-extra">
           <button class="fmt-btn js-clear-color" type="button" style="flex:1; justify-content:center;">색 빼기 (원래 글자색으로)</button>
         </div>
+      </div>
+      <div class="field-group" id="imgBox" style="margin-top:8px; display:none;">
+        <label class="field-label">문구 속 이미지 크기</label>
+        <div class="slider-row">
+          <input type="range" id="imgWidthRange" min="15" max="100" value="100">
+          <span class="slider-val" id="imgWidthVal">100%</span>
+        </div>
+        <div class="hint">입력칸의 <b>[이미지 1]</b> 줄이 그 자리에 이미지로 들어가요. 줄을 지우면 이미지도 빠져요.</div>
       </div>
       <div class="field-group" id="indentBox" style="margin-top:8px; display:none;">
         <label class="field-label">들여쓰기 폭</label>
@@ -3917,10 +3933,30 @@
     return { a: a, b: b };
   }
 
+  // 줄 하나가 [이미지 N] 이면 그 자리에 이미지
+  const IMG_LINE = /^[ \t]*\[이미지 (\d+)\][ \t]*$/;
+  function imgLineId(line) {
+    const m = IMG_LINE.exec(line);
+    return (m && state.inlineImgs && state.inlineImgs[m[1]]) ? m[1] : null;
+  }
   function parseInline(s, skipSub) {
     let out = '';
     let i = 0;
     while (i < s.length) {
+      // [이미지 N] 줄 — 앞뒤 줄바꿈까지 삼켜 이미지 한 덩어리로
+      if (!skipSub && (i === 0 || s[i] === '\n')) {
+        const st1 = (s[i] === '\n') ? i + 1 : i;
+        const nl1 = s.indexOf('\n', st1);
+        const line1 = (nl1 === -1 ? s.slice(st1) : s.slice(st1, nl1));
+        const id = line1 && imgLineId(line1);
+        if (id) {
+          out += '<span class="qimg"><img data-img="' + id + '" src="' + state.inlineImgs[id]
+               + '" style="width:' + ($('imgWidthRange') ? $('imgWidthRange').value : 100) + '%" alt=""></span>';
+          i = st1 + line1.length;
+          if (s[i] === '\n') i++;
+          continue;
+        }
+      }
       // \X — 뒤 글자를 서식이 아닌 글자 그대로
       if (s[i] === '\\' && ESCAPABLE.indexOf(s[i + 1]) !== -1) {
         out += escapeHtml(s[i + 1]);
@@ -3997,6 +4033,16 @@
         if (line0 && subLinePlain(line0)) {
           out += '<span class="tk-sub">' + mirrorInline(line0, true) + '</span>';
           i += line0.length;
+          continue;
+        }
+      }
+      // [이미지 N] 줄
+      if (i === 0 || s[i - 1] === '\n') {
+        const nl2 = s.indexOf('\n', i);
+        const line2 = (nl2 === -1 ? s.slice(i) : s.slice(i, nl2));
+        if (line2 && imgLineId(line2)) {
+          out += '<span class="tk-img">' + escapeHtml(line2) + '</span>';
+          i += line2.length;
           continue;
         }
       }
@@ -4601,7 +4647,8 @@
         inner += richRunHtml(line.slice(k, m));
         k = m;
       }
-      if (plain && SEP_LINE.test(plain)) inner = '<span class="rk-sep">' + inner + '</span>';
+      if (plain && imgLineId(plain)) inner = '<span class="rk-img">' + inner + '</span>';
+      else if (plain && SEP_LINE.test(plain)) inner = '<span class="rk-sep">' + inner + '</span>';
       else if (plain && subLinePlain(plain)) inner = '<span class="tk-sub">' + inner + '</span>';
       html += inner;
       if (j < chars.length) html += '<span data-a="0|0|0||">\n</span>';
@@ -4807,6 +4854,8 @@
     });
     root.addEventListener('paste', ev => {
       ev.preventDefault();
+      const imgFile = clipImageFile(ev);
+      if (imgFile) { insertInlineImage(imgFile); return; }
       const t = (ev.clipboardData && ev.clipboardData.getData('text/plain')) || '';
       if (t) richInsert(t.replace(/\r\n?/g, '\n'), true);
     });
@@ -5646,7 +5695,7 @@
       panelColor: '#000000', panelOpacityRange: 35,
       panelPadRange: 22, panelRadiusRange: 8,
       panelBorderRange: 0, panelBorderColor: '#ffffff', cornerColor: '#ffffff',
-      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18,
+      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18, imgWidthRange: 100,
       shX: 0, shY: 2, shBlur: 8, shColor: '#000000', shAlpha: 45
     };
 
@@ -7311,7 +7360,7 @@
       'shX','shY','shBlur','shColor','shAlpha',
       'dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange',
       'offsetRange','offsetXRange','indentRange','sepWidthRange',
-      'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange'];
+      'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange','imgWidthRange'];
     const sliders = {};
     ids.forEach(id => { if ($(id)) sliders[id] = $(id).value; });
     return {
@@ -7344,7 +7393,16 @@
       icons: state.icons,
       panelTail: state.panelTail,
       pageBg: state.pageBg,
-      blockOff: state.blockOff
+      blockOff: state.blockOff,
+      // 문구에 실제로 쓰인 이미지만 담는다
+      inlineImgs: (function () {
+        const used = {};
+        const txt = (typeof fullQuoteText === 'function' ? fullQuoteText() : '') || '';
+        Object.keys(state.inlineImgs || {}).forEach(id => {
+          if (txt.indexOf('[이미지 ' + id + ']') !== -1) used[id] = state.inlineImgs[id];
+        });
+        return used;
+      })()
     };
   }
 
@@ -7480,6 +7538,9 @@
     state.panelTail = s.panelTail || 'none';
     state.pageBg = s.pageBg || {};
     state.blockOff = s.blockOff || {};
+    if (s.inlineImgs && Object.keys(s.inlineImgs).length) {
+      state.inlineImgs = Object.assign({}, state.inlineImgs || {}, s.inlineImgs);
+    }
     if (s.wordBreak) state.wordBreak = s.wordBreak;
     state.quoteStyle = s.quoteStyle || 0;
     state.showCredit = s.showCredit !== false;
@@ -7740,6 +7801,82 @@
     label.classList.add('has-val');
     label.appendChild(val);
   });
+
+  // ============ 문구 속 이미지 ============
+  if (!state.inlineImgs) state.inlineImgs = {};
+  function clipImageFile(ev) {
+    const items = (ev.clipboardData && ev.clipboardData.items) || [];
+    for (const it of items) {
+      if (it.kind === 'file' && /^image\//.test(it.type)) return it.getAsFile();
+    }
+    return null;
+  }
+  // 저장 공간을 아끼려고 가로 1200px 까지 줄이고 WebP(안 되면 PNG)로
+  function shrinkImage(file) {
+    return new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onerror = rej;
+      fr.onload = () => {
+        const img = new Image();
+        img.onerror = rej;
+        img.onload = () => {
+          const maxW = 1200;
+          let w = img.naturalWidth, h = img.naturalHeight;
+          if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, 0, w, h);
+          let url = cv.toDataURL('image/webp', 0.88);
+          if (url.indexOf('data:image/webp') !== 0) url = cv.toDataURL('image/png');
+          res(url);
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+  function updateImgBox() {
+    const txt = fullQuoteText() || '';
+    $('imgBox').style.display = /\[이미지 \d+\]/.test(txt) ? '' : 'none';
+    $('imgWidthVal').textContent = $('imgWidthRange').value + '%';
+  }
+  function insertInlineImage(file) {
+    shrinkImage(file).then(url => {
+      const ids = Object.keys(state.inlineImgs).map(Number);
+      const txt0 = fullQuoteText() || '';
+      (txt0.match(/\[이미지 (\d+)\]/g) || []).forEach(m => ids.push(parseInt(m.slice(5), 10)));
+      const id = String((ids.length ? Math.max.apply(null, ids) : 0) + 1);
+      state.inlineImgs[id] = url;
+      const ta = $('quoteInput');
+      const v = ta.value;
+      const a = ta.selectionStart, b = ta.selectionEnd;
+      const before = v.slice(0, a), after = v.slice(b);
+      let ins = '[이미지 ' + id + ']';
+      if (before && !before.endsWith('\n')) ins = '\n' + ins;
+      if (after && !after.startsWith('\n')) ins = ins + '\n';
+      const pos = before.length + ins.length;
+      fmtTarget = 'quoteInput';
+      commitQuoteEdit(before + ins + after, pos, pos);
+      updateImgBox();
+      toast('이미지를 넣었어요 — 크기는 아래 슬라이더로');
+    }).catch(() => toast('이미지를 읽지 못했어요'));
+  }
+  $('imgInsertBtn').addEventListener('mousedown', ev => ev.preventDefault());   // 커서 유지
+  $('imgInsertBtn').addEventListener('click', () => $('imgInsertFile').click());
+  $('imgInsertFile').addEventListener('change', ev => {
+    const f = ev.target.files && ev.target.files[0];
+    if (f) insertInlineImage(f);
+    ev.target.value = '';
+  });
+  $('quoteInput').addEventListener('paste', ev => {
+    const f = clipImageFile(ev);
+    if (!f) return;
+    ev.preventDefault();
+    insertInlineImage(f);
+  });
+  $('imgWidthRange').addEventListener('input', () => { updateImgBox(); renderCard(); });
+  $('quoteInput').addEventListener('input', updateImgBox);
+  setTimeout(updateImgBox, 0);
 
   // ============ 설정 묶음 탭 · 더보기 ============
   const TAB_KEY = 'quotecard:edTab';
@@ -9309,7 +9446,8 @@
     try { localStorage.setItem(LAST_KEY, JSON.stringify(s)); }
     catch (e) {
       // 배경 이미지가 커서 저장 한도를 넘으면 이미지만 빼고라도 남긴다
-      try { s.bgImageData = ''; localStorage.setItem(LAST_KEY, JSON.stringify(s)); } catch (e2) {}
+      try { s.bgImageData = ''; localStorage.setItem(LAST_KEY, JSON.stringify(s)); }
+      catch (e2) { try { s.inlineImgs = {}; localStorage.setItem(LAST_KEY, JSON.stringify(s)); } catch (e3) {} }
     }
   }
   function saveLastSoon() {
@@ -9510,6 +9648,7 @@
   const setHist = { undo: [], redo: [], cur: null, timer: null, applying: false };
   function setSnap() {
     const s = lastSnapshot();
+    delete s.inlineImgs;   // 이미지는 문구 쪽 내용이라 설정 되돌리기에서 뺀다
     const img = s.bgImageData;
     s.bgImageData = '';
     delete s.title;
@@ -9662,6 +9801,7 @@
           if (name === null || name === undefined) return;
           const snap = lastSnapshot();
           delete snap.title;
+          delete snap.inlineImgs;
           const d2 = slotsGet();
           const hadDef = d2.slots.some(x => x);
           d2.slots[i] = { name: (name || '').trim() || '서식 ' + (i + 1), stamp: nowStamp(), s: snap };
