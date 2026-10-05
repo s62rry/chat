@@ -672,7 +672,9 @@
   #pageStripToggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .page-nav .ps-size { display: none; margin-left: 4px; width: auto; }
   .page-nav .ps-size.show { display: inline-flex; }
-  .page-nav .ps-size button { padding: 3px 8px; font-size: 11px; }
+  /* 옆 '모아보기' 버튼과 같은 키(23px)·글자 크기로 */
+  .page-nav .ps-size { align-self: center; }
+  .page-nav .ps-size button { height: 21px; padding: 0 9px; font-size: 11px; line-height: 1; }
   /* 크게 — 카드는 자리만 지키고 숨긴 채, 장들을 미리보기 자리에 크게 나란히 */
   .preview-stack { position: relative; }
   .preview-stack.spread { max-width: none; }
