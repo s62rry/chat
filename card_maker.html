@@ -680,6 +680,13 @@
   .preview-stack.spread > .page-strip { order: -1; gap: 18px; padding: 8px 8px 14px; }
   .preview-stack.spread .ps-frame { border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.28); }
   .preview-stack.spread .ps-num { font-size: 12px; }
+  .preview-stack.spread > .page-strip { scroll-snap-type: none; }
+  /* 지금 장만 또렷하게, 나머지는 흐리게 */
+  .preview-stack.spread .ps-item { transition: opacity 0.25s ease; }
+  .preview-stack.spread .ps-item:not(.cur) { opacity: 0.35; }
+  .preview-stack.spread .ps-item:not(.cur):hover { opacity: 0.6; }
+  .preview-stack.spread .ps-item.cur .ps-frame { outline-color: transparent; }
+  .preview-stack.spread .ps-item:hover .ps-frame { transform: none; }
 
   /* 발췌 카드 */
   #card {
@@ -9167,8 +9174,8 @@
     const keep = curPage;
     const W = card.offsetWidth || 540;
     const big = stripSize === 'big';
-    // 크게 — 카드 원래 폭의 85% 로 (보통 화면이면 두 장 가까이 한눈에)
-    const TW = big ? Math.round(W * 0.85) : 132;
+    // 크게 — 원래 보이던 크기 그대로
+    const TW = big ? W : 132;
     const sc = TW / W;
     const items = [];
     stripBuilding = true;
@@ -9215,10 +9222,21 @@
     const sl = strip.scrollLeft;
     strip.innerHTML = '';
     items.forEach(it => strip.appendChild(it));
+    // 크게 — 양옆에 반 칸씩 여백을 둬서 첫 장·끝 장도 가운데에 올 수 있게
+    strip.style.paddingLeft = strip.style.paddingRight = big ? 'calc(50% - ' + (TW / 2) + 'px)' : '';
     strip.scrollLeft = sl;
+    if (big) centerCur(false);
+  }
+  function centerCur(smooth) {
+    const strip = $('pageStrip');
+    const cur = strip.querySelector('.ps-item.cur');
+    if (!cur) return;
+    const left = cur.offsetLeft + cur.offsetWidth / 2 - strip.clientWidth / 2;
+    strip.scrollTo({ left: left, behavior: smooth ? 'smooth' : 'auto' });
   }
   function markStripCur() {
     $('pageStrip').querySelectorAll('.ps-item').forEach((it, i) => it.classList.toggle('cur', i === curPage));
+    if (stripSize === 'big') { centerCur(true); return; }
     const cur = $('pageStrip').querySelector('.ps-item.cur');
     if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
   }
