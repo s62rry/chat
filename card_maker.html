@@ -133,6 +133,32 @@
     border-radius: 10px;
   }
   .section:last-child { margin-bottom: 0; }
+  /* 설정 묶음 탭 */
+  .ed-tabs {
+    position: sticky; top: -14px; z-index: 5;
+    display: flex; gap: 4px;
+    margin: -14px -14px 12px; padding: 10px 14px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .ed-tabs button {
+    flex: 1; height: 32px;
+    font-size: 13px; font-weight: 600;
+    border-radius: 8px;
+  }
+  .ed-tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .editor .section.tab-hide { display: none; }
+  /* 자주 안 쓰는 설정 — 눌러야 펼쳐진다 */
+  details.more { margin-top: 10px; }
+  details.more > summary {
+    cursor: pointer; user-select: none; list-style: none;
+    font-size: 11px; color: var(--text-dim);
+    padding: 4px 0;
+  }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary::before { content: '▸ '; }
+  details.more[open] > summary::before { content: '▾ '; }
+  details.more[open] > summary { margin-bottom: 8px; }
   /* 영역 접기 — 제목을 누르면 그 영역이 접힌다 */
   .section.collapsed > *:not(.section-title) { display: none; }
   .section.collapsed .section-title {
@@ -1290,8 +1316,16 @@
   <!-- ===== 편집 패널 ===== -->
   <div class="editor">
 
+    <!-- 설정 묶음 탭 — 한 번에 한 묶음만 보여준다 -->
+    <div class="ed-tabs" id="edTabs" role="tablist">
+      <button type="button" data-tab="text" class="active">글</button>
+      <button type="button" data-tab="font">글자</button>
+      <button type="button" data-tab="card">카드</button>
+      <button type="button" data-tab="save">저장</button>
+    </div>
+
     <!-- 문구 -->
-    <div class="section">
+    <div class="section" data-tab="text">
       <div class="section-title">
         발췌 문구
         <button class="mini-btn" id="richToggle" type="button"
@@ -1451,7 +1485,7 @@
     </div>
 
     <!-- 출처 (제작자·캐릭터·구분선) -->
-    <div class="section">
+    <div class="section" data-tab="text">
       <div class="section-title">
         출처
         <button class="toggle-btn on" id="creditToggle" title="카드에 출처 표시 여부">출처 표시</button>
@@ -1608,6 +1642,7 @@
           <button data-sep="double">이중선</button>
         </div>
       </div>
+      <details class="more" data-more="sep"><summary>더보기</summary>
       <div class="row">
         <div class="col-swatch">
           <label class="field-label">색</label>
@@ -1635,16 +1670,18 @@
           <span class="slider-val" id="sepGapVal">18px</span>
         </div>
       </div>
+      </details>
     </div>
 
     <!-- 글씨체 -->
-    <div class="section">
+    <div class="section" data-tab="font">
       <div class="section-title">
         글씨체
         <button class="mini-btn" id="addFontBtn" title="글씨체 추가">+ 추가</button>
       </div>
       <div class="btn-grid" id="fontGrid"></div>
-      <div class="field-group" style="margin-top:10px; margin-bottom:0;">
+      <details class="more" data-more="font"><summary>더보기</summary>
+      <div class="field-group" style="margin-bottom:0;">
         <label class="field-label">글씨체 크기 보정</label>
         <div class="slider-row">
           <input type="range" id="fontScaleRange" min="0.6" max="1.8" step="0.05" value="1">
@@ -1652,10 +1689,11 @@
         </div>
         <div class="hint">글씨체마다 기본 크기가 달라요. 나눔손글씨·동글처럼 작게 보이는 글씨체는 이 값을 올려 보정하세요. 글씨체별로 따로 기억됩니다.</div>
       </div>
+      </details>
     </div>
 
     <!-- 글자 스타일 -->
-    <div class="section">
+    <div class="section" data-tab="font">
       <div class="section-title">
         글자 스타일
         <button class="toggle-btn" id="shadowToggle" title="글자에 그림자 효과">그림자</button>
@@ -1706,13 +1744,6 @@
             <button data-vert="1">세로</button>
           </div>
         </div>
-        <div>
-          <label class="field-label">줄바꿈 단위</label>
-          <div class="seg" id="breakSeg">
-            <button data-break="keep-all" class="active" title="단어가 통째로 다음 줄로 넘어감">단어</button>
-            <button data-break="break-all" title="글자가 어디서든 잘려 줄이 꽉 참">글자</button>
-          </div>
-        </div>
       </div>
       <div class="field-group" id="vertDirBox" style="display:none;">
         <label class="field-label">세로쓰기 시작</label>
@@ -1737,6 +1768,14 @@
           <span class="slider-val" id="lineHeightVal">1.75</span>
         </div>
       </div>
+      <details class="more" data-more="style"><summary>더보기</summary>
+      <div class="field-group">
+        <label class="field-label">줄바꿈 단위</label>
+        <div class="seg" id="breakSeg">
+          <button data-break="keep-all" class="active" title="단어가 통째로 다음 줄로 넘어감">단어</button>
+          <button data-break="break-all" title="글자가 어디서든 잘려 줄이 꽉 참">글자</button>
+        </div>
+      </div>
       <div class="field-group">
         <label class="field-label">자간 (글자 간격)</label>
         <div class="slider-row">
@@ -1745,13 +1784,12 @@
         </div>
       </div>
       <div class="field-group">
-        <label class="field-label">장평 (가로 폭)</label>
+        <label class="field-label">글자 너비</label>
         <div class="slider-row">
           <input type="range" id="scaleRange" min="70" max="130" value="100">
           <span class="slider-val" id="scaleVal">100%</span>
         </div>
       </div>
-      <!-- 글자 꾸밈 — 본문에 관한 설정 -->
       <div class="row">
         <div class="col-swatch">
           <label class="field-label">외곽선 색</label>
@@ -1765,6 +1803,7 @@
           </div>
         </div>
       </div>
+      </details>
 
       <div class="field-group opt-group" id="shadowOpts" style="display:none;">
         <label class="field-label">글자 그림자</label>
@@ -1807,8 +1846,16 @@
       </div>
     </div>
 
+    <!-- 색 테마 프리셋 -->
+    <div class="section" data-tab="card">
+      <div class="section-title">색 테마 &amp; 프리셋</div>
+      <div class="preset-grid" id="presetGrid"></div>
+      <div class="hint">기본 테마는 색만 바꿉니다. <b>+ 저장</b>으로 직접 저장한 것은 글씨체·여백·꾸미기까지 <b>지금 설정 전체</b>가 담기고, 누르면 그대로 되돌아옵니다. 캐릭터 전용으로 저장하면 <b>제작자·캐릭터 이름까지</b> 함께 되살아납니다. 더블클릭하면 삭제됩니다.</div>
+
+          </div>
+
     <!-- 카드 비율 -->
-    <div class="section">
+    <div class="section" data-tab="card">
       <div class="section-title">카드 비율</div>
       <div class="seg" id="ratioSeg">
         <button data-ratio="square" class="active">1:1</button>
@@ -1818,46 +1865,11 @@
         <button data-ratio="fit" title="카드 높이가 문구 길이에 맞춰 늘고 줄어요 — 위아래 여백은 '여백' 으로">내용 맞춤</button>
       </div>
       <div class="field-group" style="margin-top:14px;">
-        <label class="field-label" style="display:flex;align-items:center;">
-          미리보기 드래그 배치
-          <button class="mini-btn" id="dragPlaceToggle" type="button"
-                  title="미리보기의 문단·출처·제목을 마우스로 끌어 옮깁니다">켜기</button>
-          <button class="mini-btn" id="blockOffReset" type="button"
-                  title="밀어둔 배치를 모두 원래 자리로">되돌리기</button>
-        </label>
-        <div class="hint">켜면 미리보기에서 문단·출처·제목을 직접 끌 수 있어요. 원래 자리에서 밀어내는 방식이라 줄바꿈은 그대로 유지됩니다. 클릭하면 선택되고, 여러 개 선택해 정렬할 수 있어요.</div>
-        <div class="row" id="alignRow" style="display:none; margin-top:8px; margin-bottom:0;">
-          <div>
-            <label class="field-label">선택한 것 정렬</label>
-            <div class="seg" id="alignSeg">
-              <button data-al="left" type="button">왼쪽</button>
-              <button data-al="center" type="button">가운데</button>
-              <button data-al="right" type="button">오른쪽</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="field-group" style="margin-top:9px;">
         <label class="field-label">세로 배치</label>
         <div class="seg" id="vAlignSeg">
           <button data-valign="top" title="위쪽에 붙임">위</button>
           <button data-valign="center" class="active" title="가운데">가운데</button>
           <button data-valign="bottom" title="아래쪽에 붙임">아래</button>
-        </div>
-      </div>
-      <div class="field-group">
-        <label class="field-label">위아래 미세조정</label>
-        <div class="slider-row">
-          <input type="range" id="offsetRange" min="-200" max="200" value="0">
-          <span class="slider-val" id="offsetVal">0px</span>
-        </div>
-      </div>
-      <div class="field-group">
-        <label class="field-label">좌우 미세조정</label>
-        <div class="slider-row">
-          <input type="range" id="offsetXRange" min="-200" max="200" value="0">
-          <span class="slider-val" id="offsetXVal">0px</span>
         </div>
       </div>
       <div class="field-group">
@@ -1892,10 +1904,47 @@
           <span class="slider-val" id="radiusVal">0px</span>
         </div>
       </div>
+      <details class="more" data-more="layout"><summary>더보기</summary>
+      <div class="field-group">
+        <label class="field-label">위아래 미세조정</label>
+        <div class="slider-row">
+          <input type="range" id="offsetRange" min="-200" max="200" value="0">
+          <span class="slider-val" id="offsetVal">0px</span>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">좌우 미세조정</label>
+        <div class="slider-row">
+          <input type="range" id="offsetXRange" min="-200" max="200" value="0">
+          <span class="slider-val" id="offsetXVal">0px</span>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label" style="display:flex;align-items:center;">
+          미리보기 드래그 배치
+          <button class="mini-btn" id="dragPlaceToggle" type="button"
+                  title="미리보기의 문단·출처·제목을 마우스로 끌어 옮깁니다">켜기</button>
+          <button class="mini-btn" id="blockOffReset" type="button"
+                  title="밀어둔 배치를 모두 원래 자리로">되돌리기</button>
+        </label>
+        <div class="hint">켜면 미리보기에서 문단·출처·제목을 직접 끌 수 있어요. 원래 자리에서 밀어내는 방식이라 줄바꿈은 그대로 유지됩니다. 클릭하면 선택되고, 여러 개 선택해 정렬할 수 있어요.</div>
+        <div class="row" id="alignRow" style="display:none; margin-top:8px; margin-bottom:0;">
+          <div>
+            <label class="field-label">선택한 것 정렬</label>
+            <div class="seg" id="alignSeg">
+              <button data-al="left" type="button">왼쪽</button>
+              <button data-al="center" type="button">가운데</button>
+              <button data-al="right" type="button">오른쪽</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      </details>
     </div>
 
     <!-- 배경 -->
-    <div class="section">
+    <div class="section" data-tab="card">
       <div class="section-title">
         배경
         <button class="toggle-btn" id="transBgToggle" title="저장할 때 배경 없이 글자만">투명 배경</button>
@@ -1974,20 +2023,21 @@
 
       <div class="row" style="margin-top:13px;">
         <div class="col-swatch">
-          <label class="field-label">막 색</label>
+          <label class="field-label">덮개 색</label>
           <input type="color" class="swatch-input" id="dimColor" value="#000000">
         </div>
         <div>
-          <label class="field-label">막 진하기</label>
+          <label class="field-label">덮개 진하기</label>
           <div class="slider-row">
             <input type="range" id="dimRange" min="-80" max="80" value="35">
             <span class="slider-val" id="dimVal">35%</span>
           </div>
         </div>
       </div>
-      <div class="hint">배경 위에 고른 색의 막을 덮어 글자가 잘 보이게 합니다. 왼쪽으로 밀면 흰 막이 덮여 밝아집니다.</div>
+      <div class="hint">배경 위에 고른 색을 덮어 글자가 잘 보이게 합니다. 왼쪽으로 밀면 흰색이 덮여 밝아집니다.</div>
 
-      <div class="row">
+      <details class="more" data-more="bg"><summary>더보기</summary>
+      <div class="row" style="margin-bottom:0;">
         <div>
           <label class="field-label">테두리 굵기</label>
           <div class="slider-row">
@@ -2000,11 +2050,12 @@
           <input type="color" class="swatch-input" id="borderColor" value="#1a1d24">
         </div>
       </div>
+      </details>
 
     </div>
 
     <!-- 꾸미기 -->
-    <div class="section">
+    <div class="section" data-tab="card">
       <div class="section-title">꾸미기</div>
 
       <div class="field-group">
@@ -2118,27 +2169,27 @@
 
       <div class="row">
         <div>
-          <label class="field-label">비네트 (가장자리)</label>
+          <label class="field-label">가장자리 어둡게</label>
           <div class="slider-row">
             <input type="range" id="vignetteRange" min="0" max="80" value="0">
             <span class="slider-val" id="vignetteVal">0%</span>
           </div>
         </div>
         <div class="col-swatch">
-          <label class="field-label">비네트 색</label>
+          <label class="field-label">가장자리 색</label>
           <input type="color" class="swatch-input" id="vignetteColor" value="#000000">
         </div>
       </div>
 
       <div class="field-group">
         <label class="field-label" style="display:flex;align-items:center;">
-          문구 뒤 판
-          <button class="mini-btn" id="panelToggle" type="button" title="문구 덩어리 뒤에 반투명 판 깔기">켜기</button>
+          문구 뒤 글 상자
+          <button class="mini-btn" id="panelToggle" type="button" title="문구 덩어리 뒤에 반투명 상자 깔기">켜기</button>
         </label>
         <div id="panelOpts" style="display:none;">
           <div class="row">
             <div class="col-swatch">
-              <label class="field-label">판 색</label>
+              <label class="field-label">상자 색</label>
               <input type="color" class="swatch-input" id="panelColor" value="#000000">
             </div>
             <div>
@@ -2164,14 +2215,14 @@
           </div>
           <div class="row">
             <div>
-              <label class="field-label">판 여백</label>
+              <label class="field-label">상자 여백</label>
               <div class="slider-row">
                 <input type="range" id="panelPadRange" min="0" max="80" value="22">
                 <span class="slider-val" id="panelPadVal">22px</span>
               </div>
             </div>
             <div>
-              <label class="field-label">판 둥글기</label>
+              <label class="field-label">상자 둥글기</label>
               <div class="slider-row">
                 <input type="range" id="panelRadiusRange" min="0" max="40" value="8">
                 <span class="slider-val" id="panelRadiusVal">8px</span>
@@ -2225,7 +2276,7 @@
     </div>
 
     <!-- 저장 / 미리보기 -->
-    <div class="section">
+    <div class="section" data-tab="save">
       <div class="section-title">저장</div>
       <div class="field-group">
         <label class="field-label">저장 형식</label>
@@ -2252,16 +2303,8 @@
         </div>
       </div>
     </div>
-    <!-- 색 테마 프리셋 -->
-    <div class="section">
-      <div class="section-title">색 테마 &amp; 프리셋</div>
-      <div class="preset-grid" id="presetGrid"></div>
-      <div class="hint">기본 테마는 색만 바꿉니다. <b>+ 저장</b>으로 직접 저장한 것은 글씨체·여백·꾸미기까지 <b>지금 설정 전체</b>가 담기고, 누르면 그대로 되돌아옵니다. 캐릭터 전용으로 저장하면 <b>제작자·캐릭터 이름까지</b> 함께 되살아납니다. 더블클릭하면 삭제됩니다.</div>
-
-          </div>
-
     <!-- 히스토리 -->
-    <div class="section">
+    <div class="section" data-tab="save">
       <div class="section-title">
         히스토리
         <button class="mini-btn" id="historyClear" title="히스토리 전체 삭제">전체 삭제</button>
@@ -2355,7 +2398,7 @@
           </div>
           <div class="row">
             <div>
-              <label class="field-label">막 진하기</label>
+              <label class="field-label">덮개 진하기</label>
               <div class="slider-row">
                 <input type="range" id="tkDimRange" min="-80" max="80" value="0">
                 <span class="slider-val" id="tkDimVal" style="min-width:52px;">없음</span>
@@ -7386,6 +7429,43 @@
     label.appendChild(val);
   });
 
+  // ============ 설정 묶음 탭 · 더보기 ============
+  const TAB_KEY = 'quotecard:edTab';
+  const MORE_KEY = 'quotecard:moreOpen';
+  (function setupEdTabs() {
+    const bar = $('edTabs');
+    if (!bar) return;
+    function show(tab) {
+      bar.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      document.querySelectorAll('.editor .section[data-tab]').forEach(sec => {
+        sec.classList.toggle('tab-hide', sec.dataset.tab !== tab);
+      });
+      try { localStorage.setItem(TAB_KEY, tab); } catch (e) {}
+    }
+    bar.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-tab]');
+      if (!b) return;
+      show(b.dataset.tab);
+      const ed = bar.closest('.editor');
+      if (ed) ed.scrollTop = 0;
+    });
+    let t = 'text';
+    try { t = localStorage.getItem(TAB_KEY) || 'text'; } catch (e) {}
+    if (!bar.querySelector('[data-tab="' + t + '"]')) t = 'text';
+    show(t);
+
+    let open = [];
+    try { open = JSON.parse(localStorage.getItem(MORE_KEY) || '[]'); } catch (e) { open = []; }
+    document.querySelectorAll('details.more').forEach(d => {
+      if (open.indexOf(d.dataset.more) !== -1) d.open = true;
+      d.addEventListener('toggle', () => {
+        const list = [];
+        document.querySelectorAll('details.more[open]').forEach(x => list.push(x.dataset.more));
+        try { localStorage.setItem(MORE_KEY, JSON.stringify(list)); } catch (e) {}
+      });
+    });
+  })();
+
   // ============ 영역 접기 ============
   // 제목을 누르면 그 영역이 접힌다. 접힌 목록은 다음에 열 때도 유지.
   const COLLAPSE_KEY = 'quotecard:collapsed';
@@ -8701,6 +8781,64 @@
   applyStyle();
   applyBackground();
   renderCard();
+
+  // ============ 마지막 설정 그대로 ============
+  // 바꾼 설정을 모두 기억했다가 다음에 열면 그대로 되살린다 (문구·출처는 loadDraft 가 따로 맡음)
+  const LAST_KEY = 'quotecard:lastSettings';
+  let lastTimer = null;
+  function lastSnapshot() {
+    const s = captureSettings();
+    s.sliders.outWidthRange = $('outWidthRange').value;
+    s.sliders.qualityRange = $('qualityRange').value;
+    s.outFormat = state.outFormat;
+    s.transBg = !!state.transBg;
+    s.lastHl = state.lastHl;
+    s.lastCol = state.lastCol;
+    s.title = $('titleInput').value;
+    return s;
+  }
+  function saveLastNow() {
+    if (!storageOK) return;
+    clearTimeout(lastTimer);
+    const s = lastSnapshot();
+    try { localStorage.setItem(LAST_KEY, JSON.stringify(s)); }
+    catch (e) {
+      // 배경 이미지가 커서 저장 한도를 넘으면 이미지만 빼고라도 남긴다
+      try { s.bgImageData = ''; localStorage.setItem(LAST_KEY, JSON.stringify(s)); } catch (e2) {}
+    }
+  }
+  function saveLastSoon() {
+    clearTimeout(lastTimer);
+    lastTimer = setTimeout(saveLastNow, 700);
+  }
+  (function restoreLast() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); } catch (e) { s = null; }
+    if (!s) return;
+    try {
+      if (s.lastHl) state.lastHl = s.lastHl;
+      if (s.lastCol) state.lastCol = s.lastCol;
+      if (typeof s.title === 'string') $('titleInput').value = s.title;
+      restoreSettings(s);
+      $('outWidthVal').textContent = $('outWidthRange').value + 'px';
+      $('qualityVal').textContent = $('qualityRange').value + '%';
+      if (s.outFormat) {
+        state.outFormat = s.outFormat;
+        document.querySelectorAll('#fmtSeg button').forEach(b =>
+          b.classList.toggle('active', b.dataset.fmt2 === s.outFormat));
+        $('qualityBox').style.display = state.outFormat === 'png' ? 'none' : '';
+      }
+      state.transBg = !!s.transBg;
+      $('transBgToggle').classList.toggle('on', state.transBg);
+      applyHighlightColor();
+      renderCard();
+    } catch (e) { console.warn('[last] 마지막 설정 복원 실패', e); }
+  })();
+  // 편집 패널에서 무언가를 바꾸거나 미리보기를 끌면 저장 예약
+  ['input', 'change', 'click', 'pointerup'].forEach(t =>
+    document.addEventListener(t, saveLastSoon, true));
+  window.addEventListener('pagehide', saveLastNow);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveLastNow(); });
 </script>
 <!-- ☁ 선택적 클라우드 동기화 — 로그인 안 하면 동작하지 않음(기존 로컬 방식 그대로). 데이터·테마·히스토리(이미지 포함) 동기화. -->
 <script type="module">
