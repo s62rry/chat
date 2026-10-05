@@ -3617,9 +3617,10 @@ function lkSkinSnippet() {
   const SC = "<" + "/script>";
   const js = "(function(){\n" +
     "if(window.__lkLive)return;window.__lkLive=1;\n" +
-    "var P=" + JSON.stringify(P) + ",T=" + JSON.stringify(T) + ",defs={},frames=[];\n" +
+    // 티스토리는 skin.html 에서 </head>·</body> 를 찾아 자기 코드를 끼워 넣으므로, 이 코드 안에는 '<' 를 아예 남기지 않는다
+    "var P=" + JSON.stringify(P).replace(/</g, "\\u003c") + ",T=" + JSON.stringify(T).replace(/</g, "\\u003c") + ",defs={},frames=[],LT=String.fromCharCode(60);\n" +
     "function d64(s){try{return decodeURIComponent(escape(atob(String(s||'').replace(/\\s+/g,''))))}catch(e){return ''}}\n" +
-    "function esc(t){return String(t).replace(/<\\/script/gi,'<\\\\/script')}\n" +
+    "function esc(t){return String(t).split(LT+'/script').join(LT+'\\\\/script')}\n" +
     "function roots(){var r=[document],a=document.querySelectorAll('*');for(var i=0;i<a.length;i++)if(a[i].shadowRoot)r.push(a[i].shadowRoot);return r}\n" +
     "function scan(){var rs=roots();\n" +
     " rs.forEach(function(r){r.querySelectorAll('[data-lk-def]').forEach(function(d){var n=d.getAttribute('data-lk-def');if(!defs[n])defs[n]=d64(d.textContent)})});\n" +
@@ -3628,13 +3629,20 @@ function lkSkinSnippet() {
     "  var f=document.createElement('iframe'),fb=el.querySelector('.lk-fb');\n" +
     "  f.setAttribute('sandbox','allow-scripts');f.setAttribute('title',n);\n" +
     "  f.style.cssText='display:block;width:100%;border:0;background:transparent;height:0';\n" +
-    "  f.srcdoc=P.pre+(/THREE|ThreeCanvas/.test(c)?T:'')+P.setup+'<script>'+esc(c)+'<\\/script><script>'+esc(d64(el.getAttribute('data-lk-props')))+'<\\/script>'+P.tail;\n" +
-    "  frames.push({f:f,fb:fb});el.insertBefore(f,el.firstChild);\n" +
-    " })})}\n" +
-    "window.addEventListener('message',function(e){var d=e.data;if(!d||d.type!=='lk-jsx-h'||!(d.h>0))return;\n" +
+    "  var SO=LT+'script>',SC=LT+'/script>';\n" +
+    "  f.srcdoc=P.pre+(/THREE|ThreeCanvas/.test(c)?T:'')+P.setup+SO+esc(c)+SC+SO+esc(d64(el.getAttribute('data-lk-props')))+SC+P.tail;\n" +
+    "  frames.push({f:f,fb:fb,n:n});el.insertBefore(f,el.firstChild);\n" +
+    " })});dbg()}\n" +
+    // 주소 끝에 #lkdebug 를 붙이면 왼쪽 아래에 상태가 뜬다
+    "var msgs=0;function dbg(){if(location.hash.indexOf('lkdebug')<0)return;var b=document.getElementById('lkdbg');\n" +
+    " if(!b){b=document.createElement('div');b.id='lkdbg';b.style.cssText='position:fixed;left:8px;bottom:8px;z-index:2147483647;background:#111;color:#0f0;font:12px monospace;padding:6px 8px;border-radius:6px;white-space:pre';document.body.appendChild(b)}\n" +
+    " var rs=roots(),lv=0,on=0;rs.forEach(function(r){lv+=r.querySelectorAll('.lk-live').length;on+=r.querySelectorAll('.lk-live[data-lk-on]').length});\n" +
+    " b.textContent='lk 스킨코드 OK\\n그림자영역 '+(rs.length-1)+' / 코드 '+Object.keys(defs).join(',')+'\\n상태창 '+on+'/'+lv+' 실행 / 응답 '+msgs}\n" +
+    "window.addEventListener('message',function(e){var d=e.data;if(!d||d.type!=='lk-jsx-h'||!(d.h>0))return;msgs++;\n" +
     " for(var i=0;i<frames.length;i++){var x=frames[i];if(x.f.contentWindow===e.source){x.f.style.height=d.h+'px';if(x.fb)x.fb.style.display='none';break}}});\n" +
-    "var k=0,t=setInterval(function(){scan();if(++k>60)clearInterval(t)},500);\n" +
-    "if(document.readyState!=='loading')scan();else document.addEventListener('DOMContentLoaded',scan);\n" +
+    // 스킨이 본문을 늦게 그려도(로그인 화면 등) 잡히도록 계속 살핀다 (처음 30초는 0.5초, 이후 2초 간격)
+    "var k=0;(function loop(){scan();setTimeout(loop,++k<60?500:2000)})();\n" +
+
     "})();";
   return "<!-- 로그보관함: 티팟 상태창을 진짜로 띄우기 -->\n<script>\n" + js.split(SC).join("<\\/script>") + "\n" + SC;
 }
