@@ -780,6 +780,39 @@
     border-radius: 2px;
   }
 
+  /* 코드 숨김 모드 — 서식 기호 없이 적용된 모습 그대로 편집하는 칸.
+     실제 글(표식 포함)은 숨겨 둔 textarea 에 그대로 있고, 이 칸은 그걸 보여주고 고치는 창이다. */
+  .ta-rich {
+    display: none;
+    width: 100%;
+    min-height: 84px; max-height: 50vh;
+    overflow-y: auto;
+    resize: vertical;
+    font-family: var(--ui);
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--field);
+    color: var(--text);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    tab-size: 4;
+    outline: none;
+    caret-color: var(--accent);
+  }
+  .ta-rich:focus { border-color: var(--accent); }
+  #richToggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ta-rich:empty::before { content: attr(data-ph); color: var(--text-dim); pointer-events: none; }
+  .ta-rich .rk-b { font-weight: 700; color: var(--text-strong); }
+  .ta-rich .rk-sep { color: var(--accent); background: var(--accent-soft); border-radius: 2px; }
+  .ta-wrap.rich-on .ta-rich { display: block; }
+  .ta-wrap.rich-on textarea,
+  .ta-wrap.rich-on .ta-mirror,
+  .ta-wrap.rich-on .ta-grow { display: none; }
+
   /* 서식 버튼 줄 — 입력창 바로 위 */
   .fmt-bar {
     display: flex;
@@ -1261,6 +1294,8 @@
     <div class="section">
       <div class="section-title">
         발췌 문구
+        <button class="mini-btn" id="richToggle" type="button"
+                title="서식 기호(__ · {#색|…} 등)를 숨기고 서식이 적용된 모습 그대로 편집">코드 숨김</button>
         <button class="mini-btn" id="titleBtn" type="button" data-pop="titlePop"
                 title="문구 위에 얹을 제목 줄">제목 <span class="pop-caret">▾</span></button>
       </div>
@@ -1323,6 +1358,8 @@
       <div class="ta-wrap">
         <textarea id="quoteInput" placeholder="이미지로 만들 문구를 입력하세요" spellcheck="false"></textarea>
         <div class="ta-mirror" id="quoteMirror" aria-hidden="true"></div>
+        <div class="ta-rich" id="quoteRich" contenteditable="true" spellcheck="false"
+             data-ph="이미지로 만들 문구를 입력하세요"></div>
         <button class="ta-grow" id="taGrowBtn" type="button"
                 title="입력칸 높이를 글 길이에 맞춤 — 다시 누르면 원래대로">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -3857,6 +3894,8 @@
     // 마지막 줄에 캐럿이 있어도 잘리지 않게 줄바꿈 하나 여유
     mr.innerHTML = (v.length > MIRROR_MAX ? escapeHtml(v) : mirrorInline(v)) + '\n';
     mr.scrollTop = ta.scrollTop;
+    // 코드 숨김 칸 — 그 칸에서 직접 친 글자는 이미 화면에 있으므로 다시 그리지 않는다
+    if (typeof rich !== 'undefined' && rich.on && !rich.fromRich) richRender();
   }
 
   // ============ 카드 렌더링 ============
@@ -4145,6 +4184,8 @@
   // Ctrl+Z 가 안 먹는다. 편집 명령(insertText)으로 바꿔야 기록이 남는다.
   function commitQuoteEdit(text, selStart, selEnd) {
     const ta = fmtEl();
+    // 코드 숨김 모드에선 숨은 입력창에 포커스를 줄 수 없으니 값을 직접 바꾸고 화면 칸을 다시 그린다
+    if (rich.on && ta.id === 'quoteInput') { richCommit(text, selStart, selEnd); return; }
     // 전체를 골라 바꿔 넣으면 입력창이 맨 위로 튄다 — 보던 자리를 기억했다가 되돌린다
     const keepTop = ta.scrollTop;
     const ed = ta.closest('.editor');
@@ -4167,6 +4208,280 @@
     if (window.scrollY !== keepWin) window.scrollTo(window.scrollX, keepWin);
     if ($('quoteMirror') && ta.id === 'quoteInput') $('quoteMirror').scrollTop = ta.scrollTop;
   }
+
+  // ============ 코드 숨김 모드 ============
+  // 원본은 언제나 숨은 textarea(#quoteInput). 이 칸은 글자 단위 서식 모델(textToChars)로
+  // 그려 보여주고, 고치면 다시 표식 문자열(charsToText)로 바꿔 textarea 에 넣는다.
+  // 서식 버튼들은 그대로 textarea 의 선택 범위로 동작하므로, 이 칸의 선택을 늘 textarea 에 옮겨 둔다.
+  const RICH_KEY = 'quotecard:richEdit';
+  var rich = { on: false, composing: false, fromRich: false, undo: [], redo: [], lastPush: 0 };
+
+  // 형광펜 위 글자색 — 밝은 형광펜엔 검정, 어두운 형광펜엔 흰 글씨
+  function richIsLight(hex) {
+    let h = hex.replace('#', '');
+    if (h.length <= 4) h = h.split('').map(x => x + x).join('');
+    const n = parseInt(h.slice(0, 6), 16);
+    if (isNaN(n)) return true;
+    return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 150;
+  }
+  function richAttrKey(c) {
+    return [c.b ? 1 : 0, c.em ? 1 : 0, c.st ? 1 : 0, c.hl || '', c.col || ''].join('|');
+  }
+  function richRunHtml(list) {
+    const c = list[0];
+    let style = '';
+    if (c.em) style += 'font-style:italic;';
+    if (c.st) style += 'text-decoration:line-through;';
+    if (c.hl) style += 'background:' + c.hl + ';border-radius:2px;'
+                     + (c.col ? '' : 'color:' + (richIsLight(c.hl) ? '#1a1d24' : '#fff') + ';');
+    if (c.col) style += 'color:' + c.col + ';';
+    return '<span data-a="' + richAttrKey(c) + '"' + (c.b ? ' class="rk-b"' : '')
+         + (style ? ' style="' + style + '"' : '') + '>'
+         + escapeHtml(list.map(x => x.ch).join('')) + '</span>';
+  }
+  function richHtml(raw) {
+    const chars = textToChars(raw);
+    let html = '';
+    let i = 0;
+    while (i < chars.length) {
+      // 한 줄씩 — 번역 줄 · --- 줄은 입력창과 같은 모양으로
+      let j = i;
+      while (j < chars.length && chars[j].ch !== '\n') j++;
+      const line = chars.slice(i, j);
+      const plain = line.map(x => x.ch).join('');
+      let inner = '';
+      let k = 0;
+      while (k < line.length) {
+        const key = richAttrKey(line[k]);
+        let m = k;
+        while (m < line.length && richAttrKey(line[m]) === key) m++;
+        inner += richRunHtml(line.slice(k, m));
+        k = m;
+      }
+      if (plain && SEP_LINE.test(plain)) inner = '<span class="rk-sep">' + inner + '</span>';
+      else if (plain && subLinePlain(plain)) inner = '<span class="tk-sub">' + inner + '</span>';
+      html += inner;
+      if (j < chars.length) html += '<span data-a="0|0|0||">\n</span>';
+      i = j + 1;
+    }
+    // 끝이 줄바꿈이면 마지막 빈 줄이 안 보이므로 자리 표시용 <br>
+    if (raw.endsWith('\n')) html += '<br data-end="1">';
+    return html;
+  }
+  // 칸의 DOM → 글자 배열 (각 글자는 감싼 span 의 data-a 서식을 물려받는다)
+  function richReadChars() {
+    const root = $('quoteRich');
+    const out = [];
+    (function walk(node) {
+      node.childNodes.forEach(n => {
+        if (n.nodeType === 3) {
+          const host = n.parentElement && n.parentElement.closest('[data-a]');
+          const a = (host && root.contains(host) ? host.dataset.a : '0|0|0||').split('|');
+          for (const ch of n.nodeValue) {
+            out.push({ ch: ch, b: a[0] === '1', em: a[1] === '1', st: a[2] === '1',
+                       hl: a[3] || null, col: a[4] || null });
+          }
+        } else if (n.nodeName === 'BR') {
+          if (!n.dataset.end) out.push({ ch: '\n', b: false, em: false, st: false, hl: null, col: null });
+        } else if (n.nodeType === 1) {
+          // 브라우저가 줄을 div 로 나눠 넣는 경우
+          const block = /^(DIV|P)$/.test(n.nodeName);
+          if (block && out.length && out[out.length - 1].ch !== '\n') {
+            out.push({ ch: '\n', b: false, em: false, st: false, hl: null, col: null });
+          }
+          walk(n);
+        }
+      });
+    })(root);
+    return out;
+  }
+  // 칸 안의 선택 → 글자 순번 [a, b)
+  function richGetSel() {
+    const root = $('quoteRich');
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !root.contains(sel.anchorNode)) return null;
+    const r = sel.getRangeAt(0);
+    function off(node, o) {
+      const pre = document.createRange();
+      pre.selectNodeContents(root);
+      pre.setEnd(node, o);
+      const frag = pre.cloneContents();
+      let n = 0;
+      (function walk(x) {
+        x.childNodes.forEach(c => {
+          if (c.nodeType === 3) n += c.nodeValue.length;
+          else if (c.nodeName === 'BR') { if (!c.dataset || !c.dataset.end) n++; }
+          else walk(c);
+        });
+      })(frag);
+      return n;
+    }
+    return { a: off(r.startContainer, r.startOffset), b: off(r.endContainer, r.endOffset) };
+  }
+  function richSetSel(a, b) {
+    const root = $('quoteRich');
+    function locate(n) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let t, last = null;
+      while ((t = walker.nextNode())) {
+        if (n <= t.nodeValue.length) return { node: t, off: n };
+        n -= t.nodeValue.length;
+        last = t;
+      }
+      return last ? { node: last, off: last.nodeValue.length } : { node: root, off: 0 };
+    }
+    const s0 = locate(a), s1 = locate(b);
+    const r = document.createRange();
+    r.setStart(s0.node, s0.off);
+    r.setEnd(s1.node, s1.off);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  // 글자 순번 ↔ 원문(표식 포함) 위치
+  function charToRaw(chars, k, rawLen) { return k < chars.length ? chars[k].raw : rawLen; }
+  function rawToChar(chars, pos) {
+    for (let k = 0; k < chars.length; k++) if (chars[k].raw >= pos) return k;
+    return chars.length;
+  }
+  function richSelToTa(sel) {
+    const ta = $('quoteInput');
+    const chars = textToChars(ta.value);
+    const rs = charToRaw(chars, sel.a, ta.value.length);
+    const re = sel.b > sel.a ? chars[sel.b - 1].raw + 1 : rs;
+    ta.setSelectionRange(rs, re);
+  }
+  function richRender() {
+    if (!rich.on || rich.composing) return;
+    const ta = $('quoteInput');
+    const root = $('quoteRich');
+    const top = root.scrollTop;
+    const chars = textToChars(ta.value);
+    const a = rawToChar(chars, ta.selectionStart);
+    let b = 0;
+    while (b < chars.length && chars[b].raw < ta.selectionEnd) b++;
+    root.innerHTML = richHtml(ta.value);
+    if (document.activeElement === root) richSetSel(a, Math.max(a, b));
+    root.scrollTop = top;
+  }
+  function richPushUndo(force) {
+    const ta = $('quoteInput');
+    const now = Date.now();
+    if (force || now - rich.lastPush > 1000) {
+      rich.undo.push({ v: ta.value, s: ta.selectionStart, e: ta.selectionEnd });
+      if (rich.undo.length > 200) rich.undo.shift();
+      rich.redo = [];
+    }
+    rich.lastPush = force ? 0 : now;
+  }
+  // 프로그램이 바꾸는 편집 (서식 버튼 · 줄바꿈 · 붙여넣기)
+  function richCommit(text, s0, s1) {
+    const ta = $('quoteInput');
+    const root = $('quoteRich');
+    if (ta.value !== text) {
+      richPushUndo(true);
+      ta.value = text;
+    }
+    ta.setSelectionRange(s0, s1);
+    root.focus({ preventScroll: true });
+    ta.dispatchEvent(new Event('input'));   // 카드 다시 그리기 → syncMirror → richRender
+    ta.setSelectionRange(s0, s1);
+    richRender();
+  }
+  // 칸에 글자를 넣는다 — 서식은 바로 앞 글자를 따라감 (줄바꿈·붙여넣기는 서식 없이)
+  function richInsert(text, plain) {
+    const ta = $('quoteInput');
+    const sel = richGetSel() || { a: 0, b: 0 };
+    const chars = richReadChars();
+    const like = (!plain && chars[sel.a - 1]) || { b: false, em: false, st: false, hl: null, col: null };
+    const add = Array.from(text).map(ch => ch === '\n'
+      ? { ch: ch, b: false, em: false, st: false, hl: null, col: null }
+      : { ch: ch, b: like.b, em: like.em, st: like.st, hl: like.hl, col: like.col });
+    chars.splice(sel.a, sel.b - sel.a, ...add);
+    const raw = charsToText(chars);
+    const nc = textToChars(raw);
+    const pos = charToRaw(nc, sel.a + add.length, raw.length);
+    richCommit(raw, pos, pos);
+  }
+  // 사용자가 칸에서 직접 친 글자 → textarea 로
+  function richSyncFromDom(ev) {
+    const ta = $('quoteInput');
+    const raw = charsToText(richReadChars());
+    if (raw !== ta.value) {
+      richPushUndo(false);
+      ta.value = raw;
+    }
+    const sel = richGetSel();
+    if (sel) richSelToTa(sel);
+    rich.fromRich = true;
+    try {
+      ta.dispatchEvent(new InputEvent('input', {
+        inputType: (ev && ev.inputType) || 'insertText',
+        data: (ev && ev.data) || null
+      }));
+    } finally { rich.fromRich = false; }
+  }
+  function richUndo(redo) {
+    const ta = $('quoteInput');
+    const from = redo ? rich.redo : rich.undo;
+    const to = redo ? rich.undo : rich.redo;
+    const st = from.pop();
+    if (!st) return;
+    to.push({ v: ta.value, s: ta.selectionStart, e: ta.selectionEnd });
+    ta.value = st.v;
+    ta.setSelectionRange(st.s, st.e);
+    rich.lastPush = 0;
+    ta.dispatchEvent(new Event('input'));
+    ta.setSelectionRange(st.s, st.e);
+    richRender();
+  }
+  function setRich(on) {
+    rich.on = on;
+    $('quoteInput').closest('.ta-wrap').classList.toggle('rich-on', on);
+    $('richToggle').classList.toggle('on', on);
+    try { localStorage.setItem(RICH_KEY, on ? '1' : '0'); } catch (e) {}
+    rich.undo = []; rich.redo = [];
+    if (on) richRender(); else syncMirror();
+  }
+  (function initRich() {
+    const root = $('quoteRich');
+    // 글자 그대로만 받는다 (브라우저가 굵게 태그 등을 끼워 넣지 못하게)
+    try { root.contentEditable = 'plaintext-only'; } catch (e) {}
+    if (root.contentEditable !== 'plaintext-only') root.contentEditable = 'true';
+    root.addEventListener('focus', () => { fmtTarget = 'quoteInput'; });
+    root.addEventListener('compositionstart', () => { rich.composing = true; });
+    root.addEventListener('compositionend', () => { rich.composing = false; richSyncFromDom(null); });
+    root.addEventListener('input', ev => richSyncFromDom(ev));
+    root.addEventListener('keydown', ev => {
+      if (ev.isComposing || rich.composing) return;
+      const mod = ev.ctrlKey || ev.metaKey;
+      const k = (ev.key || '').toLowerCase();
+      if (ev.key === 'Enter') { ev.preventDefault(); richInsert('\n', true); return; }
+      if (ev.key === 'Tab') { ev.preventDefault(); richInsert('\t', true); return; }
+      if (mod && !ev.altKey && k === 'z') { ev.preventDefault(); richUndo(ev.shiftKey); return; }
+      if (mod && !ev.altKey && k === 'y') { ev.preventDefault(); richUndo(true); return; }
+      fmtShortcut(ev);
+    });
+    root.addEventListener('paste', ev => {
+      ev.preventDefault();
+      const t = (ev.clipboardData && ev.clipboardData.getData('text/plain')) || '';
+      if (t) richInsert(t.replace(/\r\n?/g, '\n'), true);
+    });
+    root.addEventListener('drop', ev => ev.preventDefault());
+    // 칸 안 선택이 바뀔 때마다 숨은 입력창 선택도 맞춘다 (서식 버튼이 그걸 쓴다)
+    document.addEventListener('selectionchange', () => {
+      if (!rich.on || rich.composing) return;
+      const sel = richGetSel();
+      if (sel) richSelToTa(sel);
+    });
+    $('richToggle').addEventListener('click', () => {
+      setRich(!rich.on);
+      toast(rich.on ? '서식 기호를 숨기고 적용된 모습으로 보여줘요' : '서식 기호를 다시 보여줘요');
+    });
+    let saved = null;
+    try { saved = localStorage.getItem(RICH_KEY); } catch (e) {}
+    if (saved === '1') setTimeout(() => setRich(true), 0);
+  })();
 
   // 서식 버튼 — mousedown 을 막아야 입력창 선택이 풀리지 않는다
   function bindFmtBtn(el, fn) {
