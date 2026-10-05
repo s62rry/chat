@@ -3610,13 +3610,14 @@ async function liveJsxForExport(src, chat, inline, defs) {
   const fb = await snapJsxForExport(src, chat, inline, true);
   return '<div class="lk-live" data-lk-name="' + escapeHtml(nm) + '" data-lk-props="' + b64u(b.compP) + '"><div class="lk-fb">' + (fb || "") + "</div></div>";
 }
-// 스킨 skin.html 의 </body> 바로 앞에 넣을 코드: .lk-live 자리를 찾아 sandbox iframe 으로 진짜 상태창을 띄운다
+const LK_SKIN_TAG = '<script src="https://s62rry.github.io/chat/lk_skin.js"><\/script>';
+// lk_skin.js 의 내용을 만든다 (스킨에는 LK_SKIN_TAG 한 줄만 넣음): .lk-live 자리를 찾아 sandbox iframe 으로 진짜 상태창을 띄운다
 function lkSkinSnippet() {
   const P = jsxDocParts();
   const T = '<script src="https://unpkg.com/three@0.160.0/build/three.min.js"><\/script>';
   const SC = "<" + "/script>";
   const js = "(function(){\n" +
-    "if(window.__lkLive)return;window.__lkLive=1;\n" +
+    "if(window.__lkLive)return;window.__lkLive=1;try{console.log('[로그보관함] 스킨 코드 실행됨')}catch(e){}\n" +
     // 티스토리는 skin.html 에서 </head>·</body> 를 찾아 자기 코드를 끼워 넣으므로, 이 코드 안에는 '<' 를 아예 남기지 않는다
     "var P=" + JSON.stringify(P).replace(/</g, "\\u003c") + ",T=" + JSON.stringify(T).replace(/</g, "\\u003c") + ",defs={},frames=[],LT=String.fromCharCode(60);\n" +
     "function d64(s){try{return decodeURIComponent(escape(atob(String(s||'').replace(/\\s+/g,''))))}catch(e){return ''}}\n" +
@@ -3822,7 +3823,7 @@ function openTistoryModal() {
     '<label class="bm-hint" style="display:flex;gap:6px;align-items:flex-start"><input type="radio" name="exMode" value="live"' + (lsGetSafe("lk_exMode") === "snap" ? "" : " checked") + '> ' +
     '<span><b>티팟이랑 똑같이 (추천)</b> — 블로그에서 진짜 상태창 코드를 돌려요. 버튼·탭·움직임 전부 그대로. ' +
     '스킨에 코드를 <b>한 번만</b> 넣으면 돼요 → <a href="#" id="exSkin">스킨 코드 복사</a><br>' +
-    '<span style="opacity:.75">스킨 → html 편집 → HTML 탭 맨 아래 <code>&lt;/body&gt;</code> 바로 위에 붙여넣고 적용. 코드가 없는 곳에선 첫 화면 그림으로 보여요.</span></span></label>' +
+    '<span style="opacity:.75">스킨 → html 편집 → HTML 탭 맨 아래의 <code>&lt;/s_t3&gt;</code> <b>바로 위</b>에 한 줄 붙여넣고 적용 (<code>&lt;/s_t3&gt;</code> 밖은 티스토리가 지워요). 코드가 없는 곳에선 첫 화면 그림으로 보여요.</span></span></label>' +
     '<label class="bm-hint" style="display:flex;gap:6px;align-items:flex-start"><input type="radio" name="exMode" value="snap"' + (lsGetSafe("lk_exMode") === "snap" ? " checked" : "") + '> ' +
     '<span><b>스크립트 없이</b> — 버튼을 미리 눌러 본 화면으로 바꿔 넣어요. 스킨 수정 없이 되지만 느리고, 숫자가 계속 바뀌는 동작은 안 돼요.</span></label></div>' +
     '<div class="bm-block"><div class="bm-step">범위</div>' +
@@ -3871,7 +3872,8 @@ function openTistoryModal() {
     } finally { busy = false; }
   };
   $("exCopy").addEventListener("click", () => run("copy"));
-  $("exSkin").addEventListener("click", e => { e.preventDefault(); copyText(lkSkinSnippet()); toast("스킨 코드를 복사했어요 — </body> 바로 위에 붙여넣으세요"); });
+  // 스킨에는 한 줄만 (본 코드 lk_skin.js 는 lkSkinSnippet() 으로 만들어 저장소에 둔다 → 고쳐도 스킨은 그대로)
+  $("exSkin").addEventListener("click", e => { e.preventDefault(); copyText(LK_SKIN_TAG); toast("스킨 코드를 복사했어요 — </s_t3> 바로 위에 붙여넣으세요"); });
   $("exSave").addEventListener("click", () => run("save"));
 }
 $("tistoryBtn").addEventListener("click", openTistoryModal);
