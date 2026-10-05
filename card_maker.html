@@ -720,6 +720,31 @@
     background: rgba(0,0,0,0.55); border: 0; color: #fff;
   }
   .tkp-acts button:hover { background: var(--accent); color: #fff; }
+  .tkp-gren { margin-left: auto; font-size: 11px; color: var(--text-dim); padding: 0 5px; border-radius: 4px; opacity: 0; }
+  .tkp-head:hover .tkp-gren { opacity: 1; }
+  @media (hover: none) { .tkp-gren { opacity: 0.7; } }
+  .tkp-gren:hover { color: var(--accent); background: var(--accent-soft); }
+  .tkp-card.dragging { opacity: 0.4; }
+  /* 끄는 동안 놓을 수 있는 곳을 점선으로 */
+  #tkMyPresets.dragging-on .tkp-head, #tkMyPresets.dragging-on .tkp-grid {
+    outline: 1.5px dashed var(--border); outline-offset: 2px; border-radius: 8px;
+  }
+  #tkMyPresets .tkp-head.drop, #tkMyPresets .tkp-grid.drop {
+    outline-color: var(--accent); background: var(--accent-soft);
+  }
+  .tkp-menu {
+    position: fixed; z-index: 300; min-width: 150px; padding: 4px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 9px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  }
+  .tkp-menu button {
+    display: flex; width: 100%; justify-content: flex-start;
+    border: 0; background: transparent; padding: 6px 9px; border-radius: 6px; font-size: 12px;
+  }
+  .tkp-menu button:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+  .tkp-menu button.cur { color: var(--accent); opacity: 1; font-weight: 600; cursor: default; }
+  .tkp-menu-head { font-size: 10.5px; font-weight: 700; color: var(--text-dim); padding: 6px 9px 2px;
+                   border-top: 1px solid var(--border); margin-top: 3px; }
   .tkp-add {
     width: 100%; height: 30px; justify-content: center;
     border: 1.5px dashed var(--border); background: transparent;
@@ -9573,6 +9598,50 @@
                    cur || tkpLastGroup || '', '확인');
   }
   let tkpLastGroup = '';
+  function tkpGroups() {
+    const g = [];
+    tkMyPresetsCache.forEach(x => { const k = x.group || ''; if (g.indexOf(k) === -1) g.push(k); });
+    return g;
+  }
+  function tkpMove(i, group) {
+    const pz = tkMyPresetsCache[i];
+    if (!pz) return;
+    pz.group = group || '';
+    tkpLastGroup = pz.group;
+    tkSaveMyPresets();
+    tkRenderMyPresets();
+    toast("'" + pz.name + "' → " + (pz.group || TKP_NOGROUP));
+  }
+  // 카드·묶음 옆에 뜨는 작은 메뉴
+  let tkpMenuEl = null;
+  function tkpCloseMenu() { if (tkpMenuEl) { tkpMenuEl.remove(); tkpMenuEl = null; } }
+  function tkpMenu(anchor, items) {
+    tkpCloseMenu();
+    const m = document.createElement('div');
+    m.className = 'tkp-menu';
+    items.forEach(it => {
+      if (it.head) { const h = document.createElement('div'); h.className = 'tkp-menu-head'; h.textContent = it.head; m.appendChild(h); return; }
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = it.label;
+      if (it.cur) { b.classList.add('cur'); b.disabled = true; }
+      if (it.danger) b.classList.add('danger');
+      b.addEventListener('click', ev => { ev.stopPropagation(); tkpCloseMenu(); it.fn(); });
+      m.appendChild(b);
+    });
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect();
+    const mw = m.offsetWidth, mh = m.offsetHeight;
+    let x = Math.min(r.left, window.innerWidth - mw - 8);
+    let y = r.bottom + 4;
+    if (y + mh > window.innerHeight - 8) y = Math.max(8, r.top - mh - 4);
+    m.style.left = Math.max(8, x) + 'px';
+    m.style.top = y + 'px';
+    tkpMenuEl = m;
+  }
+  document.addEventListener('click', ev => { if (tkpMenuEl && !ev.target.closest('.tkp-menu')) tkpCloseMenu(); });
+  window.addEventListener('resize', tkpCloseMenu);
+  document.addEventListener('scroll', tkpCloseMenu, true);
   function tkRenderMyPresets() {
     const box = $('tkMyPresets');
     const list = tkMyPresets();
@@ -9588,9 +9657,34 @@
       const head = document.createElement('button');
       head.type = 'button';
       head.className = 'tkp-head' + (isFold ? ' fold' : '');
-      head.innerHTML = '<span class="tkp-caret">▾</span><span class="tkp-gname"></span><span class="tkp-count">' + items.length + '</span>';
+      head.innerHTML = '<span class="tkp-caret">▾</span><span class="tkp-gname"></span><span class="tkp-count">' + items.length + '</span>'
+        + (g !== TKP_NOGROUP ? '<span class="tkp-gren" title="묶음 이름 바꾸기">✎</span>' : '');
       head.querySelector('.tkp-gname').textContent = g;
-      head.addEventListener('click', () => {
+      const gKey = g === TKP_NOGROUP ? '' : g;
+      // 카드를 끌어다 묶음 제목이나 그 아래 칸에 놓으면 그 묶음으로 옮겨진다
+      const dropOn = el => {
+        el.addEventListener('dragover', ev => { ev.preventDefault(); el.classList.add('drop'); });
+        el.addEventListener('dragleave', () => el.classList.remove('drop'));
+        el.addEventListener('drop', ev => {
+          ev.preventDefault(); el.classList.remove('drop');
+          const i = parseInt(ev.dataTransfer.getData('text/tkp'), 10);
+          if (!isNaN(i) && (tkMyPresetsCache[i].group || '') !== gKey) tkpMove(i, gKey);
+        });
+      };
+      dropOn(head);
+      head.addEventListener('click', ev => {
+        if (ev.target.closest('.tkp-gren')) {
+          ev.stopPropagation();
+          askText('묶음 이름 바꾸기', g, '바꾸기').then(nn => {
+            nn = (nn || '').trim();
+            if (!nn || nn === g) return;
+            tkMyPresetsCache.forEach(x => { if ((x.group || '') === gKey) x.group = nn; });
+            const f = tkpFolded(); const k = f.indexOf(g); if (k !== -1) { f[k] = nn; try { localStorage.setItem(TKP_FOLD_KEY, JSON.stringify(f)); } catch (e) {} }
+            tkSaveMyPresets(); tkRenderMyPresets();
+            toast("묶음 이름을 '" + nn + "' 로 바꿨어요");
+          });
+          return;
+        }
         const f = tkpFolded();
         const k = f.indexOf(g);
         if (k === -1) f.push(g); else f.splice(k, 1);
@@ -9601,10 +9695,19 @@
       if (isFold) return;
       const grid = document.createElement('div');
       grid.className = 'tkp-grid';
+      dropOn(grid);
       items.forEach(({ pz, i }) => {
         const card = document.createElement('div');
         card.className = 'tkp-card';
-        card.title = "'" + pz.name + "' 적용";
+        card.title = "'" + pz.name + "' 적용 — 끌어서 다른 묶음에 놓으면 옮겨져요";
+        card.draggable = true;
+        card.addEventListener('dragstart', ev => {
+          ev.dataTransfer.setData('text/tkp', String(i));
+          ev.dataTransfer.effectAllowed = 'move';
+          card.classList.add('dragging');
+          box.classList.add('dragging-on');
+        });
+        card.addEventListener('dragend', () => { card.classList.remove('dragging'); box.classList.remove('dragging-on'); });
         card.appendChild(tkpPreview(pz.data));
         const nm = document.createElement('span');
         nm.className = 'tkp-name';
@@ -9612,7 +9715,7 @@
         card.appendChild(nm);
         const acts = document.createElement('span');
         acts.className = 'tkp-acts';
-        acts.innerHTML = '<button type="button" class="tkp-ed" title="이름·묶음 바꾸기">✎</button>'
+        acts.innerHTML = '<button type="button" class="tkp-ed" title="이름 바꾸기 · 묶음 옮기기">✎</button>'
           + '<button type="button" class="tkp-del" title="지우기">×</button>';
         card.appendChild(acts);
         card.addEventListener('click', ev => {
@@ -9626,18 +9729,22 @@
             return;
           }
           if (ev.target.closest('.tkp-ed')) {
-            askText('프리셋 이름', pz.name, '다음').then(name => {
-              if (name === null || name === undefined) return;
-              name = (name || '').trim() || pz.name;
-              tkpAskGroup(pz.group || '').then(gr => {
-                if (gr === null || gr === undefined) return;
-                pz.name = name;
-                pz.group = (gr || '').trim();
-                tkSaveMyPresets();
-                tkRenderMyPresets();
-                toast('바꿨어요');
-              });
-            });
+            ev.stopPropagation();
+            const cur = pz.group || '';
+            const groups = tkpGroups();
+            if (groups.indexOf('') === -1) groups.push('');
+            const items2 = [{ label: '이름 바꾸기', fn: () => askText('프리셋 이름', pz.name, '바꾸기').then(nn => {
+                nn = (nn || '').trim();
+                if (!nn) return;
+                pz.name = nn; tkSaveMyPresets(); tkRenderMyPresets();
+              }) },
+              { head: '묶음 옮기기' }];
+            groups.forEach(gg => items2.push({ label: (gg || TKP_NOGROUP) + (gg === cur ? '  ✓' : ''), cur: gg === cur, fn: () => tkpMove(i, gg) }));
+            items2.push({ label: '+ 새 묶음…', fn: () => askText('새 묶음 이름', '', '옮기기').then(nn => {
+              nn = (nn || '').trim();
+              if (nn) tkpMove(i, nn);
+            }) });
+            tkpMenu(ev.target.closest('.tkp-ed'), items2);
             return;
           }
           tkApplySnapshot(pz.data);
