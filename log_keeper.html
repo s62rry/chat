@@ -1200,6 +1200,11 @@
       <button class="icon" id="sortBtn" title="정렬 순서 바꾸기">
         <svg id="sortIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
       </button>
+      <button class="icon" id="tistoryBtn" title="티스토리용 내보내기 (상태창 디자인 포함 HTML)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 4h16v12H4z"/><path d="M8 20h8M12 16v4"/><path d="m9 9 2 2 4-4"/>
+        </svg>
+      </button>
       <button class="icon" id="copyAllBtn" title="전체 로그 복사">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="9" y="9" width="13" height="13" rx="2"/>
@@ -1548,14 +1553,138 @@ function parseJsxTag(src) {
   }
   return { name: m[1], attrs };
 }
-async function mountJsx(slot) {
-  const src = decodeURIComponent(slot.dataset.jsx || "");
+/* ===== 상태창 굳히기 (iframe 안에서만 실행됨) =====
+   부모가 {type:'lk-jsx-snap'} 를 보내면, 지금 그려진 상태창을 계산된 스타일째로 굳힌 HTML 로 돌려준다.
+   티스토리 같은 곳에 붙여넣어도 모양이 남도록 — 애니메이션은 끝난 모습으로 고정. */
+function lkJsxSnapper() {
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var INHERIT = /^(color|font|font-.*|line-height|letter-spacing|word-spacing|text-align|text-indent|text-transform|text-shadow|white-space|word-break|overflow-wrap|word-wrap|visibility|cursor|list-style.*|direction|quotes|tab-size|hyphens|-webkit-text-fill-color|-webkit-text-stroke.*|text-rendering|font-kerning|-webkit-font-smoothing|caret-color|fill|stroke.*|paint-order|text-anchor|dominant-baseline)$/;
+  var SKIP = /^(--|transition|animation|will-change|-webkit-tap|-webkit-user|user-select|pointer-events|cursor|caret-color|outline|block-size|inline-size|min-block|min-inline|max-block|max-inline|inset-block|inset-inline|margin-block|margin-inline|padding-block|padding-inline|border-block|border-inline|border-start|border-end|overflow-block|overflow-inline|scroll|overscroll|contain-intrinsic|perspective-origin|transform-origin|-webkit-locale|-webkit-rtl|-webkit-ruby|-webkit-border-horizontal|-webkit-border-vertical|-webkit-logical|-webkit-mask-box|app-region|view-transition|anchor|position-try|interpolate-size|field-sizing|appearance|-webkit-appearance|width$|height$|d$|x$|y$|cx$|cy$|r$|rx$|ry$)/;
+  var KEEP_SVG = /^(viewbox|d|x|y|x1|x2|y1|y2|cx|cy|r|rx|ry|points|transform|width|height|fill|stroke|stroke-width|offset|stop-color|stop-opacity|gradientunits|gradienttransform|preserveaspectratio|xmlns|href|xlink:href|id|text-anchor|font-size|opacity|fill-opacity|stroke-opacity|stroke-dasharray|stroke-dashoffset|stroke-linecap|stroke-linejoin|patternunits|clip-path|mask|filter|pathlength|fill-rule|clip-rule)$/i;
+  var esc = function (t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); };
+  var fr = null, fdoc = null, cache = {};
+  function defOf(el) {
+    var svg = el instanceof SVGElement, tag = el.tagName.toLowerCase(), k = (svg ? "s:" : "h:") + tag;
+    if (cache[k]) return cache[k];
+    var d;
+    if (svg) { var root = document.createElementNS(SVGNS, "svg"); fdoc.appendChild(root); d = tag === "svg" ? root : root.appendChild(document.createElementNS(SVGNS, tag)); }
+    else d = fdoc.appendChild(document.createElement(/^(button|input|textarea|select)$/.test(tag) ? "span" : tag));
+    var cs = getComputedStyle(d), o = {};
+    for (var i = 0; i < cs.length; i++) o[cs[i]] = cs.getPropertyValue(cs[i]);
+    cache[k] = o;
+    return o;
+  }
+  function sizeOf(el, cs) {
+    if (el instanceof SVGElement && el.tagName.toLowerCase() !== "svg") return "";
+    if (/^(IMG|CANVAS|VIDEO)$/.test(el.tagName) || el.tagName.toLowerCase() === "svg") return "width:" + cs.width + ";height:" + cs.height + ";";
+    var out = "";
+    ["width", "height"].forEach(function (p) {
+      var v = cs.getPropertyValue(p);
+      if (!v || v === "auto") return;
+      var pv = el.style.getPropertyValue(p), pp = el.style.getPropertyPriority(p);
+      var r1 = el.getBoundingClientRect();
+      el.style.setProperty(p, "auto", "important");
+      var r2 = el.getBoundingClientRect();
+      if (pv) el.style.setProperty(p, pv, pp); else el.style.removeProperty(p);
+      if (Math.abs((p === "width" ? r1.width - r2.width : r1.height - r2.height)) > 0.5) out += p + ":" + v + ";";
+    });
+    return out;
+  }
+  function styleOf(el, pcs, isRoot) {
+    var cs = getComputedStyle(el), def = defOf(el), out = [];
+    for (var i = 0; i < cs.length; i++) {
+      var p = cs[i];
+      if (SKIP.test(p)) continue;
+      var v = cs.getPropertyValue(p);
+      if (v === def[p]) continue;
+      if (!isRoot && pcs && INHERIT.test(p) && pcs.getPropertyValue(p) === v) continue;
+      var bm = p.match(/^border-(top|right|bottom|left)-color$/);
+      if (bm && cs.getPropertyValue("border-" + bm[1] + "-style") === "none") continue;
+      if (/^(column-rule-color|text-emphasis-color|text-decoration-color|-webkit-text-stroke-color|-webkit-text-fill-color|outline-color)$/.test(p) && v === cs.color) continue;
+      if (p === "position" && v === "fixed") v = "absolute";
+      if (p === "position" && v === "sticky") v = "relative";
+      out.push(p + ":" + v);
+    }
+    return { cs: cs, css: out.join(";") + ";" + sizeOf(el, cs) };
+  }
+  function pseudo(el, which, pcs) {
+    var ps; try { ps = getComputedStyle(el, which); } catch (e) { return ""; }
+    var c = ps && ps.content;
+    if (!c || c === "none" || c === "normal") return "";
+    var m = c.match(/^["'](.*)["']$/), text = m ? m[1] : "";
+    var def = defOf(document.createElement("span")), out = [];
+    for (var i = 0; i < ps.length; i++) {
+      var p = ps[i];
+      if (p === "content" || /^(--|transition|animation)/.test(p)) continue;
+      var v = ps.getPropertyValue(p);
+      if (v === def[p]) continue;
+      if (INHERIT.test(p) && pcs.getPropertyValue(p) === v) continue;
+      out.push(p + ":" + v);
+    }
+    var css = out.join(";");
+    if (!text && !/background|border|box-shadow/.test(css)) return "";
+    if (!/display/.test(css)) css += ";display:inline-block";
+    return '<span style="' + esc(css) + '">' + esc(text) + "</span>";
+  }
+  function snap(n, pcs, isRoot, inD) {
+    if (n.nodeType === 3) return esc(n.nodeValue);
+    if (n.nodeType !== 1) return "";
+    var tag = n.tagName.toLowerCase();
+    if (/^(script|style|noscript|template|link|meta)$/.test(tag)) return "";
+    var r = styleOf(n, pcs, isRoot), cs = r.cs, st = r.css;
+    if (cs.display === "none" && !inD) return "";
+    if (tag === "canvas") { try { return '<img src="' + n.toDataURL() + '" style="' + esc(st) + '">'; } catch (e) { return ""; } }
+    if (tag === "img") return '<img src="' + esc(n.currentSrc || n.src || "") + '" alt="' + esc(n.alt || "") + '" style="' + esc(st) + '">';
+    if (/^(input|textarea|select)$/.test(tag)) {
+      var v = n.value;
+      if (tag === "select" && n.selectedOptions && n.selectedOptions[0]) v = n.selectedOptions[0].text;
+      if (n.type === "checkbox" || n.type === "radio") v = n.checked ? "☑" : "☐";
+      return '<span style="' + esc(st) + '">' + esc(v || n.placeholder || "") + "</span>";
+    }
+    var svg = n instanceof SVGElement, outTag = tag === "button" ? "span" : tag, attrs = "";
+    for (var i = 0; i < n.attributes.length; i++) {
+      var a = n.attributes[i], an = a.name.toLowerCase();
+      if (an === "style" || an === "class" || an.indexOf("on") === 0 || an.indexOf("data-") === 0 || an.indexOf("aria-") === 0) continue;
+      if (!svg && !/^(src|alt|title|colspan|rowspan|open)$/.test(an)) continue;
+      if (svg && !KEEP_SVG.test(an)) continue;
+      if (/javascript:/i.test(a.value)) continue;
+      attrs += " " + a.name + '="' + esc(a.value) + '"';
+    }
+    if (tag === "details" && n.open && attrs.indexOf(" open") < 0) attrs += " open";
+    var inner = svg ? "" : pseudo(n, "::before", cs);
+    for (var c = n.firstChild; c; c = c.nextSibling) inner += snap(c, cs, false, inD || tag === "details");
+    if (!svg) inner += pseudo(n, "::after", cs);
+    return "<" + outTag + attrs + ' style="' + esc(st + (isRoot ? "max-width:100%;box-sizing:border-box;" : "")) + '">' + inner + "</" + outTag + ">";
+  }
+  function snapAll() {
+    var still = document.createElement("style");
+    still.textContent = "*,*::before,*::after{animation:none!important;transition:none!important}";
+    document.head.appendChild(still);
+    // 기본 스타일 비교용: 샌드박스 안에서는 빈 iframe 에 접근할 수 없어서 shadow DOM 으로 페이지 CSS 를 막는다
+    fr = document.createElement("div");
+    fr.style.cssText = "position:absolute;left:-99999px;top:0;width:680px";
+    document.body.appendChild(fr);
+    fdoc = fr.attachShadow({ mode: "open" });
+    fdoc.innerHTML = "<style>:host{all:initial;display:block}</style>";
+    var root = document.getElementById("root"), rcs = getComputedStyle(document.body), html = "";
+    try { for (var c = root.firstChild; c; c = c.nextSibling) html += snap(c, rcs, true, false); }
+    finally { fr.remove(); still.remove(); }
+    return html;
+  }
+  window.addEventListener("message", function (e) {
+    var d = e.data;
+    if (!d || d.type !== "lk-jsx-snap") return;
+    var html = "", ok = !!window.__lkOk && !document.querySelector(".lk-err");
+    try { if (ok) html = snapAll(); } catch (err) { ok = false; try { console.warn("[lk-snap]", err && err.stack || err); } catch (e2) {} }
+    try { parent.postMessage({ type: "lk-jsx-snapped", id: d.id, ok: ok && !!html, html: html }, "*"); } catch (err) {}
+  });
+}
+
+// [[JSX]] 한 덩어리를 iframe 문서로 만든다. 실패하면 { error } 를 돌려준다
+async function buildJsxDoc(src, chat) {
   const nm = (src.match(/^\s*<\s*([A-Za-z_$][\w$]*)/) || [])[1];
-  const showRaw = msg => {
-    slot.innerHTML = '<div class="jsx-missing">' + escapeHtml(msg) + '</div><div class="codeblock">' + escapeHtml(src.slice(0, 4000)) + "</div>";
-  };
-  const code = nm && jsxDefsFor(getActive())[nm];
-  if (!code) { showRaw("상태창 코드(" + (nm || "?") + ")가 이 채팅에 없어서 원문으로 보여드려요"); return; }
+  const code = nm && jsxDefsFor(chat)[nm];
+  if (!code) return { error: "상태창 코드(" + (nm || "?") + ")가 이 채팅에 없어서 원문으로 보여드려요" };
   let compC, compP;
   try {
     const tag = parseJsxTag(src);
@@ -1565,7 +1694,7 @@ async function mountJsx(slot) {
     compP = "window.__lkSetProps({" + tag.attrs.map(a => JSON.stringify(a.name) + ":" +
       (a.kind === "str" ? JSON.stringify(a.value) : a.kind === "expr" ? "(" + a.value + ")" : "true")).join(",") + "});";
     if (tag.attrs.some(a => a.kind === "expr")) compP = (await loadBabel()).transform(compP, { presets: ["react"] }).code;
-  } catch (e) { showRaw("상태창을 변환하지 못했어요: " + (e && e.message ? e.message : e)); return; }
+  } catch (e) { return { error: "상태창을 변환하지 못했어요: " + (e && e.message ? e.message : e) }; }
   const esc = t => String(t).replace(/<\/script/gi, "<\\/script");
   const three = /THREE|ThreeCanvas/.test(code) ? '<script src="https://unpkg.com/three@0.160.0/build/three.min.js"><\/script>' : "";
   const doc = '<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">' +
@@ -1584,19 +1713,32 @@ async function mountJsx(slot) {
     "if(!window.ThreeCanvas)window.ThreeCanvas=function(p){var ref=React.useRef(null),h=p&&p.height!=null?p.height:300;React.useEffect(function(){if(!ref.current||typeof THREE==='undefined')return;var w=ref.current.clientWidth||300,r=new THREE.WebGLRenderer({antialias:true,alpha:true});r.setSize(w,h);ref.current.appendChild(r.domElement);var sc=new THREE.Scene(),cam=new THREE.PerspectiveCamera(50,w/h,0.1,1000);cam.position.z=3;try{p.onInit&&p.onInit({THREE:THREE,scene:sc,camera:cam,renderer:r})}catch(e){}return function(){try{r.dispose()}catch(e){}}},[]);return React.createElement('div',{ref:ref,style:{width:'100%',height:h}})};" +
     "window.__lkSetComp=function(c){window.__lkC=c};window.__lkSetProps=function(p){window.__lkP=p};" +
     "})();<\/script>" +
+    "<script>(" + lkJsxSnapper.toString() + ")();<\/script>" +
     "<script>" + esc(compC) + "<\/script>" +
     "<script>" + esc(compP) + "<\/script>" +
     "<script>(function(){if(!window.__lkC){if(window.__lkErr&&!document.querySelector('.lk-err'))window.__lkErr('상태창 컴포넌트를 찾지 못했어요');return;}" +
     "var p=window.__lkP||{},q={};for(var k in p){var v=p[k];if(typeof v==='string'&&/^\\s*[\\[{]/.test(v)){try{v=JSON.parse(v)}catch(e){}}q[k]=v}" +
     "try{ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(window.__lkC,q));window.__lkOk=1}catch(e){window.__lkErr('상태창 오류: '+(e&&e.message||e))}" +
     "setTimeout(window.__lkPost,60);setTimeout(window.__lkPost,500);setTimeout(window.__lkPost,1500);})();<\/script></body></html>";
+  return { doc };
+}
+function makeJsxFrame(doc) {
   const ifr = document.createElement("iframe");
   ifr.setAttribute("sandbox", "allow-scripts");
   ifr.setAttribute("title", "상태창");
   ifr.style.height = "80px";
   ifr.srcdoc = doc;
+  return ifr;
+}
+async function mountJsx(slot) {
+  const src = decodeURIComponent(slot.dataset.jsx || "");
+  const r = await buildJsxDoc(src, getActive());
+  if (r.error) {
+    slot.innerHTML = '<div class="jsx-missing">' + escapeHtml(r.error) + '</div><div class="codeblock">' + escapeHtml(src.slice(0, 4000)) + "</div>";
+    return;
+  }
   slot.innerHTML = "";
-  slot.appendChild(ifr);
+  slot.appendChild(makeJsxFrame(r.doc));
 }
 
 function parseLog(raw) {
@@ -3217,6 +3359,175 @@ $("composerToggle").addEventListener("click", () => {
   $("composer").classList.toggle("collapsed");
 });
 $("copyAllBtn").addEventListener("click", copyAll);
+/* ===== 티스토리용 내보내기 =====
+   채팅방을 글자색·상태창 디자인째로 HTML 하나로 묶는다. 티스토리 글쓰기의 HTML 모드에 붙여넣으면 그대로 보인다.
+   JSX 상태창은 실제로 그린 뒤 계산된 스타일째로 굳혀서 넣는다 (화면에 펼쳐 둔 상태창은 펼친 모습 그대로). */
+let _snapSeq = 0;
+function askJsxSnap(ifr, ms) {
+  return new Promise(res => {
+    const id = "s" + (++_snapSeq), win = ifr.contentWindow;
+    let tm = null;
+    const on = ev => {
+      const d = ev.data;
+      if (ev.source !== win || !d || d.type !== "lk-jsx-snapped" || d.id !== id) return;
+      done(d);
+    };
+    const done = v => { clearTimeout(tm); window.removeEventListener("message", on); res(v); };
+    window.addEventListener("message", on);
+    tm = setTimeout(() => done(null), ms);
+    try { win.postMessage({ type: "lk-jsx-snap", id }, "*"); } catch (e) { done(null); }
+  });
+}
+function exportHost() {
+  let h = document.getElementById("lkExportHost");
+  if (!h) {
+    h = document.createElement("div");
+    h.id = "lkExportHost";
+    h.style.cssText = "position:fixed;left:0;top:0;width:680px;height:10px;overflow:hidden;opacity:0;pointer-events:none;z-index:-1;";
+    document.body.appendChild(h);
+  }
+  return h;
+}
+async function snapJsxForExport(src, chat, liveIfr) {
+  if (liveIfr && liveIfr.contentWindow) {
+    const r = await askJsxSnap(liveIfr, 5000);
+    if (r && r.ok) return r.html;
+  }
+  const b = await buildJsxDoc(src, chat);
+  if (b.error) return null;
+  const ifr = makeJsxFrame(b.doc);
+  ifr.style.cssText = "width:680px;height:3000px;border:0;";
+  exportHost().appendChild(ifr);
+  try {
+    for (let i = 0; i < 40; i++) {
+      await new Promise(r => setTimeout(r, 250));
+      const r1 = await askJsxSnap(ifr, 2000);
+      if (r1 && r1.ok) {
+        await new Promise(r => setTimeout(r, 400));   // 마운트 직후 바뀌는 값까지 반영
+        const r2 = await askJsxSnap(ifr, 2000);
+        return (r2 && r2.ok ? r2.html : r1.html);
+      }
+    }
+    return null;
+  } finally { ifr.remove(); }
+}
+function exInline(line, isUser, chat) {
+  const dia = isUser ? ((chat && chat.userDiaColor) || "#6f4bd6") : ((chat && chat.dialogueColor) || "#1f3f7a");
+  const nar = isUser ? ((chat && chat.userNarColor) || "#9aa0ad") : "#5a5f6e";
+  let out = "", i = 0;
+  while (i < line.length) {
+    if (line[i] === "*") {
+      const c = line.indexOf("*", i + 1);
+      if (c !== -1) { out += '<span style="color:' + nar + ';font-style:italic">' + escapeHtml(line.slice(i + 1, c)) + "</span>"; i = c + 1; continue; }
+      out += "*"; i++; continue;
+    }
+    let nx = line.indexOf("*", i);
+    if (nx === -1) nx = line.length;
+    const seg = line.slice(i, nx);
+    out += seg.trim() ? '<span style="color:' + dia + '">' + escapeHtml(seg) + "</span>" : escapeHtml(seg);
+    i = nx;
+  }
+  return out;
+}
+function exProse(text, isUser, chat) {
+  return text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
+    .map(para => para.split("\n").map(l => l.trim()).filter(Boolean)
+      .map(l => '<p style="margin:0 0 14px;line-height:1.8">' + exInline(l, isUser, chat) + "</p>").join("")).join("");
+}
+function exStatus(data) {
+  const body = data.items.map(it =>
+    it.type === "kv" ? '<div><b style="color:#5a5f6e">' + escapeHtml(it.key) + "</b> " + escapeHtml(it.val) + "</div>" :
+    it.type === "section" ? '<div style="margin-top:8px;font-weight:700;color:#b67d1f">' + escapeHtml(it.text) + "</div>" :
+    it.type === "li" ? "<div>· " + escapeHtml(it.text) + "</div>" :
+    "<div>" + escapeHtml(it.text || "") + "</div>").join("");
+  return '<details style="margin:14px 0;border:1px solid #e1e7f3;border-radius:12px;background:#f4f7fd;padding:10px 14px;font-size:14px">' +
+    '<summary style="cursor:pointer;font-weight:600">🪪 ' + escapeHtml(data.summary) + "</summary>" +
+    '<div style="margin-top:8px;line-height:1.7">' + body + "</div></details>";
+}
+async function buildTistoryHtml(chat, from, to, withNo, onProg) {
+  const all = sortedTurns(chat);
+  const turns = all.slice(from - 1, to);
+  const parts = [];
+  for (let ti = 0; ti < turns.length; ti++) {
+    const turn = turns[ti];
+    onProg && onProg(ti + 1, turns.length);
+    const liveSlots = [...document.querySelectorAll(".turn")].filter(el => el.dataset.tid === turn.id)
+      .flatMap(el => [...el.querySelectorAll(".jsx-slot")]);
+    let jsxIdx = 0, h = "";
+    let blocks;
+    try { blocks = parseLog(turn.raw); } catch (e) { blocks = [{ kind: "prose", text: turn.raw || "" }]; }
+    for (const b of blocks) {
+      try {
+        if (b.kind === "prose") h += exProse(b.text, false, chat);
+        else if (b.kind === "user") h += '<div style="margin:0 0 20px">' + exProse(b.text, true, chat) + "</div>";
+        else if (b.kind === "code") h += '<pre style="white-space:pre-wrap;background:#f4f5f8;border-radius:8px;padding:10px 12px;font-size:13px">' + escapeHtml(b.text.trim()) + "</pre>";
+        else if (b.kind === "status") h += exStatus(b.data);
+        else if (b.kind === "htmlstatus") h += '<div style="margin:14px 0">' + sanitizeHtml(b.html) + "</div>";
+        else if (b.kind === "jsx") {
+          const slot = liveSlots[jsxIdx++];
+          const live = slot && slot.querySelector("iframe");
+          const html = await snapJsxForExport(b.src, chat, live);
+          h += html ? '<div style="margin:16px 0">' + html + "</div>"
+                    : '<div style="margin:16px 0;padding:10px;border:1px dashed #ccc;border-radius:8px;font-size:12px;color:#999">(상태창을 그리지 못했어요)</div>';
+        }
+      } catch (e) { console.warn("export block failed", e); }
+    }
+    const no = effectiveTurnNo(chat, turn);
+    const label = withNo ? '<div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#2f6df0;margin:0 0 10px">TURN ' + (no != null ? no : (chat.turns.indexOf(turn) + 1)) + "</div>" : "";
+    parts.push("<div>" + label + h + "</div>");
+  }
+  const head = '<div style="font-size:20px;font-weight:700;color:#1a1d24;margin:0 0 24px">' + escapeHtml((chat.emoji ? chat.emoji + " " : "") + (chat.title || "")) + "</div>";
+  return '<div style="max-width:720px;margin:0 auto;font-family:\'Pretendard\',-apple-system,BlinkMacSystemFont,\'Malgun Gothic\',sans-serif;font-size:15px;line-height:1.8;color:#41454f;word-break:keep-all;overflow-wrap:anywhere">' +
+    head + parts.join('<hr style="border:0;border-top:1px dashed #dde1ea;margin:30px 0">') + "</div>";
+}
+function openTistoryModal() {
+  const chat = getActive();
+  if (!chat || !chat.turns.length) { toast("내보낼 로그가 없어요"); return; }
+  const n = chat.turns.length;
+  openModal("티스토리용 내보내기", '' +
+    '<p class="desc">대사 색과 상태창 디자인을 살린 HTML 로 내보내요. 티스토리 글쓰기에서 오른쪽 위 <b>기본모드 → HTML</b> 로 바꾼 뒤 붙여넣으면 돼요. ' +
+    '상태창은 움직이는 효과 없이 지금 모습으로 고정되고, 화면에서 펼쳐 둔 상태창은 펼친 모습으로 들어가요.</p>' +
+    '<div class="bm-block"><div class="bm-step">범위</div>' +
+    '<p class="bm-hint" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+    '<input id="exFrom" type="number" min="1" max="' + n + '" value="1" style="width:80px"> 번째 턴부터 ' +
+    '<input id="exTo" type="number" min="1" max="' + n + '" value="' + n + '" style="width:80px"> 번째 턴까지 (전체 ' + n + '턴, 지금 정렬 순서 기준)</p>' +
+    '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exNo" checked> 턴 번호 표시</label></div>' +
+    '<p class="bm-hint" id="exProg" style="min-height:18px;color:var(--accent)"></p>',
+    [{ label: "HTML 복사", id: "exCopy", primary: true }, { label: "파일로 저장", id: "exSave" }, { label: "닫기", close: true }]
+  );
+  let busy = false;
+  const run = async mode => {
+    if (busy) return;
+    busy = true;
+    const from = Math.max(1, Math.min(n, parseInt($("exFrom").value) || 1));
+    const to = Math.max(from, Math.min(n, parseInt($("exTo").value) || n));
+    const prog = $("exProg");
+    try {
+      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "만드는 중… " + i + " / " + t + "턴"; });
+      const kb = Math.round(html.length / 1024);
+      if (mode === "copy") {
+        copyText(html);
+        if (prog) prog.textContent = "복사했어요! (" + kb + "KB) 티스토리 HTML 모드에 붙여넣으세요.";
+      } else {
+        const doc = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
+          escapeHtml(chat.title || "로그") + '</title></head><body style="margin:0;padding:24px 16px;background:#fff">' + html + "</body></html>";
+        const blob = new Blob([doc], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = (chat.title || "로그").replace(/[\\/:*?"<>|]/g, "_") + ".html";
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        if (prog) prog.textContent = "파일로 저장했어요 (" + kb + "KB)";
+      }
+    } catch (e) {
+      if (prog) prog.textContent = "내보내지 못했어요: " + (e && e.message ? e.message : e);
+    } finally { busy = false; }
+  };
+  $("exCopy").addEventListener("click", () => run("copy"));
+  $("exSave").addEventListener("click", () => run("save"));
+}
+$("tistoryBtn").addEventListener("click", openTistoryModal);
+
 $("sortBtn").addEventListener("click", () => {
   if (!getActive()) { toast("채팅을 먼저 선택하세요"); return; }
   const order = ["input", "turnAsc", "turnDesc"];
