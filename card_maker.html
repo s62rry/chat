@@ -218,7 +218,11 @@
     background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent);
   }
   .ed-tabs .ed-undo:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .ed-tabs .ed-undo:disabled { opacity: 0.35; cursor: default; }
+  .ed-tabs .ed-undo:disabled {
+    background: var(--panel); border-color: var(--border); color: var(--text-dim);
+    cursor: default; transform: none;
+  }
+  .ed-tabs .ed-undo:disabled svg { opacity: 0.45; }
   .editor .section.tab-hide { display: none; }
   /* 미리보기를 눌러 찾아간 영역을 잠깐 표시 */
   .editor .section.sec-flash { box-shadow: 0 0 0 2px var(--accent); transition: box-shadow 0.2s ease; }
@@ -796,10 +800,13 @@
   .multi-help {
     display: flex; align-items: center;
     row-gap: 8px; column-gap: 0; flex-wrap: wrap;   /* 버튼 사이는 margin 3px 로만 */
-    margin-top: 7px;
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px dashed var(--border);
     font-size: 11px;
     color: var(--text-dim);
   }
+  .multi-help .mh-label { font-weight: 600; color: var(--text-dim); }
+  .multi-help .mini-btn { height: 26px; }
   .multi-help b {
     font-weight: 700; color: var(--text);
     font-family: ui-monospace, Menlo, monospace;
@@ -945,6 +952,14 @@
   .fmt-bar:not(.field-fmt) .fmt-btn.fmt-ico .pop-caret { margin-left: 1px; }
   .fmt-bar:not(.field-fmt) .fmt-btn:not(.fmt-ico) { padding: 0 5px; }
   .editor .fmt-bar:not(.field-fmt) { gap: 1px; }
+  /* 본문 툴바 — 버튼 폭을 똑같이 나눠 입력칸 너비에 딱 맞춘다 */
+  .editor .fmt-bar.main-bar { flex-wrap: nowrap; gap: 2px; margin: 7px 0 0; }
+  .editor .fmt-bar.main-bar > .fmt-btn {
+    flex: 1 1 0; min-width: 0; height: 28px; padding: 0;
+    justify-content: center;
+  }
+  .editor .fmt-bar.main-bar > .fmt-gap { flex: 0 0 5px; min-width: 5px; }
+  .editor .fmt-bar.main-bar > [data-pop="tidyPop"] { flex: 1.7 1 0; }
   .fmt-bar:not(.field-fmt) .fmt-gap { min-width: 2px; }
   /* 버튼 안에서 지금 고른 색을 미리 보여줌 */
   .fmt-btn .fb-hl {
@@ -1504,7 +1519,7 @@
       </div>
 
       <!-- 서식 툴바 — 글자 서식 · 문단 도구 한 줄 -->
-      <div class="fmt-bar">
+      <div class="fmt-bar main-bar">
         <button class="fmt-btn fmt-ico" type="button" data-fmt="b" title="굵게 (Ctrl+B)"><b>B</b></button>
         <button class="fmt-btn fmt-ico" type="button" data-fmt="em" title="기울임 (Ctrl+I)"><i>I</i></button>
         <button class="fmt-btn fmt-ico" type="button" data-fmt="st" title="취소선"><s>S</s></button>
@@ -1588,8 +1603,8 @@
         </div>
       </div>
       <div class="multi-help">
-        <b>---</b> 입력 시 구분해 저장
-        <button class="mini-btn" id="insertSepBtn" type="button">--- 넣기</button>
+        <span class="mh-label" title="문구 중간에 --- 만 있는 줄을 넣으면 거기서 장이 나뉘어요">여러 장</span>
+        <button class="mini-btn" id="insertSepBtn" type="button" title="커서 자리에 --- 줄을 넣어 장을 나눠요">장 나누기</button>
         <button class="mini-btn" id="stitchBtn" type="button"
                 title="나뉜 장들을 세로로 이어 한 장으로 저장">이어붙여 저장</button>
       </div>
