@@ -8476,22 +8476,49 @@
   window.tkSaveImage = tkSaveImage;
   window.tkCopyImage = tkCopyImage;
 
-  // ===== 메시지 히스토리 — 저장·복사할 때의 대본을 쌓아둔다 =====
+  // ===== 메시지 히스토리 — 저장·복사할 때의 대본과 화면 설정(글꼴·배경·화자 등)을 쌓아둔다 =====
+  // 아바타·배경 이미지까지 담으면 localStorage 로는 좁아서 IndexedDB 에 둔다 (내 프리셋과 같은 곳)
   const TK_HIST_KEY = 'quotecard:talkhistory';
-  function tkHistList() {
-    try { return JSON.parse(localStorage.getItem(TK_HIST_KEY) || '[]'); } catch (e) { return []; }
+  let tkHistCache = [];
+  function tkHistList() { return tkHistCache; }
+  function tkLoadHistory() {
+    return tkIdbGet('history').then(v => {
+      if (Array.isArray(v)) { tkHistCache = v; return; }
+      // 예전 기록(대본만)은 localStorage 에서 옮겨온다
+      try {
+        const old = JSON.parse(localStorage.getItem(TK_HIST_KEY) || '[]');
+        if (Array.isArray(old)) tkHistCache = old;
+        if (tkHistCache.length) {
+          tkIdbSet('history', tkHistCache).then(() => localStorage.removeItem(TK_HIST_KEY)).catch(() => {});
+        }
+      } catch (e) {}
+    });
+  }
+  function tkSaveHistory() {
+    return tkIdbSet('history', tkHistCache).catch(() => {
+      // IndexedDB 를 못 쓰는 환경이면 대본만이라도 남긴다
+      try {
+        localStorage.setItem(TK_HIST_KEY, JSON.stringify(tkHistCache.map(h => ({ stamp: h.stamp, script: h.script }))));
+      } catch (e) {}
+    });
   }
   function tkAddHistory() {
     const script = $('tkScript').value.trim();
     if (!script) return;
-    let list = tkHistList();
-    if (list[0] && list[0].script === script) return;   // 같은 대본 연속 저장은 한 번만
+    const settings = tkSnapshot();
     const now = new Date();
     const stamp = (now.getMonth() + 1) + '월 ' + now.getDate() + '일 '
       + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-    list.unshift({ stamp: stamp, script: script });
-    list = list.slice(0, 20);
-    try { localStorage.setItem(TK_HIST_KEY, JSON.stringify(list)); } catch (e) {}
+    const top = tkHistCache[0];
+    if (top && top.script === script) {
+      // 같은 대본을 다시 저장하면 새 기록 대신 화면 설정만 최신으로
+      top.settings = settings;
+      top.stamp = stamp;
+    } else {
+      tkHistCache.unshift({ stamp: stamp, script: script, settings: settings });
+      tkHistCache = tkHistCache.slice(0, 20);
+    }
+    tkSaveHistory();
     tkRenderHistory();
   }
   function tkRenderHistory() {
@@ -8506,22 +8533,25 @@
       const first = h.script.split('\n')[0].slice(0, 26);
       item.innerHTML = '<div style="flex:1; min-width:0;">'
         + '<div style="font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + first.replace(/</g, '&lt;') + '</div>'
-        + '<div style="font-size:10.5px; color:var(--text-dim); margin-top:1px;">' + h.stamp + '</div></div>'
+        + '<div style="font-size:10.5px; color:var(--text-dim); margin-top:1px;">' + h.stamp
+        + (h.settings ? ' · 화면 설정 포함' : '') + '</div></div>'
         + '<button class="mini-btn tkh-del" type="button" style="margin-left:0;">×</button>';
       item.addEventListener('click', ev => {
         if (ev.target.classList.contains('tkh-del')) {
-          const list2 = tkHistList();
-          list2.splice(i, 1);
-          try { localStorage.setItem(TK_HIST_KEY, JSON.stringify(list2)); } catch (e) {}
+          tkHistCache.splice(i, 1);
+          tkSaveHistory();
           tkRenderHistory();
           return;
         }
-        askConfirm('이 기록의 대본을 불러올까요?', '지금 입력창의 대본은 덮어써요.').then(ok => {
+        const withSet = !!h.settings;
+        askConfirm(withSet ? '이 기록을 불러올까요?' : '이 기록의 대본을 불러올까요?',
+                   withSet ? '대본과 그때의 화면 설정(글꼴·배경·화자 등)을 그대로 되살려요. 지금 내용은 덮어써요.'
+                           : '지금 입력창의 대본은 덮어써요. (예전 기록이라 화면 설정은 없어요)').then(ok => {
           if (!ok) return;
           $('tkScript').value = h.script;
-          tkRenderAll();
-          tkPersist();
-          toast('대본을 되살렸어요');
+          if (withSet) tkApplySnapshot(h.settings);   // 다시 그리고 저장까지 한다
+          else { tkRenderAll(); tkPersist(); }
+          toast(withSet ? '대본과 화면 설정을 되살렸어요' : '대본을 되살렸어요');
         });
       });
       box.appendChild(item);
@@ -8765,7 +8795,7 @@
 
   tkRestore();
   tkFillStickers();
-  tkRenderHistory();
+  tkLoadHistory().then(tkRenderHistory);
   tkLoadMyPresets().then(tkRenderMyPresets);
   tkRenderAll();
   try {
