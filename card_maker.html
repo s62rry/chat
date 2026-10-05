@@ -2964,7 +2964,14 @@
           <span class="slider-val" id="tkSaveWidthVal">840px</span>
         </div>
       </div>
-      <div class="hint">위 오른쪽의 <b>복사</b>·<b>저장</b> 버튼이 이 대화 화면을 PNG 로 만들어요. 대본과 화자 설정은 이 브라우저에 자동 저장됩니다.</div>
+      <div class="field-group">
+        <label class="field-label">움짤이 있으면</label>
+        <div class="seg" id="tkGifSeg">
+          <button type="button" data-gif="1" class="active">움짤(GIF)로 저장</button>
+          <button type="button" data-gif="0">그림(PNG)으로</button>
+        </div>
+      </div>
+      <div class="hint">위 오른쪽의 <b>저장</b>은 화면에 움짤이 있으면 움직이는 GIF 로, 없으면 PNG 로 만들어요. <b>복사</b>는 늘 PNG 예요. 대본과 화자 설정은 이 브라우저에 자동 저장됩니다.</div>
     </div>
   </div>
 
@@ -7980,6 +7987,283 @@
     return null;
   }
   // 저장 공간을 아끼려고 가로 1200px 까지 줄이고 WebP(안 되면 PNG)로
+  // ============ 움짤(GIF) 읽기·만들기 ============
+  // 외부 라이브러리 없이 — 메시지 화면에 들어간 움짤을 프레임별로 풀어서 다시 GIF 로 묶는다.
+
+  // GIF → { width, height, frames: [{ data: RGBA(전체 화면 크기, 합성 끝난 상태), delay(ms) }] }
+  function gifDecode(bytes) {
+    let p = 0;
+    const rd = () => bytes[p++];
+    const rd16 = () => { const v = bytes[p] | (bytes[p + 1] << 8); p += 2; return v; };
+    p = 6;
+    const W = rd16(), H = rd16();
+    const flags = rd(); p += 2;
+    let gct = null;
+    if (flags & 0x80) { const n = 2 << (flags & 7); gct = bytes.subarray(p, p + n * 3); p += n * 3; }
+    const canvas = new Uint8ClampedArray(W * H * 4);
+    const frames = [];
+    let gce = { delay: 100, trans: -1, disposal: 0 };
+    while (p < bytes.length) {
+      const b = rd();
+      if (b === 0x3B) break;                       // 끝
+      if (b === 0x21) {                            // 확장 블록
+        const label = rd();
+        if (label === 0xF9) {
+          rd();
+          const pf = rd(); const d = rd16(); const ti = rd(); rd();
+          gce = { disposal: (pf >> 2) & 7, trans: (pf & 1) ? ti : -1, delay: Math.max(20, (d || 10) * 10) };
+        } else {
+          let sz; while ((sz = rd())) p += sz;
+        }
+        continue;
+      }
+      if (b !== 0x2C) break;                       // 알 수 없는 블록이면 멈춘다
+      const fx = rd16(), fy = rd16(), fw = rd16(), fh = rd16();
+      const f = rd();
+      let pal = gct;
+      if (f & 0x80) { const n = 2 << (f & 7); pal = bytes.subarray(p, p + n * 3); p += n * 3; }
+      const interlaced = !!(f & 0x40);
+      const minCode = rd();
+      const parts = []; let len = 0, sz;
+      while ((sz = rd())) { parts.push(bytes.subarray(p, p + sz)); p += sz; len += sz; }
+      const data = new Uint8Array(len); let o = 0;
+      parts.forEach(c => { data.set(c, o); o += c.length; });
+      const idx = gifLzwDecode(minCode, data, fw * fh);
+      // 줄 순서 — 인터레이스면 8,8,4,2 칸 간격으로 저장돼 있다
+      const rowMap = new Int32Array(fh);
+      if (interlaced) {
+        let k = 0;
+        [[0, 8], [4, 8], [2, 4], [1, 2]].forEach(([s0, st]) => { for (let r = s0; r < fh; r += st) rowMap[k++] = r; });
+      } else for (let r = 0; r < fh; r++) rowMap[r] = r;
+      const before = gce.disposal === 3 ? canvas.slice() : null;
+      if (pal) {
+        for (let r = 0; r < fh; r++) {
+          const y = fy + rowMap[r];
+          if (y >= H) continue;
+          for (let c = 0; c < fw; c++) {
+            const ci = idx[r * fw + c];
+            if (ci === gce.trans) continue;
+            const x = fx + c;
+            if (x >= W) continue;
+            const q = (y * W + x) * 4;
+            canvas[q] = pal[ci * 3]; canvas[q + 1] = pal[ci * 3 + 1]; canvas[q + 2] = pal[ci * 3 + 2]; canvas[q + 3] = 255;
+          }
+        }
+      }
+      frames.push({ data: canvas.slice(), delay: gce.delay });
+      if (gce.disposal === 2) {                    // 다음 프레임 전에 이 자리를 비운다
+        for (let y = fy; y < Math.min(H, fy + fh); y++) canvas.fill(0, (y * W + fx) * 4, (y * W + Math.min(W, fx + fw)) * 4);
+      } else if (gce.disposal === 3 && before) canvas.set(before);
+      gce = { delay: 100, trans: -1, disposal: 0 };
+    }
+    return { width: W, height: H, frames: frames };
+  }
+  function gifLzwDecode(minCode, data, npix) {
+    const out = new Uint8Array(npix);
+    const clear = 1 << minCode, eoi = clear + 1;
+    const prefix = new Int32Array(4096), suffix = new Uint8Array(4096), stack = new Uint8Array(4097);
+    for (let i = 0; i < clear; i++) { prefix[i] = -1; suffix[i] = i; }
+    let codeSize = minCode + 1, next = eoi + 1, old = -1, first = 0;
+    let cur = 0, bits = 0, dp = 0, op = 0;
+    while (op < npix) {
+      while (bits < codeSize) {
+        if (dp >= data.length) return out;
+        cur |= data[dp++] << bits; bits += 8;
+      }
+      let code = cur & ((1 << codeSize) - 1);
+      cur >>>= codeSize; bits -= codeSize;
+      if (code === clear) { codeSize = minCode + 1; next = eoi + 1; old = -1; continue; }
+      if (code === eoi) break;
+      if (old === -1) { out[op++] = suffix[code]; old = code; first = code; continue; }
+      const inCode = code;
+      let sp = 0;
+      if (code >= next) { stack[sp++] = first; code = old; }
+      while (code >= clear) { stack[sp++] = suffix[code]; code = prefix[code]; }
+      first = suffix[code];
+      stack[sp++] = first;
+      while (sp > 0 && op < npix) out[op++] = stack[--sp];
+      if (next < 4096) {
+        prefix[next] = old; suffix[next] = first; next++;
+        if (next === (1 << codeSize) && codeSize < 12) codeSize++;
+      }
+      old = inCode;
+    }
+    return out;
+  }
+
+  // 여러 프레임에서 고르게 뽑은 색으로 255색 팔레트 (255번은 투명)
+  function gifPalette(frames, w, h) {
+    const samples = [];
+    const total = w * h;
+    const per = Math.max(1, Math.floor(total * frames.length / 60000));
+    frames.forEach(fr => {
+      const d = fr.data;
+      for (let i = (Math.random() * per) | 0; i < total; i += per) {
+        const q = i * 4;
+        if (d[q + 3] < 128) continue;
+        samples.push(d[q], d[q + 1], d[q + 2]);
+      }
+    });
+    const n = samples.length / 3;
+    const order = new Int32Array(n); for (let i = 0; i < n; i++) order[i] = i;
+    const boxes = [{ s: 0, e: n }];
+    const range = (bx) => {
+      let mn = [255, 255, 255], mx = [0, 0, 0];
+      for (let k = bx.s; k < bx.e; k++) {
+        const j = order[k] * 3;
+        for (let c = 0; c < 3; c++) { const v = samples[j + c]; if (v < mn[c]) mn[c] = v; if (v > mx[c]) mx[c] = v; }
+      }
+      const r = [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]];
+      bx.ch = r[0] >= r[1] && r[0] >= r[2] ? 0 : (r[1] >= r[2] ? 1 : 2);
+      bx.score = r[bx.ch] * Math.sqrt(bx.e - bx.s);
+    };
+    if (n) range(boxes[0]);
+    while (boxes.length < 255) {
+      let bi = -1, best = 0;
+      boxes.forEach((bx, i) => { if (bx.e - bx.s > 1 && bx.score > best) { best = bx.score; bi = i; } });
+      if (bi < 0) break;
+      const bx = boxes[bi];
+      const seg = Array.from(order.subarray(bx.s, bx.e)).sort((a, b) => samples[a * 3 + bx.ch] - samples[b * 3 + bx.ch]);
+      order.set(seg, bx.s);
+      const mid = bx.s + ((bx.e - bx.s) >> 1);
+      const a = { s: bx.s, e: mid }, b2 = { s: mid, e: bx.e };
+      range(a); range(b2);
+      boxes.splice(bi, 1, a, b2);
+    }
+    const pal = new Uint8Array(256 * 3);
+    boxes.forEach((bx, i) => {
+      let r = 0, g = 0, b = 0;
+      for (let k = bx.s; k < bx.e; k++) { const j = order[k] * 3; r += samples[j]; g += samples[j + 1]; b += samples[j + 2]; }
+      const c = Math.max(1, bx.e - bx.s);
+      pal[i * 3] = Math.round(r / c); pal[i * 3 + 1] = Math.round(g / c); pal[i * 3 + 2] = Math.round(b / c);
+    });
+    return { pal: pal, count: Math.max(1, boxes.length) };
+  }
+  // RGBA → 팔레트 번호 (가까운 색은 캐시로)
+  function gifIndexer(palInfo) {
+    const { pal, count } = palInfo;
+    const cache = new Int16Array(1 << 18).fill(-1);
+    return function (r, g, b, a) {
+      if (a < 128) return 255;
+      const key = ((r >> 2) << 12) | ((g >> 2) << 6) | (b >> 2);
+      let v = cache[key];
+      if (v >= 0) return v;
+      let best = 0, bd = 1e9;
+      for (let i = 0; i < count; i++) {
+        const dr = pal[i * 3] - r, dg = pal[i * 3 + 1] - g, db = pal[i * 3 + 2] - b;
+        const d = dr * dr * 2 + dg * dg * 4 + db * db * 3;
+        if (d < bd) { bd = d; best = i; }
+      }
+      cache[key] = best;
+      return best;
+    };
+  }
+  function gifLzwEncode(minCode, idx, out) {
+    const clear = 1 << minCode, eoi = clear + 1;
+    let codeSize = minCode + 1, next = eoi + 1;
+    let dict = new Map();
+    const buf = [];
+    let cur = 0, bits = 0;
+    const emit = code => {
+      cur |= code << bits; bits += codeSize;
+      while (bits >= 8) { buf.push(cur & 255); cur >>>= 8; bits -= 8; }
+    };
+    emit(clear);
+    let prefix = idx[0];
+    for (let i = 1; i < idx.length; i++) {
+      const k = idx[i];
+      const key = prefix * 256 + k;
+      const v = dict.get(key);
+      if (v !== undefined) { prefix = v; continue; }
+      emit(prefix);
+      if (next === 4096) {
+        emit(clear);
+        next = eoi + 1; codeSize = minCode + 1; dict = new Map();
+      } else {
+        if (next >= (1 << codeSize)) codeSize++;
+        dict.set(key, next++);
+      }
+      prefix = k;
+    }
+    emit(prefix);
+    emit(eoi);
+    if (bits > 0) buf.push(cur & 255);
+    out.push(minCode);
+    for (let i = 0; i < buf.length; i += 255) {
+      const n = Math.min(255, buf.length - i);
+      out.push(n);
+      for (let j = 0; j < n; j++) out.push(buf[i + j]);
+    }
+    out.push(0);
+  }
+  // frames: [{ data: RGBA, delay(ms) }] → GIF 바이트. 바뀐 부분만 담아서 가볍게.
+  function gifEncode(frames, w, h, onProgress) {
+    return gifEncodeGen(w, h, frames.length, i => frames[i], frames, onProgress);
+  }
+  // 프레임을 하나씩 만들어 넘겨받는다 (전부 메모리에 쌓지 않게). 팔레트는 sample 프레임에서.
+  async function gifEncodeGen(w, h, count, getFrame, sample, onProgress) {
+    const palInfo = gifPalette(sample, w, h);
+    const toIdx = gifIndexer(palInfo);
+    const out = [];
+    const push = (...a) => { for (const v of a) out.push(v); };
+    const p16 = v => push(v & 255, (v >> 8) & 255);
+    'GIF89a'.split('').forEach(c => out.push(c.charCodeAt(0)));
+    p16(w); p16(h); push(0xF7, 0, 0);
+    for (let i = 0; i < 256 * 3; i++) out.push(palInfo.pal[i]);
+    push(0x21, 0xFF, 0x0B); 'NETSCAPE2.0'.split('').forEach(c => out.push(c.charCodeAt(0))); push(3, 1, 0, 0, 0);   // 무한 반복
+    let prev = null;
+    let pendingDelay = 0;
+    const N = w * h;
+    for (let f = 0; f < count; f++) {
+      const fr = getFrame(f);
+      const d = fr.data;
+      const cur = new Uint8Array(N);
+      for (let i = 0, q = 0; i < N; i++, q += 4) cur[i] = toIdx(d[q], d[q + 1], d[q + 2], d[q + 3]);
+      let x0 = 0, y0 = 0, x1 = w - 1, y1 = h - 1;
+      if (prev) {
+        x0 = w; y0 = h; x1 = -1; y1 = -1;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          if (cur[i] !== prev[i]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        }
+        if (x1 < 0) {                                       // 바뀐 게 없으면 앞 프레임을 더 오래 보여준다
+          pendingDelay += fr.delay;
+          prev = cur;
+          continue;
+        }
+      }
+      if (pendingDelay && out._lastDelayAt !== undefined) {
+        const dd = Math.round((out._lastDelay + pendingDelay) / 10);
+        out[out._lastDelayAt] = dd & 255; out[out._lastDelayAt + 1] = (dd >> 8) & 255;
+        pendingDelay = 0;
+      }
+      const fw = x1 - x0 + 1, fh = y1 - y0 + 1;
+      const sub = new Uint8Array(fw * fh);
+      for (let y = 0; y < fh; y++) sub.set(cur.subarray((y0 + y) * w + x0, (y0 + y) * w + x0 + fw), y * fw);
+      const dcs = Math.max(2, Math.round(fr.delay / 10));
+      push(0x21, 0xF9, 4, (1 << 2) | 1);                    // 그대로 두기 + 투명색 있음
+      out._lastDelayAt = out.length; out._lastDelay = fr.delay;
+      p16(dcs); push(255, 0);
+      push(0x2C); p16(x0); p16(y0); p16(fw); p16(fh); push(0);
+      gifLzwEncode(8, sub, out);
+      prev = cur;
+      if (onProgress) { onProgress(f + 1, count); await new Promise(r => setTimeout(r, 0)); }
+    }
+    if (pendingDelay && out._lastDelayAt !== undefined) {
+      const dd = Math.round((out._lastDelay + pendingDelay) / 10);
+      out[out._lastDelayAt] = dd & 255; out[out._lastDelayAt + 1] = (dd >> 8) & 255;
+    }
+    out.push(0x3B);
+    return new Uint8Array(out);
+  }
+  function dataUrlBytes(url) {
+    const b64 = url.slice(url.indexOf(',') + 1);
+    const bin = atob(b64);
+    const a = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    return a;
+  }
+
   function shrinkImage(file) {
     return new Promise((res, rej) => {
       const fr = new FileReader();
@@ -9350,8 +9634,111 @@
     ctxMenu.style.top = y + 'px';
   });
 
+  // ===== 움짤 저장 — 화면 속 GIF 를 프레임별로 다시 그려 GIF 하나로 =====
+  const TK_GIF_KEY = 'quotecard:tkGif';
+  function tkGifPref() { try { return localStorage.getItem(TK_GIF_KEY) !== '0'; } catch (e) { return true; } }
+  function tkGifImgs() {
+    return [...$('chat').querySelectorAll('img')].filter(im => /^data:image\/gif/i.test(im.src) && im.offsetWidth > 0);
+  }
+  document.querySelectorAll('#tkGifSeg button').forEach(b => {
+    b.classList.toggle('active', (b.dataset.gif === '1') === tkGifPref());
+    b.addEventListener('click', () => {
+      try { localStorage.setItem(TK_GIF_KEY, b.dataset.gif); } catch (e) {}
+      document.querySelectorAll('#tkGifSeg button').forEach(x => x.classList.toggle('active', x === b));
+    });
+  });
+  async function tkSaveGif() {
+    const chat = $('chat');
+    const imgs = tkGifImgs();
+    // 움짤은 프레임마다 화면 전체를 담아서 무거우므로 가로 720px 까지만
+    const outW = Math.min(parseInt($('tkSaveWidthRange').value, 10) || 840, 720);
+    const scale = outW / chat.offsetWidth;
+    toast('움짤 만드는 중…');
+    const cr = chat.getBoundingClientRect();
+    const items = imgs.map(im => {
+      const r = im.getBoundingClientRect();
+      const cs = getComputedStyle(im);
+      const g = gifDecode(dataUrlBytes(im.src));
+      // 프레임을 미리 캔버스로
+      const cvs = g.frames.map(fr => {
+        const c = document.createElement('canvas');
+        c.width = g.width; c.height = g.height;
+        c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(fr.data), g.width, g.height), 0, 0);
+        return c;
+      });
+      const delays = g.frames.map(fr => fr.delay);
+      return { x: (r.left - cr.left) * scale, y: (r.top - cr.top) * scale, w: r.width * scale, h: r.height * scale,
+               rad: (parseFloat(cs.borderTopLeftRadius) || 0) * scale, cvs: cvs, delays: delays,
+               dur: delays.reduce((a, b) => a + b, 0) || 100 };
+    });
+    imgs.forEach(im => { im.style.visibility = 'hidden'; });
+    let base;
+    try { base = await html2canvas(chat, { scale: scale, useCORS: true, backgroundColor: null }); }
+    finally { imgs.forEach(im => { im.style.visibility = ''; }); }
+    const W = base.width, H = base.height;
+    // 프레임 시간표 — 움짤 하나면 그 박자 그대로, 여럿이면 가장 짧은 박자로 맞춰 함께 돈다
+    let times = [], delays = [];
+    if (items.length === 1) {
+      let t = 0;
+      items[0].delays.forEach(d => { times.push(t); delays.push(d); t += d; });
+    } else {
+      const total = Math.min(8000, Math.max.apply(null, items.map(it => it.dur)));
+      let tick = Math.max(40, Math.min.apply(null, items.map(it => Math.min.apply(null, it.delays))));
+      while (total / tick > 100) tick += 10;
+      for (let t = 0; t < total; t += tick) { times.push(t); delays.push(tick); }
+    }
+    if (times.length > 150) { times = times.slice(0, 150); delays = delays.slice(0, 150); }
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    const frameAt = (it, t) => {
+      let tt = t % it.dur, k = 0;
+      while (k < it.delays.length - 1 && tt >= it.delays[k]) { tt -= it.delays[k]; k++; }
+      return it.cvs[k];
+    };
+    const draw = i => {
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(base, 0, 0);
+      items.forEach(it => {
+        ctx.save();
+        if (it.rad > 0) {
+          const r = Math.min(it.rad, it.w / 2, it.h / 2);
+          ctx.beginPath();
+          ctx.moveTo(it.x + r, it.y);
+          ctx.arcTo(it.x + it.w, it.y, it.x + it.w, it.y + it.h, r);
+          ctx.arcTo(it.x + it.w, it.y + it.h, it.x, it.y + it.h, r);
+          ctx.arcTo(it.x, it.y + it.h, it.x, it.y, r);
+          ctx.arcTo(it.x, it.y, it.x + it.w, it.y, r);
+          ctx.closePath();
+          ctx.clip();
+        }
+        ctx.drawImage(frameAt(it, times[i]), it.x, it.y, it.w, it.h);
+        ctx.restore();
+      });
+      return { data: ctx.getImageData(0, 0, W, H).data, delay: delays[i] };
+    };
+    // 팔레트용 샘플 — 처음·가운데·끝 프레임
+    const sample = [0, times.length >> 1, times.length - 1].filter((v, k, a) => a.indexOf(v) === k).map(draw);
+    let lastToast = 0;
+    const bytes = await gifEncodeGen(W, H, times.length, draw, sample, (n, all) => {
+      if (Date.now() - lastToast > 700) { toast('움짤 만드는 중… ' + Math.round(n / all * 100) + '%'); lastToast = Date.now(); }
+    });
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'image/gif' }));
+    const a = document.createElement('a');
+    a.download = 'talk_' + Date.now() + '.gif';
+    a.href = url;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('움짤로 저장했어요 (' + Math.round(bytes.length / 1024) + 'KB)');
+    tkAddHistory(base);
+  }
+  window.tkSaveGif = tkSaveGif;
   // 저장·복사 동작을 함수로 빼서 헤더 버튼과 우클릭 메뉴가 같이 쓴다
   function tkSaveImage() {
+    if (tkGifPref() && tkGifImgs().length) {
+      tkSaveGif().catch(err => { console.warn(err); toast('움짤 저장에 실패했어요'); });
+      return;
+    }
     tkCanvas().then(cv => {
       const a = document.createElement('a');
       a.download = 'talk_' + Date.now() + '.png';
@@ -10120,7 +10507,11 @@
     const f = ev.target.files && ev.target.files[0];
     ev.target.value = '';
     if (!f) return;
-    shrinkImage(f).then(url => {
+    // 움짤(GIF)은 줄이면 멈춰버리니 그대로 둔다
+    const isGif = f.type === 'image/gif';
+    if (isGif && f.size > 6 * 1024 * 1024) toast('움짤 용량이 커서 저장이 무거울 수 있어요');
+    (isGif ? new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(f); })
+           : shrinkImage(f)).then(url => {
       const ids = Object.keys(tk.photos).map(Number);
       ($('tkScript').value.match(/\[사진 (\d+)\]/g) || []).forEach(x => ids.push(parseInt(x.slice(4), 10)));
       const id = String((ids.length ? Math.max.apply(null, ids) : 0) + 1);
