@@ -686,6 +686,46 @@
   }
   .grp-head span { font-size: 10.5px; font-weight: 400; color: var(--text-dim); }
   .tk-style-grid { grid-template-columns: repeat(4, 1fr); }
+  /* 내 프리셋 — 묶음 제목 + 미리보기 카드 */
+  .tkp-head {
+    display: flex; align-items: center; gap: 5px; width: 100%;
+    margin: 4px 0 5px; padding: 3px 2px;
+    border: 0; background: transparent; border-radius: 5px;
+    font-size: 11.5px; font-weight: 700; color: var(--text);
+    justify-content: flex-start;
+  }
+  .tkp-head:hover { background: var(--field); color: var(--text); }
+  .tkp-caret { font-size: 9px; color: var(--text-dim); transition: transform 0.15s ease; }
+  .tkp-head.fold .tkp-caret { transform: rotate(-90deg); }
+  .tkp-count { font-size: 10px; font-weight: 600; color: var(--text-dim); background: var(--field);
+               border-radius: 999px; padding: 1px 6px; }
+  .tkp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+  .tkp-card {
+    position: relative; display: flex; flex-direction: column; gap: 5px;
+    padding: 5px; border: 1px solid var(--border); border-radius: 9px;
+    background: var(--field); cursor: pointer;
+    transition: border-color 0.13s ease, transform 0.1s ease;
+  }
+  .tkp-card:hover { border-color: var(--accent); }
+  .tkp-card:active { transform: translateY(1px); }
+  .tkp-card .sty-prev { height: 24px; }
+  .tkp-name { font-size: 11px; font-weight: 600; color: var(--text); text-align: center;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tkp-acts { position: absolute; top: 3px; right: 3px; display: flex; gap: 2px; opacity: 0; transition: opacity 0.13s ease; }
+  .tkp-card:hover .tkp-acts { opacity: 1; }
+  @media (hover: none) { .tkp-acts { opacity: 1; } }
+  .tkp-acts button {
+    width: 18px; height: 18px; padding: 0; justify-content: center;
+    border-radius: 50%; font-size: 10px; line-height: 1;
+    background: rgba(0,0,0,0.55); border: 0; color: #fff;
+  }
+  .tkp-acts button:hover { background: var(--accent); color: #fff; }
+  .tkp-add {
+    width: 100%; height: 30px; justify-content: center;
+    border: 1.5px dashed var(--border); background: transparent;
+    border-radius: 9px; font-size: 11.5px; color: var(--text-dim);
+  }
+  .tkp-add:hover { border-color: var(--accent); color: var(--accent); }
   .tk-bar .fmt-btn .tk-lbl { pointer-events: none; }
   #tkTopSeg button { height: 22px; padding: 0 10px; font-size: 11px; }
   #tkTopOpts input { width: 100%; }
@@ -2726,8 +2766,8 @@
       </div>
       <div class="field-group">
         <label class="field-label">내 프리셋</label>
-        <div id="tkMyPresets" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:7px;"></div>
-        <button class="mini-btn" id="tkPresetSave" type="button" style="margin:7px 0 0;">+ 내 프리셋</button>
+        <div id="tkMyPresets" style="margin-top:6px;"></div>
+        <button class="mini-btn" id="tkPresetSave" type="button" style="display:none;">+ 내 프리셋</button>
       </div>
       <!-- ① 화면 틀 — 대화 전체를 감싸는 판 -->
       <div class="grp-head">화면 틀</div>
@@ -9466,41 +9506,136 @@
     tkRenderAll();
     tkPersist();
   }
+  // ===== 내 프리셋 — 묶음(폴더)별로 접고 펴는 미리보기 카드 =====
+  const TKP_FOLD_KEY = 'quotecard:tkPresetFold';
+  const TKP_NOGROUP = '기타';
+  function tkpFolded() {
+    try { return JSON.parse(localStorage.getItem(TKP_FOLD_KEY) || '[]'); } catch (e) { return []; }
+  }
+  // 프리셋에 담긴 색으로 작은 미리보기 (화면 종류 카드와 같은 모양)
+  function tkpPreview(d) {
+    const prev = document.createElement('span');
+    const sl = (d && d.sliders) || {};
+    const sps = Object.values((d && d.speakers) || {});
+    const L = sps.find(x => x.side !== 'right') || {};
+    const R = sps.find(x => x.side === 'right') || {};
+    const bg = sl.tkBgColor || '#b2c7da';
+    prev.className = 'sty-prev' + (d && d.rowMode ? ' rows' : '');
+    prev.style.background = bg;
+    const cols = d && d.rowMode
+      ? sps.slice(0, 3).map(x => x.nameColor || '#aaaaaa')
+      : [L.bubble || '#ffffff', R.bubble || '#ffe94a'];
+    (cols.length ? cols : ['#aaaaaa']).forEach(c => {
+      const i = document.createElement('i');
+      i.style.background = c;
+      if (String(c).toLowerCase() === String(bg).toLowerCase() || String(c).toLowerCase() === '#ffffff') i.style.boxShadow = '0 0 0 1px rgba(0,0,0,0.1)';
+      prev.appendChild(i);
+    });
+    return prev;
+  }
+  function tkpAskGroup(cur) {
+    const groups = [...new Set(tkMyPresetsCache.map(x => x.group).filter(Boolean))];
+    return askText('묶음 이름' + (groups.length ? ' (있는 묶음: ' + groups.slice(0, 4).join(', ') + ')' : ''),
+                   cur || tkpLastGroup || '', '확인');
+  }
+  let tkpLastGroup = '';
   function tkRenderMyPresets() {
     const box = $('tkMyPresets');
     const list = tkMyPresets();
     box.innerHTML = '';
-    list.forEach((pz, i) => {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'mini-btn';
-      chip.style.marginLeft = '0';
-      chip.innerHTML = pz.name.replace(/</g, '&lt;') + ' <span class="tkp-del" style="opacity:0.55;">×</span>';
-      chip.addEventListener('click', ev => {
-        if (ev.target.classList.contains('tkp-del')) {
-          askConfirm("'" + pz.name + "' 프리셋을 지울까요?").then(ok => {
-            if (!ok) return;
-            tkMyPresetsCache.splice(i, 1);
-            tkSaveMyPresets();
-            tkRenderMyPresets();
-          });
-          return;
-        }
-        tkApplySnapshot(pz.data);
-        toast("'" + pz.name + "' 프리셋을 적용했어요");
+    const folded = tkpFolded();
+    // 묶음 순서 = 처음 나온 순서, '기타' 는 맨 뒤
+    const order = [];
+    list.forEach(pz => { const g = pz.group || TKP_NOGROUP; if (order.indexOf(g) === -1) order.push(g); });
+    order.sort((a, b) => (a === TKP_NOGROUP) - (b === TKP_NOGROUP));
+    order.forEach(g => {
+      const items = list.map((pz, i) => ({ pz, i })).filter(x => (x.pz.group || TKP_NOGROUP) === g);
+      const isFold = folded.indexOf(g) !== -1;
+      const head = document.createElement('button');
+      head.type = 'button';
+      head.className = 'tkp-head' + (isFold ? ' fold' : '');
+      head.innerHTML = '<span class="tkp-caret">▾</span><span class="tkp-gname"></span><span class="tkp-count">' + items.length + '</span>';
+      head.querySelector('.tkp-gname').textContent = g;
+      head.addEventListener('click', () => {
+        const f = tkpFolded();
+        const k = f.indexOf(g);
+        if (k === -1) f.push(g); else f.splice(k, 1);
+        try { localStorage.setItem(TKP_FOLD_KEY, JSON.stringify(f)); } catch (e) {}
+        tkRenderMyPresets();
       });
-      box.appendChild(chip);
+      box.appendChild(head);
+      if (isFold) return;
+      const grid = document.createElement('div');
+      grid.className = 'tkp-grid';
+      items.forEach(({ pz, i }) => {
+        const card = document.createElement('div');
+        card.className = 'tkp-card';
+        card.title = "'" + pz.name + "' 적용";
+        card.appendChild(tkpPreview(pz.data));
+        const nm = document.createElement('span');
+        nm.className = 'tkp-name';
+        nm.textContent = pz.name;
+        card.appendChild(nm);
+        const acts = document.createElement('span');
+        acts.className = 'tkp-acts';
+        acts.innerHTML = '<button type="button" class="tkp-ed" title="이름·묶음 바꾸기">✎</button>'
+          + '<button type="button" class="tkp-del" title="지우기">×</button>';
+        card.appendChild(acts);
+        card.addEventListener('click', ev => {
+          if (ev.target.closest('.tkp-del')) {
+            askConfirm("'" + pz.name + "' 프리셋을 지울까요?").then(ok => {
+              if (!ok) return;
+              tkMyPresetsCache.splice(i, 1);
+              tkSaveMyPresets();
+              tkRenderMyPresets();
+            });
+            return;
+          }
+          if (ev.target.closest('.tkp-ed')) {
+            askText('프리셋 이름', pz.name, '다음').then(name => {
+              if (name === null || name === undefined) return;
+              name = (name || '').trim() || pz.name;
+              tkpAskGroup(pz.group || '').then(gr => {
+                if (gr === null || gr === undefined) return;
+                pz.name = name;
+                pz.group = (gr || '').trim();
+                tkSaveMyPresets();
+                tkRenderMyPresets();
+                toast('바꿨어요');
+              });
+            });
+            return;
+          }
+          tkApplySnapshot(pz.data);
+          toast("'" + pz.name + "' 프리셋을 적용했어요");
+        });
+        grid.appendChild(card);
+      });
+      box.appendChild(grid);
     });
+    // 지금 화면 저장 — 점선 카드
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'tkp-add';
+    add.textContent = '+ 지금 화면 저장';
+    add.title = '화면 설정 + 화자(색·프사)를 프리셋으로 저장';
+    add.addEventListener('click', () => $('tkPresetSave').click());
+    box.appendChild(add);
   }
   $('tkPresetSave').addEventListener('click', () => {
-    askText('내 프리셋 이름', '', '저장').then(name => {
+    askText('프리셋 이름', '', '다음').then(name => {
       if (!name) return;
-      const found = tkMyPresetsCache.findIndex(x => x.name === name);
-      const item = { name: name, data: tkSnapshot() };
-      if (found >= 0) tkMyPresetsCache[found] = item;
-      else tkMyPresetsCache.push(item);
-      tkSaveMyPresets().then(() => toast("'" + name + "' 프리셋으로 저장했어요 (화자 포함)"));
-      tkRenderMyPresets();
+      tkpAskGroup('').then(gr => {
+        if (gr === null || gr === undefined) return;
+        const group = (gr || '').trim();
+        tkpLastGroup = group;
+        const found = tkMyPresetsCache.findIndex(x => x.name === name && (x.group || '') === group);
+        const item = { name: name, group: group, data: tkSnapshot() };
+        if (found >= 0) tkMyPresetsCache[found] = item;
+        else tkMyPresetsCache.push(item);
+        tkSaveMyPresets().then(() => toast("'" + (group ? group + ' · ' : '') + name + "' 으로 저장했어요 (화자 포함)"));
+        tkRenderMyPresets();
+      });
     });
   });
 
@@ -10542,7 +10677,7 @@
       const row = document.createElement('div');
       row.className = 'nc-slot';
       row.innerHTML = '<button type="button" class="nc-use" title="이 프리셋으로 새 메시지"><b></b><small>화면 설정 + 화자</small></button>';
-      row.querySelector('b').textContent = pz.name;
+      row.querySelector('b').textContent = (pz.group ? pz.group + ' · ' : '') + pz.name;
       row.querySelector('.nc-use').addEventListener('click', () => { ncMenu.classList.remove('open'); window.tkApi.startNew(pz); });
       box.appendChild(row);
     });
