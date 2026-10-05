@@ -500,6 +500,23 @@
     border-radius: 999px; line-height: 1.5;
   }
   .mini-copy.copied { color: var(--accent); border-color: var(--accent); }
+  /* 의상 — 여러 벌을 카드로 쌓는다 */
+  .outfit-card {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px; margin-bottom: 7px; background: var(--panel);
+  }
+  .outfit-top { display: flex; gap: 5px; align-items: center; margin-bottom: 6px; }
+  .outfit-top input { flex: 1; min-width: 0; }
+  .outfit-top button { flex: 0 0 auto; }
+  .outfit-card textarea { width: 100%; }
+  .outfit-del { padding: 2px 8px; font-size: 12px; border-radius: 999px; }
+  .outfit-del:hover { color: #e0556b; border-color: #e0556b; }
+  .outfit-add {
+    width: 100%; height: 32px; justify-content: center;
+    border: 1.5px dashed var(--border); background: transparent;
+    border-radius: 10px; font-size: 12px; color: var(--text-dim);
+  }
+  .outfit-add:hover { border-color: var(--accent); color: var(--accent); }
   .field-row .field { flex: 1; }
   /* ===== AU 탭 (편집·상세 공용) ===== */
   .ver-tabs {
@@ -1043,6 +1060,11 @@
         </label>
         <textarea id="fPrompt" placeholder="AI 에 그대로 붙여넣을 프롬프트 — 복사 버튼으로 바로 가져가요" rows="4"></textarea>
       </div>
+      <div class="field">
+        <label>의상</label>
+        <div id="fOutfitList"></div>
+        <button type="button" class="outfit-add" id="fOutfitAdd">+ 의상 추가</button>
+      </div>
       <div class="field" style="margin-bottom:0;">
         <label>태그</label>
         <div class="char-input-row">
@@ -1296,6 +1318,7 @@
       chars: Array.isArray(p.chars) ? p.chars : [],
       memo: p.memo || '',
       prompt: p.prompt || '',
+      outfits: cleanOutfits(p.outfits),
       tags: Array.isArray(p.tags) ? p.tags : [],
       hasImg: !!p.hasImg
     };
@@ -2181,7 +2204,7 @@
       vid: uid(), isOrig: !!isOrig, catId: '', label: '', subLabel: '',
       hideTop: false,
       name: '', age: '', height: '', gender: '',
-      tagline: '', chars: [], memo: '', prompt: '', tags: [],
+      tagline: '', chars: [], memo: '', prompt: '', outfits: [], tags: [],
       hasImg: false, _img: ''
     };
   }
@@ -2282,6 +2305,7 @@
     v.tagline = $('fTagline').value.trim();
     v.memo = $('fMemo').value;
     v.prompt = $('fPrompt').value;
+    v.outfits = readOutfits();
   }
   function ensureFirstOrig() {
     if (editVersions.length && !editVersions[0].isOrig) {
@@ -2349,6 +2373,7 @@
     $('fTagline').value = v.tagline || '';
     $('fMemo').value = v.memo || '';
     $('fPrompt').value = v.prompt || '';
+    renderOutfits(v.outfits || []);
     $('fCharInput').value = '';
     $('fTagInput').value = '';
     fillCategorySelect(v.catId || '');
@@ -2640,6 +2665,7 @@
       chars: (v.chars || []).slice(),
       memo: v.memo || '',
       prompt: v.prompt || '',
+      outfits: cleanOutfits(v.outfits),
       tags: (v.tags || []).slice(),
       hasImg: !!v._img
     }));
@@ -2847,6 +2873,10 @@
       cnt2.textContent = v.prompt.length + '자';
       body.appendChild(cnt2);
     }
+    (v.outfits || []).forEach((o, k) => {
+      if (!o.name && !o.desc) return;
+      body.appendChild(makeSection('의상 · ' + (o.name || (k + 1) + '번째'), o.desc || o.name));
+    });
   }
   function makeTagSection(arr) {
     const sec = document.createElement('div');
@@ -2906,6 +2936,55 @@
     sec.appendChild(t);
     return sec;
   }
+  // ===== 의상 — 이름 + 설명을 여러 벌 =====
+  function cleanOutfits(arr) {
+    return (Array.isArray(arr) ? arr : [])
+      .map(o => ({ name: String((o && o.name) || ''), desc: String((o && o.desc) || '') }))
+      .filter(o => o.name.trim() || o.desc.trim());
+  }
+  function readOutfits() {
+    return cleanOutfits([...document.querySelectorAll('#fOutfitList .outfit-card')].map(c => ({
+      name: c.querySelector('input').value.trim(),
+      desc: c.querySelector('textarea').value
+    })));
+  }
+  function copyText(text, btn, label) {
+    const done = () => {
+      btn.textContent = '복사됨!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = label; btn.classList.remove('copied'); }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, () => { fallbackCopy(text); done(); });
+    } else { fallbackCopy(text); done(); }
+  }
+  function addOutfitCard(o, focus) {
+    const card = document.createElement('div');
+    card.className = 'outfit-card';
+    card.innerHTML = '<div class="outfit-top">'
+      + '<input type="text" maxlength="30" placeholder="의상 이름 (예: 교복, 사복, 잠옷)">'
+      + '<button type="button" class="mini-copy" title="이 의상 설명 복사">복사</button>'
+      + '<button type="button" class="outfit-del" title="이 의상 지우기">×</button>'
+      + '</div>'
+      + '<textarea rows="2" placeholder="의상 설명 — 색·소재·액세서리 등"></textarea>';
+    card.querySelector('input').value = (o && o.name) || '';
+    card.querySelector('textarea').value = (o && o.desc) || '';
+    card.querySelector('.mini-copy').addEventListener('click', ev => {
+      const nm = card.querySelector('input').value.trim();
+      const ds = card.querySelector('textarea').value.trim();
+      if (!nm && !ds) { toast('의상이 비어 있어요'); return; }
+      copyText(ds ? (nm ? nm + ': ' + ds : ds) : nm, ev.currentTarget, '복사');
+    });
+    card.querySelector('.outfit-del').addEventListener('click', () => card.remove());
+    $('fOutfitList').appendChild(card);
+    if (focus) card.querySelector('input').focus();
+  }
+  function renderOutfits(list) {
+    $('fOutfitList').innerHTML = '';
+    (list || []).forEach(o => addOutfitCard(o, false));
+  }
+  $('fOutfitAdd').addEventListener('click', () => addOutfitCard(null, true));
+
   // 편집 창의 프롬프트 복사
   $('fPromptCopy').addEventListener('click', () => {
     const text = $('fPrompt').value;
@@ -3048,6 +3127,7 @@
               chars: Array.isArray(rv.chars) ? rv.chars : [],
               memo: rv.memo || '',
               prompt: rv.prompt || '',
+              outfits: cleanOutfits(rv.outfits),
               tags: Array.isArray(rv.tags) ? rv.tags : [],
               hasImg: !!(rv.img && rv.img.indexOf
                 && rv.img.indexOf('data:') === 0)
@@ -3074,6 +3154,7 @@
             chars: Array.isArray(rp.chars) ? rp.chars : [],
             memo: rp.memo || '',
             prompt: rp.prompt || '',
+            outfits: cleanOutfits(rp.outfits),
             tags: Array.isArray(rp.tags) ? rp.tags : [],
             hasImg: !!(rp.img && rp.img.indexOf
               && rp.img.indexOf('data:') === 0)
