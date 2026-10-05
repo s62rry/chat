@@ -8931,7 +8931,8 @@
       b.classList.toggle('active', b.dataset.mode === m));
     const talk = m === 'talk';
     document.querySelector('.editor:not(#talkEditor)').style.display = talk ? 'none' : '';
-    if ($('newCardWrap')) $('newCardWrap').style.display = talk ? 'none' : '';
+    // 자리는 남겨 둔 채 숨긴다 — 없애면 헤더 버튼 폭이 바뀌어 발췌/메시지 탭이 옆으로 밀린다
+    if ($('newCardWrap')) $('newCardWrap').style.visibility = talk ? 'hidden' : '';
     $('talkEditor').style.display = talk ? '' : 'none';
     document.querySelector('.preview-stack').style.display = talk ? 'none' : '';
     $('chatWrap').style.display = talk ? '' : 'none';
