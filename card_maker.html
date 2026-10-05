@@ -110,7 +110,7 @@
   button.primary:hover { opacity: 0.88; color: #fff; }
   button.icon { padding: 6px; }
   .header-actions { display: flex; gap: 7px; }
-  /* 새 카드 — 왼쪽은 바로 실행, 오른쪽 ▾ 는 내 모양 메뉴 */
+  /* 새 카드 — 왼쪽은 바로 실행, 오른쪽 ▾ 는 기본 서식 슬롯 메뉴 */
   .nc-wrap { position: relative; display: flex; }
   .nc-wrap > #newCardBtn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
   .nc-wrap > #newCardMore {
@@ -121,23 +121,35 @@
   .nc-menu {
     display: none;
     position: absolute; right: 0; top: calc(100% + 6px); z-index: 50;
-    min-width: 230px; padding: 5px;
+    min-width: 268px; padding: 5px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 9px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.16);
   }
   .nc-menu.open { display: block; }
+  .nc-head { font-size: 11px; font-weight: 600; color: var(--text-dim); padding: 5px 9px 4px; }
+  .nc-slot { display: flex; align-items: center; gap: 2px; border-radius: 6px; }
+  .nc-slot:hover { background: var(--field); }
   .nc-menu button {
-    display: flex; width: 100%;
-    justify-content: flex-start;
     border: 0; background: transparent;
-    padding: 8px 9px; border-radius: 6px;
-    font-size: 12.5px; text-align: left;
+    border-radius: 6px; font-size: 12.5px;
   }
+  .nc-slot .nc-use {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+    padding: 7px 9px; text-align: left;
+  }
+  .nc-slot .nc-use b { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nc-slot .nc-use small { font-size: 10.5px; color: var(--text-dim); font-weight: 400; }
+  .nc-slot.empty .nc-use { cursor: default; }
+  .nc-slot.empty .nc-use b { color: var(--text-dim); font-weight: 500; }
+  .nc-slot .nc-act { flex: 0 0 auto; padding: 5px 7px; font-size: 11px; color: var(--text-dim); }
+  .nc-slot .nc-star { font-size: 14px; padding: 4px 6px; }
+  .nc-slot .nc-star.on { color: #f0b400; }
   .nc-menu button:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
-  .nc-menu button:disabled { opacity: 0.4; cursor: default; }
-  .nc-menu #myDefClear { font-size: 11px; color: var(--text-dim); padding: 6px 9px; }
+  .nc-slot .nc-star.on:hover { color: #f0b400; }
+  .nc-menu button:disabled { opacity: 0.35; cursor: default; }
   .nc-hint {
     font-size: 10.5px; line-height: 1.5; color: var(--text-dim);
     padding: 6px 9px 4px; margin-top: 3px;
@@ -1361,26 +1373,19 @@
       </svg>
     </button>
     <div class="nc-wrap" id="newCardWrap">
-      <button id="newCardBtn" title="문구를 비우고 새 카드 시작 (내 모양이 있으면 그 모양으로)">
+      <button id="newCardBtn" title="문구를 비우고 새 카드 시작">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="3"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
         </svg>
         <span>새 카드</span>
       </button>
-      <button id="newCardMore" title="내 모양 저장">
+      <button id="newCardMore" title="기본 서식 저장·선택">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="nc-menu" id="newCardMenu">
-        <button type="button" id="myDefSave">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6.5 7 .8-5.2 4.8 1.5 7L12 17.6 5.7 21.1l1.5-7L2 9.3l7-.8z"/></svg>
-          지금 모양을 내 모양으로 저장
-        </button>
-        <button type="button" id="myDefStart">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-          내 모양으로 새 카드
-        </button>
-        <button type="button" id="myDefClear">내 모양 지우기</button>
-        <div class="nc-hint" id="myDefHint"></div>
+        <div class="nc-head">기본 서식</div>
+        <div id="ncSlots"><!-- JS --></div>
+        <div class="nc-hint">★ 표시한 서식이 <b>새 카드</b>의 기본이에요. 이름을 누르면 그 서식으로 새 카드를 시작해요.</div>
       </div>
     </div>
     <button id="copyBtn">
@@ -9115,73 +9120,131 @@
   });
   setHist.cur = setSnap();
 
-  // ============ 새 카드 · 내 모양 ============
-  const MYDEF_KEY = 'quotecard:myDefault';
-  function myDefGet() {
-    try { return JSON.parse(localStorage.getItem(MYDEF_KEY) || 'null'); } catch (e) { return null; }
+  // ============ 새 카드 · 기본 서식 (슬롯 3개) ============
+  const SLOT_KEY = 'quotecard:formatSlots';
+  const SLOT_N = 3;
+  function slotsGet() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(SLOT_KEY) || 'null'); } catch (e) { d = null; }
+    if (!d) {
+      d = { slots: [], def: 0 };
+      // 예전 '내 모양' 하나를 1번 슬롯으로 옮긴다
+      try {
+        const old = JSON.parse(localStorage.getItem('quotecard:myDefault') || 'null');
+        if (old && old.s) d.slots[0] = { name: '서식 1', stamp: old.stamp, s: old.s };
+      } catch (e) {}
+    }
+    while (d.slots.length < SLOT_N) d.slots.push(null);
+    return d;
   }
-  function myDefHint() {
-    const d = myDefGet();
-    $('myDefStart').disabled = !d;
-    $('myDefClear').style.display = d ? '' : 'none';
-    $('myDefHint').textContent = d
-      ? '내 모양: ' + d.stamp + ' 에 저장 — "새 카드" 를 누르면 이 모양으로 시작해요.'
-      : '아직 내 모양이 없어요. 저장해 두면 "새 카드" 가 그 모양으로 시작해요.';
-    $('newCardBtn').title = d ? '문구를 비우고 내 모양으로 새 카드 시작' : '문구를 비우고 새 카드 시작 (모양은 그대로)';
+  function slotsPut(d) {
+    try { localStorage.setItem(SLOT_KEY, JSON.stringify(d)); localStorage.removeItem('quotecard:myDefault'); return true; }
+    catch (e) { return false; }
+  }
+  function nowStamp() {
+    const now = new Date();
+    return (now.getMonth() + 1) + '월 ' + now.getDate() + '일 '
+      + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  }
+  function renderSlots() {
+    const d = slotsGet();
+    const box = $('ncSlots');
+    box.innerHTML = '';
+    d.slots.forEach((sl, i) => {
+      const row = document.createElement('div');
+      row.className = 'nc-slot' + (sl ? '' : ' empty');
+      const isDef = sl && d.def === i;
+      row.innerHTML =
+        '<button type="button" class="nc-use"' + (sl ? ' title="이 서식으로 새 카드"' : ' disabled') + '><b></b><small></small></button>'
+        + '<button type="button" class="nc-act nc-star' + (isDef ? ' on' : '') + '"' + (sl ? '' : ' disabled')
+        + ' title="새 카드의 기본으로">' + (isDef ? '★' : '☆') + '</button>'
+        + '<button type="button" class="nc-act nc-save" title="지금 서식을 여기에 저장">저장</button>'
+        + '<button type="button" class="nc-act nc-del"' + (sl ? '' : ' disabled') + ' title="비우기">×</button>';
+      row.querySelector('b').textContent = sl ? sl.name : (i + 1) + '번 — 비어 있음';
+      row.querySelector('small').textContent = sl ? sl.stamp + ' 저장' : '지금 서식을 저장해 두세요';
+      row.querySelector('.nc-use').addEventListener('click', () => {
+        if (!sl) return;
+        ncMenu.classList.remove('open');
+        startNewCard(i);
+      });
+      row.querySelector('.nc-star').addEventListener('click', () => {
+        if (!sl) return;
+        const d2 = slotsGet(); d2.def = i; slotsPut(d2);
+        renderSlots(); updateNewCardTitle();
+        toast("'" + sl.name + "' 을 새 카드의 기본으로 정했어요");
+      });
+      row.querySelector('.nc-save').addEventListener('click', () => {
+        ncMenu.classList.remove('open');
+        askText((i + 1) + '번에 지금 서식 저장', sl ? sl.name : '서식 ' + (i + 1), '저장').then(name => {
+          if (name === null || name === undefined) return;
+          const snap = lastSnapshot();
+          delete snap.title;
+          const d2 = slotsGet();
+          const hadDef = d2.slots.some(x => x);
+          d2.slots[i] = { name: (name || '').trim() || '서식 ' + (i + 1), stamp: nowStamp(), s: snap };
+          if (!hadDef) d2.def = i;   // 처음 저장한 서식이 자동으로 기본
+          if (!slotsPut(d2)) {
+            d2.slots[i].s.bgImageData = '';
+            if (!slotsPut(d2)) { toast('저장 공간이 부족해요'); return; }
+            toast('배경 이미지가 너무 커서 이미지만 빼고 저장했어요');
+          } else toast("'" + d2.slots[i].name + "' 에 지금 서식을 저장했어요");
+          renderSlots(); updateNewCardTitle();
+        });
+      });
+      row.querySelector('.nc-del').addEventListener('click', () => {
+        if (!sl) return;
+        askConfirm("'" + sl.name + "' 을 비울까요?").then(ok => {
+          if (!ok) return;
+          const d2 = slotsGet();
+          d2.slots[i] = null;
+          if (d2.def === i) { const k = d2.slots.findIndex(x => x); d2.def = k < 0 ? 0 : k; }
+          slotsPut(d2);
+          renderSlots(); updateNewCardTitle();
+        });
+      });
+      box.appendChild(row);
+    });
+  }
+  function defSlot() {
+    const d = slotsGet();
+    return d.slots[d.def] ? { i: d.def, sl: d.slots[d.def] } : null;
+  }
+  function updateNewCardTitle() {
+    const ds = defSlot();
+    $('newCardBtn').title = ds ? "문구를 비우고 '" + ds.sl.name + "' 서식으로 새 카드"
+                               : '문구를 비우고 새 카드 (서식은 그대로)';
   }
   const ncMenu = $('newCardMenu');
   $('newCardMore').addEventListener('click', ev => {
     ev.stopPropagation();
-    myDefHint();
+    renderSlots();
     ncMenu.classList.toggle('open');
   });
   document.addEventListener('click', ev => {
-    if (!ev.target.closest('#newCardWrap')) ncMenu.classList.remove('open');
+    // 확인 창이 떠 있는 동안 누른 건 메뉴 밖으로 치지 않는다
+    if (!ev.target.closest('#newCardWrap') && !ev.target.closest('.overlay')) ncMenu.classList.remove('open');
   });
-  function startNewCard(withDef) {
-    const d = withDef ? myDefGet() : null;
+  // i 가 없으면 ★ 기본 서식으로
+  function startNewCard(i) {
+    const d = slotsGet();
+    const idx = (typeof i === 'number') ? i : d.def;
+    const sl = d.slots[idx] || null;
     askConfirm('새 카드를 시작할까요?',
-      d ? '문구와 제목을 비우고 내 모양을 적용해요. 출처(제작자·캐릭터)는 그대로 둬요.'
-        : '문구와 제목을 비워요. 모양과 출처는 그대로 둬요.').then(ok => {
+      sl ? "문구와 제목을 비우고 '" + sl.name + "' 서식을 적용해요. 출처(제작자·캐릭터)는 그대로 둬요."
+         : '문구와 제목을 비워요. 서식과 출처는 그대로 둬요.').then(ok => {
       if (!ok) return;
       if (typeof exitPageEdit === 'function') try { exitPageEdit(); } catch (e) {}
       $('quoteInput').value = '';
       $('titleInput').value = '';
       curPage = 0;
-      if (d) applySnapObj(d.s);
+      if (sl) applySnapObj(sl.s);
       $('quoteInput').dispatchEvent(new Event('input'));
       saveLastSoon();
-      toast(d ? '내 모양으로 새 카드를 시작했어요' : '새 카드를 시작했어요');
+      toast(sl ? "'" + sl.name + "' 서식으로 새 카드를 시작했어요" : '새 카드를 시작했어요');
     });
   }
-  $('newCardBtn').addEventListener('click', () => startNewCard(true));
-  $('myDefStart').addEventListener('click', () => { ncMenu.classList.remove('open'); startNewCard(true); });
-  $('myDefSave').addEventListener('click', () => {
-    ncMenu.classList.remove('open');
-    const s = lastSnapshot();
-    delete s.title;
-    const now = new Date();
-    const item = { stamp: (now.getMonth() + 1) + '월 ' + now.getDate() + '일 '
-      + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), s: s };
-    try { localStorage.setItem(MYDEF_KEY, JSON.stringify(item)); }
-    catch (e) {
-      try { item.s.bgImageData = ''; localStorage.setItem(MYDEF_KEY, JSON.stringify(item));
-            toast('배경 이미지가 너무 커서 이미지만 빼고 저장했어요'); myDefHint(); return; }
-      catch (e2) { toast('저장 공간이 부족해요'); return; }
-    }
-    myDefHint();
-    toast('지금 모양을 내 모양으로 저장했어요');
-  });
-  $('myDefClear').addEventListener('click', () => {
-    ncMenu.classList.remove('open');
-    askConfirm('내 모양을 지울까요?', '"새 카드" 는 지금 모양 그대로 문구만 비우게 돼요.').then(ok => {
-      if (!ok) return;
-      try { localStorage.removeItem(MYDEF_KEY); } catch (e) {}
-      myDefHint();
-      toast('내 모양을 지웠어요');
-    });
-  });
-  myDefHint();
+  $('newCardBtn').addEventListener('click', () => startNewCard());
+  updateNewCardTitle();
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveLastNow(); });
 </script>
 <!-- ☁ 선택적 클라우드 동기화 — 로그인 안 하면 동작하지 않음(기존 로컬 방식 그대로). 데이터·테마·히스토리(이미지 포함) 동기화. -->
