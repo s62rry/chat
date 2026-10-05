@@ -966,6 +966,15 @@
   }
   .editor .fmt-bar.main-bar > .fmt-gap { flex: 0 0 5px; min-width: 5px; }
   .editor .fmt-bar.main-bar > [data-pop="tidyPop"] { flex: 1.7 1 0; }
+  /* 펼침(▾)이 있는 버튼 — 화살표를 글자 옆에 붙이면 좁은 칸에서 찌그러지므로
+     오른쪽 아래 모서리에 작은 삼각형으로 뺀다 (글자는 가운데 그대로) */
+  .editor .fmt-bar.main-bar > .fmt-btn { position: relative; font-size: 12px; }
+  .editor .fmt-bar.main-bar > .fmt-btn.fmt-ico .pop-caret {
+    position: absolute; right: 2px; bottom: 1px;
+    margin: 0; font-size: 7px; line-height: 1; opacity: 0.5;
+  }
+  .editor .fmt-bar.main-bar > #quoteBtn { font-size: 15px; padding-top: 4px; }
+  .editor .fmt-bar.main-bar > #subLineBtn { font-size: 11px; letter-spacing: -0.03em; }
   .fmt-bar:not(.field-fmt) .fmt-gap { min-width: 2px; }
   /* 버튼 안에서 지금 고른 색을 미리 보여줌 */
   .fmt-btn .fb-hl {
