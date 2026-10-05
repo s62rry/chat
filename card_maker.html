@@ -633,6 +633,14 @@
     max-width: 540px;
   }
 
+  /* 메시지 대본 문법 버튼 — 5칸씩 두 줄 */
+  .tk-bar {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 3px; margin: 7px 0 2px;
+  }
+  .tk-bar .fmt-btn { height: 26px; padding: 0; justify-content: center; font-size: 11.5px; min-width: 0; }
+  .tk-bar .fmt-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
   /* 모아보기 줄 */
   .page-strip {
     display: none;
@@ -1513,9 +1521,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="nc-menu" id="newCardMenu">
-        <div class="nc-head">기본 서식</div>
+        <div class="nc-head" id="ncHead">기본 서식</div>
         <div id="ncSlots"><!-- JS --></div>
-        <div class="nc-hint">★ 표시한 서식이 <b>새 카드</b>의 기본이에요. 이름을 누르면 그 서식으로 새 카드를 시작해요.</div>
+        <div class="nc-hint" id="ncHint">★ 표시한 서식이 <b>새 카드</b>의 기본이에요. 이름을 누르면 그 서식으로 새 카드를 시작해요.</div>
       </div>
     </div>
     <button id="copyBtn">
@@ -2582,10 +2590,22 @@
         <button class="mini-btn" id="tkClearBtn" type="button">비우기</button>
       </div>
       <div class="tk-ta"><textarea id="tkScript" spellcheck="false" placeholder="이름: 내용"></textarea></div>
+      <!-- 대본 문법 버튼 — 커서가 있는 줄에 붙이거나 뗀다 -->
+      <div class="tk-bar" id="tkBar">
+        <button type="button" class="fmt-btn" data-tk="narr" title="* — 이 줄을 서술로">서술</button>
+        <button type="button" class="fmt-btn" data-tk="sys" title="// — 이 줄을 가운데 알림으로">알림</button>
+        <button type="button" class="fmt-btn" data-tk="trans" title="(…) — 아랫줄에 번역 줄 추가">번역</button>
+        <button type="button" class="fmt-btn" data-tk="game" title="『[파티]이름: …』 — 게임 창 줄로">게임창</button>
+        <button type="button" class="fmt-btn" data-tk="page" title="--- — 여기서 장 나누기">장 나누기</button>
+        <button type="button" class="fmt-btn" data-tk="time" title="@시:분 — 줄 끝에 지금 시간">시간</button>
+        <button type="button" class="fmt-btn" data-tk="unread" title="!1 — 줄 끝에 안읽음 숫자">안읽음</button>
+        <button type="button" class="fmt-btn" data-tk="big" title="+ — 이 말풍선 글자 크게">크게</button>
+        <button type="button" class="fmt-btn" data-tk="small" title="- — 이 말풍선 글자 작고 옅게">작게</button>
+        <button type="button" class="fmt-btn" data-tk="emo" title=":번호: — 올린 이모티콘 넣기 (이모티콘 칸에서 고르기)">이모티콘</button>
+      </div>
       <div class="hint">
-        <b>이름: 내용</b> 한 줄 = 말풍선 하나 (이름 없으면 앞사람이 이어 말함)<br>
-        <b>*</b> 서술 &nbsp;·&nbsp; <b>//</b> 가운데 알림 &nbsp;·&nbsp; <b>(번역)</b> 윗줄에 번역 붙이기 &nbsp;·&nbsp; <b>『[파티]이름: …』</b> 게임 창 &nbsp;·&nbsp; <b>---</b> 장 나누기<br>
-        줄 끝 <b>@6:26</b> 시간 &nbsp;·&nbsp; <b>!1</b> 안읽음 &nbsp;·&nbsp; 내용 앞 <b>+</b> 크게 / <b>-</b> 작게
+        <b>이름: 내용</b> 한 줄 = 말풍선 하나 (이름 없으면 앞사람이 이어 말함).
+        버튼은 커서가 있는 줄에 붙고, 한 번 더 누르면 빠져요. 버튼 위에 마우스를 올리면 직접 쓰는 기호가 보여요.
       </div>
     </div>
 
@@ -9112,7 +9132,13 @@
     const talk = m === 'talk';
     document.querySelector('.editor:not(#talkEditor)').style.display = talk ? 'none' : '';
     // 자리는 남겨 둔 채 숨긴다 — 없애면 헤더 버튼 폭이 바뀌어 발췌/메시지 탭이 옆으로 밀린다
-    if ($('newCardWrap')) $('newCardWrap').style.visibility = talk ? 'hidden' : '';
+    // 메시지 모드에선 같은 자리의 버튼이 '새 메시지' 가 된다 (헤더 폭도 그대로)
+    if ($('newCardBtn')) {
+      $('newCardBtn').querySelector('span').textContent = talk ? '새 메시지' : '새 카드';
+      $('newCardBtn').title = talk ? '대본을 비우고 새 메시지 시작 (화면 설정·화자는 그대로)' : '문구를 비우고 새 카드 시작';
+      $('newCardMore').title = talk ? '내 프리셋으로 새 메시지' : '기본 서식 저장·선택';
+      $('newCardMenu').classList.remove('open');
+    }
     $('talkEditor').style.display = talk ? '' : 'none';
     document.querySelector('.preview-stack').style.display = talk ? 'none' : '';
     $('chatWrap').style.display = talk ? '' : 'none';
@@ -9229,6 +9255,106 @@
   $('tkPrev').addEventListener('click', () => { if (tk.page > 0) { tk.page--; tkRender(); } });
   $('tkNext').addEventListener('click', () => { if (tk.page < tkPages().length - 1) { tk.page++; tkRender(); } });
   $('tkClearBtn').addEventListener('click', () => { $('tkScript').value = ''; tkRenderAll(); tkPersist(); });
+
+  // ===== 대본 문법 버튼 =====
+  // 커서가 있는 줄을 바꾼다. 입력 명령으로 넣어서 Ctrl+Z 로 되돌릴 수 있다.
+  function tkReplaceRange(a, b, text, caret) {
+    const ta = $('tkScript');
+    ta.focus();
+    ta.setSelectionRange(a, b);
+    let ok = false;
+    try { ok = document.execCommand('insertText', false, text); } catch (e) { ok = false; }
+    if (!ok) { ta.setRangeText(text, a, b, 'end'); ta.dispatchEvent(new Event('input')); }
+    const c = (caret === undefined) ? a + text.length : caret;
+    ta.setSelectionRange(c, c);
+  }
+  function tkLineAt() {
+    const ta = $('tkScript');
+    const v = ta.value, pos = ta.selectionStart;
+    const a = v.lastIndexOf('\n', pos - 1) + 1;
+    let b = v.indexOf('\n', pos); if (b === -1) b = v.length;
+    return { a: a, b: b, line: v.slice(a, b) };
+  }
+  // "이름: 내용" 에서 내용이 시작하는 위치 (이름이 없으면 줄 처음)
+  function tkContentStart(line) {
+    const m = line.match(/^([^:：]{1,20})[:：]\s*/);
+    return m ? m[0].length : 0;
+  }
+  function tkNow() {
+    const d = new Date();
+    return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  const TK_BAR = {
+    // 서술·알림·게임창은 줄 종류라 서로 바꿔 끼운다 (같은 걸 또 누르면 해제)
+    narr(L) { return tkKind(L) === 'narr' ? tkPlain(L) : '* ' + tkPlain(L); },
+    sys(L)  { return tkKind(L) === 'sys' ? tkPlain(L) : '// ' + tkPlain(L); },
+    game(L) {
+      if (tkKind(L) === 'game') return tkPlain(L);
+      const P = tkPlain(L);
+      return '\u300E[파티]' + (P || '이름: ') + '\u300F';
+    },
+    time(L) {
+      const m = L.match(/\s+@((?:[^\s@]{1,6}[ ])?[0-9]{1,2}:[0-9]{2})(?=(\s+![0-9]{1,2})?$)/);
+      return m ? L.slice(0, m.index) + L.slice(m.index + m[0].length) : L + ' @' + tkNow();
+    },
+    unread(L) {
+      const m = L.match(/\s+!([0-9]{1,2})$/);
+      return m ? L.slice(0, m.index) : L + ' !1';
+    },
+    big(L)   { return tkSizeMark(L, '+ '); },
+    small(L) { return tkSizeMark(L, '- '); }
+  };
+  function tkKind(L) {
+    if (/^\u300E[\s\S]*\u300F$/.test(L)) return 'game';
+    if (/^\/\//.test(L)) return 'sys';
+    if (/^\*/.test(L)) return 'narr';
+    return '';
+  }
+  function tkPlain(L) {
+    for (let k = 0; k < 3; k++) {
+      if (/^\u300E[\s\S]*\u300F$/.test(L)) L = L.slice(1, -1).replace(/^\[[^\]]{1,10}\]\s*/, '');
+      else if (/^\/\//.test(L)) L = L.replace(/^\/\/\s*/, '');
+      else if (/^\*/.test(L)) L = L.replace(/^\*+\s*/, '');
+      else break;
+    }
+    return L;
+  }
+  function tkSizeMark(L, mark) {
+    const k = tkContentStart(L);
+    const rest = L.slice(k);
+    if (rest.startsWith(mark)) return L.slice(0, k) + rest.slice(2);
+    if (rest.startsWith('+ ') || rest.startsWith('- ')) return L.slice(0, k) + mark + rest.slice(2);
+    return L.slice(0, k) + mark + rest;
+  }
+  document.querySelectorAll('#tkBar [data-tk]').forEach(btn => {
+    btn.addEventListener('mousedown', ev => ev.preventDefault());   // 커서 유지
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.tk;
+      const ta = $('tkScript');
+      const { a, b, line } = tkLineAt();
+      if (kind === 'emo') {
+        const sec = $('tkStickerPick') ? $('tkStickerPick').closest('.section') : null;
+        if (sec) { sec.classList.remove('collapsed'); sec.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        toast('이모티콘 칸에서 누르면 커서 자리에 들어가요');
+        return;
+      }
+      if (kind === 'page') {
+        const v = ta.value;
+        let ins = '---';
+        const before = v.slice(0, b), after = v.slice(b);
+        ins = (before && !before.endsWith('\n') ? '\n' : '') + ins + (after.startsWith('\n') ? '' : '\n');
+        tkReplaceRange(b, b, ins);
+        return;
+      }
+      if (kind === 'trans') {
+        // 아랫줄에 ( ) 를 만들고 괄호 안에 커서
+        tkReplaceRange(b, b, '\n()', b + 2);
+        return;
+      }
+      const nl = TK_BAR[kind](line);
+      tkReplaceRange(a, b, nl);
+    });
+  });
 
   // ===== 메시지 화면 설정 되돌리기 — 대본은 입력칸 자체 실행취소가 맡는다 =====
   const tkHist = { undo: [], redo: [], cur: null, timer: null, applying: false };
@@ -9397,6 +9523,22 @@
   } catch (e) {}
   tkHist.cur = tkSnapKey();
   setTimeout(tkBuildStrip, 300);
+
+  // ===== 새 메시지 — 헤더 '새 메시지' 버튼과 ▾ 메뉴(내 프리셋)가 부른다 =====
+  function startNewTalk(pz) {
+    askConfirm('새 메시지를 시작할까요?',
+      pz ? "대본을 비우고 '" + pz.name + "' 프리셋(화면·화자)을 적용해요."
+         : '대본을 비워요. 화면 설정과 화자는 그대로 둬요.').then(ok => {
+      if (!ok) return;
+      $('tkScript').value = '';
+      tk.page = 0;
+      if (pz) tkApplySnapshot(pz.data);   // 다시 그리고 저장까지
+      else { tkRenderAll(); tkPersist(); }
+      toast(pz ? "'" + pz.name + "' 으로 새 메시지를 시작했어요" : '새 메시지를 시작했어요');
+    });
+  }
+  // 이 부분은 안쪽 범위라 헤더 쪽 코드가 쓸 수 있게 창에 꺼내 둔다
+  window.tkApi = { mode: () => uiMode, presets: () => tkMyPresets(), startNew: startNewTalk };
 
 })();
 
@@ -9840,7 +9982,12 @@
   const ncMenu = $('newCardMenu');
   $('newCardMore').addEventListener('click', ev => {
     ev.stopPropagation();
-    renderSlots();
+    if (isTalk()) renderTalkMenu();
+    else {
+      $('ncHead').textContent = '기본 서식';
+      $('ncHint').innerHTML = '★ 표시한 서식이 <b>새 카드</b>의 기본이에요. 이름을 누르면 그 서식으로 새 카드를 시작해요.';
+      renderSlots();
+    }
     ncMenu.classList.toggle('open');
   });
   document.addEventListener('click', ev => {
@@ -9866,7 +10013,26 @@
       toast(sl ? "'" + sl.name + "' 서식으로 새 카드를 시작했어요" : '새 카드를 시작했어요');
     });
   }
-  $('newCardBtn').addEventListener('click', () => startNewCard());
+  const isTalk = () => !!(window.tkApi && window.tkApi.mode() === 'talk');
+  $('newCardBtn').addEventListener('click', () => (isTalk() ? window.tkApi.startNew(null) : startNewCard()));
+
+  function renderTalkMenu() {
+    $('ncHead').textContent = '내 프리셋으로 새 메시지';
+    const box = $('ncSlots');
+    box.innerHTML = '';
+    const list = window.tkApi.presets();
+    list.forEach(pz => {
+      const row = document.createElement('div');
+      row.className = 'nc-slot';
+      row.innerHTML = '<button type="button" class="nc-use" title="이 프리셋으로 새 메시지"><b></b><small>화면 설정 + 화자</small></button>';
+      row.querySelector('b').textContent = pz.name;
+      row.querySelector('.nc-use').addEventListener('click', () => { ncMenu.classList.remove('open'); window.tkApi.startNew(pz); });
+      box.appendChild(row);
+    });
+    $('ncHint').innerHTML = list.length
+      ? '<b>새 메시지</b> 버튼은 화면 설정·화자를 그대로 두고 대본만 비워요.'
+      : '아직 내 프리셋이 없어요. 왼쪽 <b>화면 → + 내 프리셋</b> 으로 저장하면 여기서 골라 시작할 수 있어요.';
+  }
   updateNewCardTitle();
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveLastNow(); });
 </script>
