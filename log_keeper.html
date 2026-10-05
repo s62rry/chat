@@ -1638,12 +1638,14 @@ function lkJsxSnapper() {
     if (tag === "canvas") { try { return '<img src="' + n.toDataURL() + '" style="' + esc(st) + '">'; } catch (e) { return ""; } }
     if (tag === "img") return '<img src="' + esc(n.currentSrc || n.src || "") + '" alt="' + esc(n.alt || "") + '" style="' + esc(st) + '">';
     if (n.__lkTo != null) {
-      // 누르면 다른 화면으로 바뀌는 버튼/탭 → 숨긴 라디오를 고르는 label (스크립트 없이 동작)
-      var lab = '<label for="@@LKX@@-' + n.__lkTo + '" style="' + esc("display:" + (cs.display === "inline" ? "inline-block" : cs.display) + ";cursor:pointer;") + '">';
+      // 누르면 다른 화면으로 바뀌는 버튼/탭 → 빈 <details> 의 summary 로 감싼다.
+      // 스킨이 <input>·id 를 지워도 되게 class 와 <details> 만 쓴다 (열린 details 를 :has 로 보고 화면을 바꿈)
+      var dd = "display:" + (/^(inline|inline-flex|inline-grid|inline-block)$/.test(cs.display) ? "inline-block" : "block") + ";margin:0;padding:0;vertical-align:" + cs.verticalAlign + ";";
+      ["flex-grow", "flex-shrink", "flex-basis", "align-self", "order", "grid-column", "grid-row"].forEach(function (k) { var v = cs.getPropertyValue(k); if (v && v !== defOf(n)[k]) dd += k + ":" + v + ";"; });
+      var to = n.__lkTo;
       n.__lkTo = null;
       var body = snap(n, pcs, isRoot, inD);
-      n.__lkTo = null;
-      return lab + body + "</label>";
+      return '<details name="@@LKX@@" class="@@LKX@@-t' + to + '" style="' + esc(dd) + '"><summary style="display:block;list-style:none;cursor:pointer">' + body + "</summary></details>";
     }
     if (/^(input|textarea|select)$/.test(tag)) {
       var v = n.value;
@@ -3495,13 +3497,14 @@ function exInteractive(states) {
   const uid = "lkx" + Date.now().toString(36) + (++_exUid);
   const fix = h => h.split("@@LKX@@").join(uid);
   if (states.length < 2) return fix(states[0]);
-  let css = "", inputs = "", divs = "";
+  // <input>·<label>·id 를 지우는 스킨이 있어서 <details>(같은 name 끼리 하나만 열림) + :has() + class 로만 화면을 바꾼다
+  let css = "." + uid + " summary::-webkit-details-marker{display:none}." + uid + " summary::marker{content:''}", divs = "";
   states.forEach((h, i) => {
-    inputs += '<input type="radio" name="' + uid + '" id="' + uid + "-" + i + '"' + (i ? "" : " checked") + ' style="display:none">';
     divs += '<div class="' + uid + "-s" + i + '"' + (i ? ' style="display:none"' : "") + ">" + fix(h) + "</div>";
-    if (i) css += "#" + uid + "-" + i + ":checked~." + uid + "-s" + i + "{display:block!important}#" + uid + "-" + i + ":checked~." + uid + "-s0{display:none!important}";
+    if (i) css += "." + uid + ":has(details." + uid + "-t" + i + "[open])>." + uid + "-s" + i + "{display:block!important}." +
+      uid + ":has(details." + uid + "-t" + i + "[open])>." + uid + "-s0{display:none!important}";
   });
-  return "<div><style>" + css + "</style>" + inputs + divs + "</div>";
+  return '<div class="' + uid + '"><style>' + css + "</style>" + divs + "</div>";
 }
 // 화면 밖에서 새로 그려서 버튼/탭을 하나씩 눌러 보고, 화면별 모습을 라디오+CSS 로 묶는다
 async function snapJsxForExport(src, chat) {
