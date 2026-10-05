@@ -635,18 +635,21 @@
 
   /* 메시지 대본 문법 버튼 — 넣는 기호를 앞에 보여주는 알약들 */
   .tk-bar {
-    display: flex; flex-wrap: wrap;
+    display: grid; grid-template-columns: repeat(4, 1fr);
     gap: 4px; margin: 8px 0 4px;
   }
+  /* 모두 같은 폭·높이 — 기호 + 이름을 가운데로 */
   .tk-bar .fmt-btn {
-    height: 25px; padding: 0 9px 0 7px; gap: 5px;
-    border-radius: 999px; font-size: 11.5px;
+    height: 23px; min-width: 0; padding: 0 4px; gap: 4px;
+    justify-content: center;
+    border-radius: 999px; font-size: 10.5px;
     background: var(--field); border-color: var(--border);
+    white-space: nowrap; overflow: hidden;
   }
   .tk-bar .fmt-btn .tk-sym {
     font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 10px; font-weight: 700; color: var(--accent);
-    min-width: 12px; text-align: center; letter-spacing: -0.03em;
+    font-size: 9px; font-weight: 700; color: var(--accent);
+    letter-spacing: -0.04em;
   }
   .tk-bar .fmt-btn:hover .tk-sym { color: inherit; }
   /* 화면 종류 — 앱 색으로 그린 작은 미리보기 카드 */
@@ -2647,7 +2650,7 @@
           <button data-tkp="bubble" type="button">버블</button>
           <button data-tkp="disc" type="button">디코</button>
           <button data-tkp="game" type="button">게임</button>
-          <button data-tkp="gamel" type="button">게임 (밝게)</button>
+          <button data-tkp="gamel" type="button">게임 라이트</button>
         </div>
         <div class="hint">고르면 배경·말풍선·화자 색이 그 화면처럼 바뀌고, 대본 버튼도 그 화면에 쓰는 것만 나와요.</div>
       </div>
