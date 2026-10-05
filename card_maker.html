@@ -643,6 +643,9 @@
     scroll-snap-type: x proximity;
   }
   .page-strip.on { display: flex; }
+  /* 옆으로 넘기는 건 ◀▶·클릭·트랙패드로 충분해서 스크롤바는 숨긴다 */
+  .page-strip { scrollbar-width: none; }
+  .page-strip::-webkit-scrollbar { display: none; }
   .ps-item {
     flex: 0 0 auto;
     display: flex; flex-direction: column; align-items: center; gap: 5px;
@@ -683,8 +686,8 @@
   .preview-stack.spread > .page-strip { scroll-snap-type: none; }
   /* 지금 장만 또렷하게, 나머지는 흐리게 */
   .preview-stack.spread .ps-item { transition: opacity 0.25s ease; }
-  .preview-stack.spread .ps-item:not(.cur) { opacity: 0.35; }
-  .preview-stack.spread .ps-item:not(.cur):hover { opacity: 0.6; }
+  .preview-stack.spread .ps-item:not(.cur) { opacity: 0.6; }
+  .preview-stack.spread .ps-item:not(.cur):hover { opacity: 0.85; }
   .preview-stack.spread .ps-item.cur .ps-frame { outline-color: transparent; }
   .preview-stack.spread .ps-item:hover .ps-frame { transform: none; }
 
