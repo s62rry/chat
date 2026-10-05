@@ -806,6 +806,66 @@
   .jsx-slot iframe { display: block; width: 100%; border: 0; background: transparent; }
   .jsx-loading { font-size: 12px; color: var(--text-dim); padding: 8px 2px; }
   .jsx-missing { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; white-space: pre-wrap; word-break: break-all; }
+  /* 티스토리 내보내기 모달 */
+  .modal.wide { width: 500px; }
+  .ex-sec { margin-top: 16px; }
+  .ex-sec:first-child { margin-top: 0; }
+  .ex-label { display: flex; align-items: baseline; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text-strong); margin-bottom: 8px; }
+  .ex-sub { font-size: 11px; font-weight: 500; color: var(--text-dim); }
+  .ex-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ex-mode { cursor: pointer; }
+  .ex-mode input { position: absolute; opacity: 0; pointer-events: none; }
+  .ex-mode-card {
+    position: relative; display: flex; flex-direction: column; gap: 4px; height: 100%;
+    padding: 12px 12px 11px; border: 1.5px solid var(--border); border-radius: 12px;
+    background: var(--field); transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+  }
+  .ex-mode:hover .ex-mode-card { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+  .ex-mode input:checked + .ex-mode-card { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+  .ex-mode input:focus-visible + .ex-mode-card { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ex-mode-top { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text-strong); }
+  .ex-mode-ic { font-size: 15px; }
+  .ex-badge { margin-left: auto; font-style: normal; font-size: 10px; font-weight: 700; color: #fff; background: var(--accent); padding: 1px 7px; border-radius: 999px; }
+  .ex-mode-desc { font-size: 11.5px; line-height: 1.55; color: var(--text-dim); }
+  .ex-skin { margin-top: 10px; padding: 12px 13px; border-radius: 12px; background: var(--field); border: 1px dashed var(--border); }
+  .ex-skin[hidden] { display: none; }
+  .ex-skin-head { font-size: 12px; font-weight: 700; color: var(--text-strong); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .ex-code { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 6px 6px 6px 10px; }
+  .ex-code code { flex: 1; min-width: 0; font: 11px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ex-copy { flex-shrink: 0; font-size: 11.5px !important; padding: 5px 11px !important; background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
+  .ex-steps { margin: 10px 0 0; padding: 0; list-style: none; counter-reset: ex; display: flex; flex-direction: column; gap: 5px; }
+  .ex-steps li { counter-increment: ex; display: flex; gap: 8px; align-items: baseline; font-size: 11.5px; line-height: 1.55; color: var(--text); }
+  .ex-steps li::before { content: counter(ex); flex-shrink: 0; width: 17px; height: 17px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
+  .ex-steps code, .ex-opt code { font: 10.5px ui-monospace, Menlo, Consolas, monospace; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+  .ex-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ex-num { display: flex; align-items: center; background: var(--field); border: 1px solid var(--border); border-radius: 9px; padding: 0 10px 0 4px; transition: border-color .13s ease; }
+  .ex-num:focus-within { border-color: var(--accent); }
+  .ex-num input { width: 58px; border: 0; background: transparent; outline: none; font: 600 13px var(--ui); color: var(--text-strong); padding: 8px 4px 8px 6px; text-align: right; -moz-appearance: textfield; }
+  .ex-num input::-webkit-inner-spin-button, .ex-num input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .ex-num span { font-size: 12px; color: var(--text-dim); }
+  .ex-tilde { color: var(--text-dim); font-weight: 600; }
+  .ex-chip { font-size: 11.5px !important; padding: 5px 10px !important; border-radius: 999px !important; }
+  .ex-chips { display: flex; gap: 6px; margin-left: auto; }
+  .ex-opts { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .ex-opt { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; background: var(--field); }
+  .ex-opt + .ex-opt { border-top: 1px solid var(--border); }
+  .ex-opt-txt { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-strong); font-weight: 600; }
+  .ex-opt-txt small { display: block; font-size: 11px; font-weight: 400; color: var(--text-dim); margin-top: 1px; line-height: 1.5; }
+  .ex-opt input { position: absolute; opacity: 0; pointer-events: none; }
+  .ex-sw { flex-shrink: 0; width: 34px; height: 20px; border-radius: 999px; background: var(--border); position: relative; transition: background .15s ease; }
+  .ex-sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s cubic-bezier(.22,1,.36,1); }
+  .ex-opt input:checked + .ex-sw { background: var(--accent); }
+  .ex-opt input:checked + .ex-sw::after { transform: translateX(14px); }
+  .ex-opt input:focus-visible + .ex-sw { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ex-prog { margin-top: 14px; }
+  .ex-prog[hidden] { display: none; }
+  .ex-bar { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; }
+  .ex-bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; transition: width .25s ease; }
+  .ex-prog p { font-size: 12px; color: var(--accent); margin-top: 7px; font-weight: 600; }
+  .ex-prog.done .ex-bar i { background: #1f9d6b; }
+  .ex-prog.done p { color: #1f9d6b; }
+  .ex-prog.err p { color: #d14343; }
+  @media (max-width: 480px) { .ex-modes { grid-template-columns: 1fr; } .ex-chips { margin-left: 0; } }
   /* 케이브덕 추출 모달 */
   .bm-block {
     margin-top: 14px; padding-top: 14px;
@@ -3469,6 +3529,7 @@ function openModal(title, bodyHtml, buttons) {
     '<button class="' + (b.primary ? "primary" : "") + ' ' + (b.danger ? "danger" : "") + '" ' +
     (b.id ? 'id="' + b.id + '"' : "") + ' ' + (b.close ? "data-close" : "") + '>' + escapeHtml(b.label) + '</button>'
   ).join("");
+  $("modalBox").classList.remove("wide");
   $("modalBox").innerHTML =
     '<div class="modal-head"><h2>' + escapeHtml(title) + '</h2>' +
     '<button class="modal-close" data-close>&times;</button></div>' +
@@ -3820,34 +3881,63 @@ function openTistoryModal() {
   const chat = getActive();
   if (!chat || !chat.turns.length) { toast("내보낼 로그가 없어요"); return; }
   const n = chat.turns.length;
+  const ck = (k) => lsGetSafe(k) === "0" ? "" : " checked";
+  const snapMode = lsGetSafe("lk_exMode") === "snap";
+  const opt = (id, on, title, sub) => '<label class="ex-opt"><span class="ex-opt-txt">' + title + (sub ? "<small>" + sub + "</small>" : "") +
+    '</span><input type="checkbox" id="' + id + '"' + on + '><span class="ex-sw"></span></label>';
   openModal("티스토리용 내보내기", '' +
-    '<p class="desc">대사 색과 상태창 디자인을 살린 HTML 로 내보내요.</p>' +
-    '<div class="bm-block"><div class="bm-step">상태창</div>' +
-    '<label class="bm-hint" style="display:flex;gap:6px;align-items:flex-start"><input type="radio" name="exMode" value="live"' + (lsGetSafe("lk_exMode") === "snap" ? "" : " checked") + '> ' +
-    '<span><b>티팟이랑 똑같이 (추천)</b> — 블로그에서 진짜 상태창 코드를 돌려요. 버튼·탭·움직임 전부 그대로. ' +
-    '스킨에 코드를 <b>한 번만</b> 넣으면 돼요 → <a href="#" id="exSkin">스킨 코드 복사</a><br>' +
-    '<span style="opacity:.75">스킨 → html 편집 → HTML 탭 맨 아래의 <code>&lt;/s_t3&gt;</code> <b>바로 위</b>에 한 줄 붙여넣고 적용 (<code>&lt;/s_t3&gt;</code> 밖은 티스토리가 지워요). 코드가 없는 곳에선 첫 화면 그림으로 보여요.</span></span></label>' +
-    '<label class="bm-hint" style="display:flex;gap:6px;align-items:flex-start"><input type="radio" name="exMode" value="snap"' + (lsGetSafe("lk_exMode") === "snap" ? " checked" : "") + '> ' +
-    '<span><b>스크립트 없이</b> — 버튼을 미리 눌러 본 화면으로 바꿔 넣어요. 스킨 수정 없이 되지만 느리고, 숫자가 계속 바뀌는 동작은 안 돼요.</span></label></div>' +
-    '<div class="bm-block"><div class="bm-step">범위</div>' +
-    '<p class="bm-hint" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
-    '<input id="exFrom" type="number" min="1" max="' + n + '" value="1" style="width:80px"> 번째 턴부터 ' +
-    '<input id="exTo" type="number" min="1" max="' + n + '" value="' + n + '" style="width:80px"> 번째 턴까지 (전체 ' + n + '턴, 지금 정렬 순서 기준)</p>' +
-    '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exNo" checked> 턴 번호 표시</label>' +
-    '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exJustify"' + (lsGetSafe("lk_exJustify") === "0" ? "" : " checked") + '> 본문 양쪽 맞춤</label>' +
-    '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exBreakAll"' + (lsGetSafe("lk_exBreakAll") === "0" ? "" : " checked") + '> 글자 단위로 자르기 (끄면 단어 단위)</label>' +
-    '<label class="bm-hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="exWrap"' + (lsGetSafe("lk_exWrap") === "0" ? "" : " checked") + '> ' +
-    '<span><b>[[HTML]] … [[/HTML]]</b> 로 감싸서 한 줄로 (스킨이 기본 칸의 [[HTML]] 을 그려 주는 경우 · 끄면 티스토리 HTML 모드용)</span></label></div>' +
-    '<p class="bm-hint" id="exProg" style="min-height:18px;color:var(--accent)"></p>',
-    [{ label: "HTML 복사", id: "exCopy", primary: true }, { label: "파일로 저장", id: "exSave" }, { label: "닫기", close: true }]
+    '<div class="ex-sec"><div class="ex-label">상태창</div>' +
+    '<div class="ex-modes">' +
+    '<label class="ex-mode"><input type="radio" name="exMode" value="live"' + (snapMode ? "" : " checked") + '><span class="ex-mode-card">' +
+    '<span class="ex-mode-top"><span class="ex-mode-ic">✨</span>티팟이랑 똑같이<em class="ex-badge">추천</em></span>' +
+    '<span class="ex-mode-desc">블로그에서 진짜로 실행해요. 버튼·탭·움직임 전부 그대로, 내보내기도 빨라요.</span></span></label>' +
+    '<label class="ex-mode"><input type="radio" name="exMode" value="snap"' + (snapMode ? " checked" : "") + '><span class="ex-mode-card">' +
+    '<span class="ex-mode-top"><span class="ex-mode-ic">📸</span>스크립트 없이</span>' +
+    '<span class="ex-mode-desc">미리 눌러 본 화면을 담아요. 스킨을 못 고치는 곳용 · 느리고 일부 동작은 빠져요.</span></span></label>' +
+    '</div>' +
+    '<div class="ex-skin" id="exSkinBox"' + (snapMode ? " hidden" : "") + '>' +
+    '<div class="ex-skin-head">🔧 스킨에 한 번만 넣어 두세요</div>' +
+    '<div class="ex-code"><code>' + escapeHtml(LK_SKIN_TAG) + '</code><button type="button" class="ex-copy" id="exSkin">복사</button></div>' +
+    '<ol class="ex-steps"><li><span>꾸미기 → 스킨 편집 → <b>html 편집</b> → HTML 탭</span></li>' +
+    '<li><span>맨 아래 <code>&lt;/s_t3&gt;</code> <b>바로 위</b>에 붙여넣기 <span style="color:var(--text-dim)">(밖에 두면 티스토리가 지워요)</span></span></li>' +
+    '<li><span>적용하면 끝! 이미 올린 글에도 바로 먹어요</span></li></ol></div></div>' +
+    '<div class="ex-sec"><div class="ex-label">범위<span class="ex-sub">전체 ' + n + '턴 · 지금 정렬 순서 기준</span></div>' +
+    '<div class="ex-range">' +
+    '<label class="ex-num"><input id="exFrom" type="number" min="1" max="' + n + '" value="1"><span>턴</span></label>' +
+    '<span class="ex-tilde">~</span>' +
+    '<label class="ex-num"><input id="exTo" type="number" min="1" max="' + n + '" value="' + n + '"><span>턴</span></label>' +
+    '<span class="ex-chips"><button type="button" class="ex-chip" data-r="all">전체</button><button type="button" class="ex-chip" data-r="10">마지막 10턴</button></span>' +
+    '</div></div>' +
+    '<div class="ex-sec"><div class="ex-label">본문</div><div class="ex-opts">' +
+    opt("exNo", " checked", "턴 번호 표시") +
+    opt("exJustify", ck("lk_exJustify"), "양쪽 맞춤") +
+    opt("exBreakAll", ck("lk_exBreakAll"), "글자 단위로 자르기", "끄면 단어 단위로 줄바꿈") +
+    opt("exWrap", ck("lk_exWrap"), "[[HTML]] 로 감싸기", "스킨 기본 칸에 붙여넣을 때 · 끄면 티스토리 HTML 모드용") +
+    '</div></div>' +
+    '<div class="ex-prog" id="exProgWrap" hidden><div class="ex-bar"><i id="exBar"></i></div><p id="exProg"></p></div>',
+    [{ label: "파일로 저장", id: "exSave" }, { label: "HTML 복사", id: "exCopy", primary: true }]
   );
+  $("modalBox").classList.add("wide");
+  $$('input[name="exMode"]').forEach(r => r.addEventListener("change", () => { $("exSkinBox").hidden = r.value === "snap" && r.checked; }));
+  $$(".ex-chip").forEach(b => b.addEventListener("click", () => {
+    $("exTo").value = n;
+    $("exFrom").value = b.dataset.r === "all" ? 1 : Math.max(1, n - 9);
+  }));
+  const setProg = (txt, ratio, state) => {
+    const w = $("exProgWrap"); if (!w) return;
+    w.hidden = false;
+    w.classList.toggle("done", state === "done");
+    w.classList.toggle("err", state === "err");
+    if (ratio != null) $("exBar").style.width = Math.round(ratio * 100) + "%";
+    $("exProg").textContent = txt;
+  };
   let busy = false;
   const run = async mode => {
     if (busy) return;
     busy = true;
     const from = Math.max(1, Math.min(n, parseInt($("exFrom").value) || 1));
     const to = Math.max(from, Math.min(n, parseInt($("exTo").value) || n));
-    const prog = $("exProg");
+    setProg("준비 중…", 0.03);
     try {
       // HTML 모드에 바로 붙일 때는 페이지 CSS 에 지지 않게 style 을 그대로 둔다
       const inline = mode === "copy" && !$("exWrap").checked;
@@ -3856,14 +3946,14 @@ function openTistoryModal() {
       const fmt = { justify: $("exJustify").checked, breakAll: $("exBreakAll").checked };
       lsSetSafe("lk_exJustify", fmt.justify ? "1" : "0");
       lsSetSafe("lk_exBreakAll", fmt.breakAll ? "1" : "0");
-      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => { if (prog) prog.textContent = "상태창 그리는 중… " + i + " / " + t; }, inline, live, fmt);
+      const html = await buildTistoryHtml(chat, from, to, $("exNo").checked, (i, t) => setProg(t ? "상태창 그리는 중… " + i + " / " + t : "만드는 중…", t ? 0.05 + 0.9 * i / t : 0.5), inline, live, fmt);
       const kb = Math.round(html.length / 1024);
       if (mode === "copy") {
         const wrap = $("exWrap").checked;
         lsSetSafe("lk_exWrap", wrap ? "1" : "0");
         // 기본 칸에 붙이면 줄바꿈마다 문단이 갈라지므로 한 줄로 (<style> 안은 공백, 나머지는 &#10;)
         copyText(wrap ? "[[HTML]]" + html.replace(/<style>[\s\S]*?<\/style>/g, m => m.replace(/\r?\n/g, " ")).replace(/\r?\n/g, "&#10;") + "[[/HTML]]" : html);
-        if (prog) prog.textContent = "복사했어요! (" + kb + "KB) " + (wrap ? "글쓰기 기본 칸에 그대로 붙여넣으세요." : "티스토리 HTML 모드에 붙여넣으세요.");
+        setProg("복사했어요! (" + kb + "KB) " + (wrap ? "글쓰기 기본 칸에 그대로 붙여넣으세요." : "티스토리 HTML 모드에 붙여넣으세요."), 1, "done");
       } else {
         const doc = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
           escapeHtml(chat.title || "로그") + '</title></head><body style="margin:0;padding:24px 16px;background:#fff">' + html + "</body></html>";
@@ -3873,15 +3963,18 @@ function openTistoryModal() {
         a.href = url; a.download = (chat.title || "로그").replace(/[\\/:*?"<>|]/g, "_") + ".html";
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 2000);
-        if (prog) prog.textContent = "파일로 저장했어요 (" + kb + "KB)";
+        setProg("파일로 저장했어요 (" + kb + "KB)", 1, "done");
       }
     } catch (e) {
-      if (prog) prog.textContent = "내보내지 못했어요: " + (e && e.message ? e.message : e);
+      setProg("내보내지 못했어요: " + (e && e.message ? e.message : e), null, "err");
     } finally { busy = false; }
   };
   $("exCopy").addEventListener("click", () => run("copy"));
   // 스킨에는 한 줄만 (본 코드 lk_skin.js 는 lkSkinSnippet() 으로 만들어 저장소에 둔다 → 고쳐도 스킨은 그대로)
-  $("exSkin").addEventListener("click", e => { e.preventDefault(); copyText(LK_SKIN_TAG); toast("스킨 코드를 복사했어요 — </s_t3> 바로 위에 붙여넣으세요"); });
+  $("exSkin").addEventListener("click", e => {
+    e.preventDefault(); copyText(LK_SKIN_TAG);
+    const b = e.currentTarget; b.textContent = "복사됨 ✓"; setTimeout(() => { b.textContent = "복사"; }, 1600);
+  });
   $("exSave").addEventListener("click", () => run("save"));
 }
 $("tistoryBtn").addEventListener("click", openTistoryModal);
