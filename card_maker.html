@@ -639,6 +639,7 @@
     gap: 3px; margin: 7px 0 2px;
   }
   .tk-bar .fmt-btn { height: 26px; padding: 0; justify-content: center; font-size: 11.5px; min-width: 0; }
+  .tk-style-grid button { height: 30px; font-size: 12px; }
   .tk-bar .fmt-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
   /* 모아보기 줄 */
@@ -2589,6 +2590,19 @@
       <div class="section-title">대본
         <button class="mini-btn" id="tkClearBtn" type="button">비우기</button>
       </div>
+      <!-- 화면 종류를 먼저 고르면 아래 대본 버튼이 그 화면에 맞는 것만 나온다 -->
+      <div class="field-group" style="margin-bottom:9px;">
+        <label class="field-label">화면 종류</label>
+        <div class="btn-grid tk-style-grid" id="tkPresetSeg">
+          <button data-tkp="kakao" type="button">카톡</button>
+          <button data-tkp="imsg" type="button">아이메시지</button>
+          <button data-tkp="line" type="button">라인</button>
+          <button data-tkp="insta" type="button">인스타</button>
+          <button data-tkp="disc" type="button">디코</button>
+          <button data-tkp="game" type="button">게임</button>
+        </div>
+        <div class="hint">고르면 배경·말풍선·화자 색이 그 화면처럼 바뀌고, 대본 버튼도 그 화면에 쓰는 것만 나와요.</div>
+      </div>
       <div class="tk-ta"><textarea id="tkScript" spellcheck="false" placeholder="이름: 내용"></textarea></div>
       <!-- 대본 문법 버튼 — 커서가 있는 줄에 붙이거나 뗀다 -->
       <div class="tk-bar" id="tkBar">
@@ -2655,16 +2669,7 @@
         </button>
       </div>
       <div class="field-group">
-        <label class="field-label">프리셋</label>
-        <div class="seg" id="tkPresetSeg">
-          <button data-tkp="kakao" type="button">카톡</button>
-          <button data-tkp="imsg" type="button">아이메시지</button>
-          <button data-tkp="line" type="button">라인</button>
-          <button data-tkp="insta" type="button">인스타</button>
-          <button data-tkp="disc" type="button">디코</button>
-          <button data-tkp="game" type="button">게임</button>
-        </div>
-        <div class="hint">누르면 배경·말풍선 모양·화자 색이 그 느낌으로 한 번에 바뀌어요. (화자 색을 직접 정했다면 덮어써요)</div>
+        <label class="field-label">내 프리셋</label>
         <div id="tkMyPresets" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:7px;"></div>
         <button class="mini-btn" id="tkPresetSave" type="button" style="margin:7px 0 0;">+ 내 프리셋</button>
       </div>
@@ -7977,7 +7982,8 @@
                rowMode: '',      // '' 말풍선 | 'game' 게임 채팅창 | 'disc' 디스코드식 줄
                avRadius: 50,     // 프사 모서리(%) — 50=원, 카톡은 42(둥근 네모)
                unreadColor: '#ffe000',   // 안읽음 숫자 색 (카톡만 노랑, 다른 프리셋은 회색)
-               font: '', bgImg: '', stickers: [], page: 0 };
+               font: '', bgImg: '', stickers: [], page: 0,
+               style: '' };      // 고른 화면 종류 (카톡·라인…) — 대본 버튼 구성을 정한다
   let uiMode = 'quote';
 
   let tkSaveTimer = null;
@@ -7998,6 +8004,7 @@
           rowMode: tk.rowMode,
           avRadius: tk.avRadius,
           unreadColor: tk.unreadColor,
+          style: tk.style,
           sliders: ['tkBgColor','tkFontRange','tkStickerRange','tkRadiusRange','tkGapRange',
                     'tkPadRange','tkPadXRange','tkShellRange','tkAvSizeRange','tkSaveWidthRange',
                     'tkBgScale','tkBgX','tkBgY','tkDimRange','tkBgBlur']
@@ -8025,6 +8032,7 @@
       tk.rowMode = d.rowMode || (d.gameRow ? 'game' : '');   // 옛 저장본 이관
       tk.avRadius = d.avRadius || 50;
       tk.unreadColor = d.unreadColor || '#ffe000';
+      tk.style = d.style || '';
       Object.keys(d.sliders || {}).forEach(k => { if ($(k)) $(k).value = d.sliders[k]; });
       tkSyncSegs();
     } catch (e) {}
@@ -8038,6 +8046,9 @@
       b.classList.toggle('active', b.dataset.avp === tk.avPos));
     document.querySelectorAll('#tkShapeSeg button').forEach(b =>
       b.classList.toggle('active', b.dataset.shape === tk.shape));
+    document.querySelectorAll('#tkPresetSeg button').forEach(b =>
+      b.classList.toggle('active', b.dataset.tkp === tk.style));
+    if (typeof tkUpdateBar === 'function') tkUpdateBar();
   }
 
   // 대본 → 장 배열. 각 장은 { name?, narr?, text } 목록
@@ -9063,7 +9074,7 @@
       speakers: JSON.parse(JSON.stringify(tk.speakers, (k, v) => (k.startsWith('_') ? undefined : v))),
       avatarOn: tk.avatarOn, nameMode: tk.nameMode, avPos: tk.avPos, shape: tk.shape,
       font: tk.font, bgImg: tk.bgImg, rowMode: tk.rowMode, avRadius: tk.avRadius,
-      unreadColor: tk.unreadColor,
+      unreadColor: tk.unreadColor, style: tk.style,
       sliders: ['tkBgColor','tkFontRange','tkStickerRange','tkRadiusRange','tkGapRange',
                 'tkPadRange','tkPadXRange','tkShellRange','tkAvSizeRange',
                 'tkBgScale','tkBgX','tkBgY','tkDimRange','tkBgBlur']
@@ -9081,6 +9092,7 @@
     tk.rowMode = d.rowMode || '';
     tk.avRadius = d.avRadius || 50;
     tk.unreadColor = d.unreadColor || '#ffe000';
+    if (d.style !== undefined) tk.style = d.style || '';
     Object.keys(d.sliders || {}).forEach(id => { if ($(id)) $(id).value = d.sliders[id]; });
     tkSyncSegs();
     tkRenderAll();
@@ -9195,6 +9207,7 @@
     btn.addEventListener('click', () => {
       const pz = TK_PRESETS[btn.dataset.tkp];
       if (!pz) return;
+      tk.style = btn.dataset.tkp;
       $('tkBgColor').value = pz.bg;
       $('tkRadiusRange').value = pz.radius;
       tk.shape = pz.shape;
@@ -9257,6 +9270,21 @@
   $('tkClearBtn').addEventListener('click', () => { $('tkScript').value = ''; tkRenderAll(); tkPersist(); });
 
   // ===== 대본 문법 버튼 =====
+  // 화면 종류마다 실제로 그려지는 것만 보여준다 (안 고른 상태면 전부)
+  var TK_BAR_SETS = {
+    kakao: ['narr', 'sys', 'trans', 'time', 'unread', 'big', 'small', 'emo', 'page'],
+    imsg:  ['narr', 'sys', 'trans', 'big', 'small', 'emo', 'page'],
+    line:  ['narr', 'sys', 'trans', 'time', 'big', 'small', 'emo', 'page'],
+    insta: ['narr', 'sys', 'trans', 'big', 'small', 'emo', 'page'],
+    disc:  ['narr', 'sys', 'trans', 'time', 'big', 'small', 'emo', 'page'],
+    game:  ['narr', 'sys', 'game', 'trans', 'big', 'small', 'emo', 'page']
+  };
+  function tkUpdateBar() {
+    const set = TK_BAR_SETS && TK_BAR_SETS[tk.style];
+    document.querySelectorAll('#tkBar [data-tk]').forEach(b => {
+      b.style.display = (!set || set.indexOf(b.dataset.tk) !== -1) ? '' : 'none';
+    });
+  }
   // 커서가 있는 줄을 바꾼다. 입력 명령으로 넣어서 Ctrl+Z 로 되돌릴 수 있다.
   function tkReplaceRange(a, b, text, caret) {
     const ta = $('tkScript');
