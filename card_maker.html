@@ -209,17 +209,19 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.15);
   }
   .ed-tabs .ed-undo {
-    flex: 0 0 auto; width: 30px; height: 38px; padding: 0;
+    flex: 0 0 auto; width: 26px; height: 26px; padding: 0;
     display: flex; align-items: center; justify-content: center;
-    border-radius: 9px; color: var(--text-dim);
+    border-radius: 7px; color: var(--text-dim);
   }
-  .ed-tabs .ed-undo svg { width: 15px; height: 15px; }
+  .ed-tabs .ed-undo svg { width: 13px; height: 13px; }
   .ed-tabs .ed-undo:not(:disabled) {
     background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent);
   }
   .ed-tabs .ed-undo:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: #fff; }
   .ed-tabs .ed-undo:disabled {
-    background: var(--panel); border-color: var(--border); color: var(--text-dim);
+    background: color-mix(in srgb, var(--panel) 55%, transparent);
+    border-color: color-mix(in srgb, var(--border) 60%, transparent);
+    color: var(--text-dim);
     cursor: default; transform: none;
   }
   .ed-tabs .ed-undo:disabled svg { opacity: 0.45; }
@@ -682,6 +684,9 @@
   #quoteText em {
     font-style: italic;
   }
+  /* 취소선 — 선 색은 <s> 자신의 글자색을 따르므로, 안쪽에 글씨색이 따로 걸린 부분은
+     그 안에서 한 번 더 그어 같은 색 선이 위에 덮이게 한다 (전체 글씨색 선이 튀지 않게) */
+  #card s [style*="color"] { text-decoration: line-through; }
   #quoteText strong {
     font-weight: 700;
   }
@@ -809,7 +814,9 @@
   .multi-help .mh-nav, .multi-help .mh-break { display: none; }
   .multi-help.has-pages .mh-nav { display: flex; align-items: center; gap: 2px; margin-left: 8px; flex: 1; }
   .multi-help.has-pages .mh-break { display: block; flex-basis: 100%; height: 0; }
-  .multi-help .mh-nav .page-ind { min-width: 44px; }
+  .multi-help .mh-nav .page-btn { width: 22px; height: 22px; font-size: 8px; border-radius: 5px; }
+  .multi-help .mh-nav .page-ind { min-width: 38px; font-size: 11px; }
+  .multi-help .mh-nav #qPageEdit { height: 22px; padding: 0 8px; font-size: 10.5px; }
   .multi-help .mh-nav #qPageEdit { margin-left: auto !important; }
   .multi-help #qPageEdit.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .multi-help .mini-btn { height: 26px; }
