@@ -136,10 +136,12 @@
   /* 설정 묶음 탭 — 한 덩어리 세그먼트로, 아래 영역들과 좌우 끝을 맞춘다 */
   .ed-tabs {
     position: sticky; top: -14px; z-index: 5;
+    display: flex; align-items: center; gap: 4px;
     margin: -14px -14px 12px; padding: 12px 14px 10px;
     background: var(--bg);
   }
   .ed-tabs-inner {
+    flex: 1; min-width: 0;
     display: grid; grid-template-columns: repeat(4, 1fr);
     gap: 3px; padding: 3px;
     background: var(--panel);
@@ -161,7 +163,17 @@
     background: var(--accent); color: #fff;
     box-shadow: 0 1px 3px rgba(0,0,0,0.15);
   }
+  .ed-tabs .ed-undo {
+    flex: 0 0 auto; width: 30px; height: 38px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 9px; color: var(--text-dim);
+  }
+  .ed-tabs .ed-undo svg { width: 15px; height: 15px; }
+  .ed-tabs .ed-undo:disabled { opacity: 0.35; cursor: default; }
   .editor .section.tab-hide { display: none; }
+  /* 미리보기를 눌러 찾아간 영역을 잠깐 표시 */
+  .editor .section.sec-flash { box-shadow: 0 0 0 2px var(--accent); transition: box-shadow 0.2s ease; }
+  body:not(.drag-place) #card #quoteText, body:not(.drag-place) #card .card-credit { cursor: pointer; }
   /* 자주 안 쓰는 설정 — 눌러야 펼쳐진다 */
   details.more { margin-top: 10px; }
   details.more > summary {
@@ -808,6 +820,7 @@
      투명 textarea 의 캐럿·선택 위치와도 어긋나지 않는다. */
   .tk-i { font-style: italic; }
   .tk-s { text-decoration: line-through; }
+  .tk-sz { text-decoration: underline dotted; text-underline-offset: 3px; }
   .tk-h {
     background: var(--hl-color, #ffe17d);
     color: #1a1d24;
@@ -881,7 +894,8 @@
   /* 본문 툴바는 버튼이 많아 좁은 편집 패널에서 '정리' 가 다음 줄로 밀린다 — 조금씩 줄여 한 줄에 맞춘다 */
   .fmt-bar:not(.field-fmt) .fmt-btn.fmt-ico { min-width: 23px; padding: 0 2px; }
   .fmt-bar:not(.field-fmt) .fmt-btn.fmt-ico .pop-caret { margin-left: 1px; }
-  .fmt-bar:not(.field-fmt) .fmt-btn:not(.fmt-ico) { padding: 0 6px; }
+  .fmt-bar:not(.field-fmt) .fmt-btn:not(.fmt-ico) { padding: 0 5px; }
+  .editor .fmt-bar:not(.field-fmt) { gap: 1px; }
   .fmt-bar:not(.field-fmt) .fmt-gap { min-width: 2px; }
   /* 버튼 안에서 지금 고른 색을 미리 보여줌 */
   .fmt-btn .fb-hl {
@@ -1338,6 +1352,12 @@
         <button type="button" data-tab="card">카드</button>
         <button type="button" data-tab="save">저장</button>
       </div>
+      <button type="button" class="ed-undo" id="setUndoBtn" title="설정 되돌리기 (문구 칸 밖에서 Ctrl+Z)" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>
+      </button>
+      <button type="button" class="ed-undo" id="setRedoBtn" title="설정 다시 하기 (Ctrl+Shift+Z)" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>
+      </button>
     </div>
 
     <!-- 문구 -->
@@ -1425,6 +1445,7 @@
         <button class="fmt-btn fmt-ico" type="button" data-fmt="st" title="취소선"><s>S</s></button>
         <button class="fmt-btn fmt-ico" id="hlBtn" type="button" data-pop="hlPop" title="형광펜 (Ctrl+H 는 마지막 색)"><span class="fb-hl">A</span><span class="pop-caret">▾</span></button>
         <button class="fmt-btn fmt-ico" id="colorBtn" type="button" data-pop="colorPop" title="글씨색"><span class="fb-col">A</span><span class="pop-caret">▾</span></button>
+        <button class="fmt-btn fmt-ico" type="button" data-pop="sizePop" id="sizeBtn" title="선택한 글자 크기">가<span class="pop-caret">▾</span></button>
         <button class="fmt-btn fmt-ico" type="button" data-pop="quotePop" id="quoteBtn" title="인용부호로 감쌈 (Ctrl+Q 는 마지막 모양)">“”<span class="pop-caret">▾</span></button>
         <button class="fmt-btn fmt-ico" id="subLineBtn" type="button" title="이 줄을 번역 줄로 (작게) — 다시 누르면 해제">(가)</button>
         <button class="fmt-btn fmt-ico" id="indentBtn" type="button" title="문단 들여쓰기"><svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="2" width="14" height="2"/><rect x="7" y="7" width="8" height="2"/><rect x="1" y="12" width="14" height="2"/><path d="M1 6 L5 8 L1 10 Z"/></svg></button>
@@ -1443,6 +1464,15 @@
           <b>공백 정리</b> — 줄 끝 공백을 없애고, 연달아 비어 있는 줄을 하나로 줄입니다.<br>
           <b>서식 지우기</b> — 굵게·기울임·형광펜·글씨색을 모두 없애고 글자만 남깁니다. 범위를 선택해 두면 그 부분만, 선택하지 않으면 전체가 대상입니다.
         </div>
+      </div>
+      <div class="fmt-pop" id="sizePop">
+        <div class="seg sz-seg">
+          <button type="button" data-sz="-1" style="font-size:10.5px;">작게</button>
+          <button type="button" data-sz="" >보통</button>
+          <button type="button" data-sz="+1" style="font-size:14px;">크게</button>
+          <button type="button" data-sz="+2" style="font-size:16px;">더 크게</button>
+        </div>
+        <div class="hint" style="margin-top:6px;">선택한 글자만 크기를 바꿔요. 본문 크기를 바꾸면 같은 비율로 따라가요. 같은 크기를 한 번 더 누르면 보통으로.</div>
       </div>
       <div class="fmt-pop" id="quotePop">
         <div class="seg qs-seg">
@@ -2317,6 +2347,15 @@
             <span class="slider-val" id="qualityVal">92%</span>
           </div>
         </div>
+      </div>
+      <div class="sub-rule"></div>
+      <div class="field-group" style="margin-bottom:0;">
+        <label class="field-label">내 기본 모양</label>
+        <div class="seg">
+          <button type="button" id="myDefSave" title="지금 글씨체·배경·꾸미기 등 모든 설정을 기본 모양으로">지금 모양을 기본으로</button>
+          <button type="button" id="myDefStart" title="문구를 비우고 기본 모양으로 새 카드 시작">기본 모양으로 새로</button>
+        </div>
+        <div class="hint" id="myDefHint">늘 쓰는 모양을 저장해 두고, 새 카드를 그 모양에서 바로 시작해요.</div>
       </div>
     </div>
     <!-- 히스토리 -->
@@ -3595,7 +3634,9 @@
   //   {#rrggbb|글씨}   → 글씨색
   //   {=#rrggbb|글씨}  → 형광펜 (구간마다 색을 따로 가질 수 있게)
   // 예전 ==글씨== 도 계속 읽고, 편집하면 색이 붙은 형태로 바뀐다.
-  const COLOR_OPEN = /^\{(=?)(#[0-9a-fA-F]{3,8})\|/;
+  //   {+1|글씨}  {+2|글씨}  {-1|글씨}  → 글자 크기 (크게 / 더 크게 / 작게)
+  const COLOR_OPEN = /^\{(?:(=?)(#[0-9a-fA-F]{3,8})|([+-][12]))\|/;
+  const SIZE_EM = { '+1': 1.3, '+2': 1.6, '-1': 0.8, '-2': 0.65 };
   // 한 줄에 --- 만 있는 구분선
   const SEP_LINE = /^[ \t]*-{3,}[ \t]*(?=\n|$)/;
 
@@ -3699,7 +3740,9 @@
           if (close !== -1) {
             const body = parseInline(s.slice(from, close), skipSub);
             // data-hl 은 이미지로 뽑을 때 형광펜 띠 색을 읽는 데 쓴다
-            out += (cm[1] === '=')
+            out += cm[3]
+              ? '<span class="qsz" style="font-size:' + SIZE_EM[cm[3]] + 'em">' + body + '</span>'
+              : (cm[1] === '=')
               ? '<mark class="qhl' + (state.hlShape === 'round' ? ' hl-round' : '')
                 + '" data-hl="' + cm[2] + '" style="'
                 + hlInlineStyle(cm[2]) + '">' + body + '</mark>'
@@ -3759,7 +3802,10 @@
           const close = findColorClose(s, from);
           if (close !== -1) {
             const inner = mirrorInline(s.slice(from, close), skipSub);
-            const styled = (cm[1] === '=')
+            // 크기는 입력칸에서 바꾸면 캐럿이 어긋나므로 점선 밑줄로만 표시
+            const styled = cm[3]
+              ? '<span class="tk-sz">' + inner + '</span>'
+              : (cm[1] === '=')
               ? '<span class="tk-h' + (state.hlShape === 'round' ? ' hl-round' : '')
                 + '" style="' + hlInlineStyle(cm[2]) + '">' + inner + '</span>'
               : '<span style="color:' + cm[2] + '">' + inner + '</span>';
@@ -3812,7 +3858,7 @@
         // \X — 뒤 글자를 서식이 아닌 글자로 담는다
         if (s[i] === '\\' && ESCAPABLE.indexOf(s[i + 1]) !== -1) {
           out.push({ ch: s[i + 1], raw: base + i + 1, b: !!attr.b, em: !!attr.em,
-                     st: !!attr.st, hl: attr.hl || null, col: attr.col || null });
+                     st: !!attr.st, hl: attr.hl || null, col: attr.col || null, sz: attr.sz || null });
           i += 2;
           continue;
         }
@@ -3822,8 +3868,9 @@
             const from = i + cm[0].length;
             const close = findColorClose(s, from);
             if (close !== -1) {
-              const na = { b: attr.b, em: attr.em, st: attr.st, hl: attr.hl, col: attr.col };
-              if (cm[1] === '=') na.hl = cm[2]; else na.col = cm[2];
+              const na = { b: attr.b, em: attr.em, st: attr.st, hl: attr.hl, col: attr.col, sz: attr.sz };
+              if (cm[3]) na.sz = cm[3];
+              else if (cm[1] === '=') na.hl = cm[2]; else na.col = cm[2];
               walk(s.slice(from, close), base + from, na);
               i = close + 1;
               continue;
@@ -3833,7 +3880,7 @@
         const mm = matchMark(s, i);
         if (mm) {
           const t = mm.mk.tag;
-          const na = { b: attr.b, em: attr.em, st: attr.st, hl: attr.hl, col: attr.col };
+          const na = { b: attr.b, em: attr.em, st: attr.st, hl: attr.hl, col: attr.col, sz: attr.sz };
           if (t === '***') { na.b = true; na.em = true; }
           else if (t === '**' || t === '__') na.b = true;
           else if (t === '~~') na.st = true;
@@ -3844,7 +3891,7 @@
           continue;
         }
         out.push({ ch: s[i], raw: base + i, b: !!attr.b, em: !!attr.em,
-                   st: !!attr.st, hl: attr.hl || null, col: attr.col || null });
+                   st: !!attr.st, hl: attr.hl || null, col: attr.col || null, sz: attr.sz || null });
         i++;
       }
     })(raw, 0, {});
@@ -3861,6 +3908,7 @@
         const c = list[i];
         let lvl = null;
         if (c.hl && active.hl !== c.hl) lvl = 'hl';
+        else if (c.sz && active.sz !== c.sz) lvl = 'sz';
         else if (c.b && !active.b) lvl = 'b';
         else if (c.st && !active.st) lvl = 'st';
         else if (c.em && !active.em) lvl = 'em';
@@ -3872,14 +3920,15 @@
           continue;
         }
         // 색을 가진 서식(형광펜·글씨색)은 같은 색이 이어지는 만큼만 묶는다
-        const byVal = (lvl === 'col' || lvl === 'hl');
+        const byVal = (lvl === 'col' || lvl === 'hl' || lvl === 'sz');
         const same = (x) => (byVal ? x[lvl] === c[lvl] : !!x[lvl]);
         let j = i;
         while (j < list.length && same(list[j])) j++;
-        const na = { b: active.b, em: active.em, st: active.st, hl: active.hl, col: active.col };
+        const na = { b: active.b, em: active.em, st: active.st, hl: active.hl, col: active.col, sz: active.sz };
         na[lvl] = byVal ? c[lvl] : true;
         const mark = (lvl === 'b') ? BOLD_MARK : (lvl === 'st' ? '~~' : '*');
         const open  = (lvl === 'col') ? '{' + c.col + '|'
+                    : (lvl === 'sz') ? '{' + c.sz + '|'
                     : (lvl === 'hl' ? '{=' + c.hl + '|' : mark);
         const close = byVal ? '}' : mark;
         out += open + ser(list.slice(i, j), na) + close;
@@ -3928,6 +3977,13 @@
     editSelection(sel => {
       const allOn = sel.every(c => c[kind]);
       sel.forEach(c => { c[kind] = !allOn; });
+    });
+  }
+  // 글자 크기 — 전부 이미 그 크기면 보통으로, 아니면 그 크기로 (null = 보통)
+  function setSelSize(sz) {
+    editSelection(sel => {
+      const allSame = sel.every(c => (c.sz || null) === sz);
+      sel.forEach(c => { c.sz = (allSame || !sz) ? null : sz; });
     });
   }
   // 글씨색 — color 가 null 이면 제거
@@ -4284,7 +4340,7 @@
     return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 150;
   }
   function richAttrKey(c) {
-    return [c.b ? 1 : 0, c.em ? 1 : 0, c.st ? 1 : 0, c.hl || '', c.col || ''].join('|');
+    return [c.b ? 1 : 0, c.em ? 1 : 0, c.st ? 1 : 0, c.hl || '', c.col || '', c.sz || ''].join('|');
   }
   function richRunHtml(list) {
     const c = list[0];
@@ -4294,6 +4350,7 @@
     if (c.hl) style += 'background:' + c.hl + ';border-radius:2px;'
                      + (c.col ? '' : 'color:' + (richIsLight(c.hl) ? '#1a1d24' : '#fff') + ';');
     if (c.col) style += 'color:' + c.col + ';';
+    if (c.sz && SIZE_EM[c.sz]) style += 'font-size:' + SIZE_EM[c.sz] + 'em;';
     return '<span data-a="' + richAttrKey(c) + '"' + (c.b ? ' class="rk-b"' : '')
          + (style ? ' style="' + style + '"' : '') + '>'
          + escapeHtml(list.map(x => x.ch).join('')) + '</span>';
@@ -4338,7 +4395,7 @@
           const a = (host && root.contains(host) ? host.dataset.a : '0|0|0||').split('|');
           for (const ch of n.nodeValue) {
             out.push({ ch: ch, b: a[0] === '1', em: a[1] === '1', st: a[2] === '1',
-                       hl: a[3] || null, col: a[4] || null });
+                       hl: a[3] || null, col: a[4] || null, sz: a[5] || null });
           }
         } else if (n.nodeName === 'BR') {
           if (!n.dataset.end) out.push({ ch: '\n', b: false, em: false, st: false, hl: null, col: null });
@@ -4452,10 +4509,10 @@
     const ta = $('quoteInput');
     const sel = richGetSel() || { a: 0, b: 0 };
     const chars = richReadChars();
-    const like = (!plain && chars[sel.a - 1]) || { b: false, em: false, st: false, hl: null, col: null };
+    const like = (!plain && chars[sel.a - 1]) || { b: false, em: false, st: false, hl: null, col: null, sz: null };
     const add = Array.from(text).map(ch => ch === '\n'
       ? { ch: ch, b: false, em: false, st: false, hl: null, col: null }
-      : { ch: ch, b: like.b, em: like.em, st: like.st, hl: like.hl, col: like.col });
+      : { ch: ch, b: like.b, em: like.em, st: like.st, hl: like.hl, col: like.col, sz: like.sz });
     chars.splice(sel.a, sel.b - sel.a, ...add);
     const raw = charsToText(chars);
     const nc = textToChars(raw);
@@ -4615,7 +4672,7 @@
       const el = aimField(bar);
       if (!el) return;
       const chars = textToChars(el.value);
-      chars.forEach(c => { c.b = false; c.em = false; c.st = false; c.hl = null; c.col = null; });
+      chars.forEach(c => { c.b = false; c.em = false; c.st = false; c.hl = null; c.col = null; c.sz = null; });
       commitQuoteEdit(charsToText(chars), 0, 0);
     });
   });
@@ -4665,7 +4722,7 @@
       while (a < chars.length && !chars[a].ch.trim()) a++;
       while (b >= 0 && !chars[b].ch.trim()) b--;
       const like = chars[a] || { b: false, em: false, st: false, hl: null, col: null };
-      const mk = (ch) => ({ ch: ch, b: like.b, em: like.em, st: like.st, hl: like.hl, col: like.col });
+      const mk = (ch) => ({ ch: ch, b: like.b, em: like.em, st: like.st, hl: like.hl, col: like.col, sz: like.sz });
       chars.splice(b + 1, 0, mk(')'));
       chars.splice(a, 0, mk('('));
     }
@@ -5176,7 +5233,7 @@
     fmtTarget = 'quoteInput';
     if (ta.selectionStart === ta.selectionEnd) ta.setSelectionRange(0, ta.value.length);
     editSelection(sel => {
-      sel.forEach(c => { c.b = false; c.em = false; c.st = false; c.hl = null; c.col = null; });
+      sel.forEach(c => { c.b = false; c.em = false; c.st = false; c.hl = null; c.col = null; c.sz = null; });
     });
     closePops();
     toast('서식을 모두 지웠어요');
@@ -5219,6 +5276,16 @@
       btn.classList.add('active');
       state.quoteStyle = parseInt(btn.dataset.qs, 10) || 0;
       toggleQuoteMark();
+      closePops();
+    });
+  });
+
+  // 글자 크기 — 고르면 선택한 글자에 바로 적용
+  document.querySelectorAll('.sz-seg button').forEach(btn => {
+    btn.addEventListener('mousedown', ev => ev.preventDefault());   // 선택 유지
+    btn.addEventListener('click', () => {
+      fmtTarget = 'quoteInput';
+      setSelSize(btn.dataset.sz || null);
       closePops();
     });
   });
@@ -7469,6 +7536,7 @@
     try { t = localStorage.getItem(TAB_KEY) || 'text'; } catch (e) {}
     if (!bar.querySelector('[data-tab="' + t + '"]')) t = 'text';
     show(t);
+    window.showEdTab = show;
 
     let open = [];
     try { open = JSON.parse(localStorage.getItem(MORE_KEY) || '[]'); } catch (e) { open = []; }
@@ -8884,6 +8952,160 @@
   ['input', 'change', 'click', 'pointerup'].forEach(t =>
     document.addEventListener(t, saveLastSoon, true));
   window.addEventListener('pagehide', saveLastNow);
+
+  // ============ 미리보기를 누르면 그 설정으로 ============
+  (function setupPreviewNav() {
+    let down = null;
+    card.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY }; }, true);
+    card.addEventListener('click', ev => {
+      if (state.dragPlace || !window.showEdTab) return;
+      if (down && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 4) return;   // 끌었던 거면 무시
+      const t = ev.target;
+      let tab = 'card', sec = '배경';
+      if (t.closest('.card-icon')) { tab = 'card'; sec = '꾸미기'; }
+      else if (t.closest('.card-credit') || t.closest('.card-sep')) { tab = 'text'; sec = '출처'; }
+      else if (t.closest('#quoteText') || t.closest('#cardTitle')) { tab = 'text'; sec = '발췌 문구'; }
+      window.showEdTab(tab);
+      const el = document.querySelector('.editor .section[data-sec="' + sec + '"]');
+      if (!el) return;
+      el.classList.remove('collapsed');
+      // 좁은 화면(편집칸이 위에 쌓인 배치)에선 화면이 튀지 않게 스크롤은 하지 않는다
+      if (!window.matchMedia('(max-width: 860px)').matches) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.classList.add('sec-flash');
+      setTimeout(() => el.classList.remove('sec-flash'), 900);
+      if (sec === '발췌 문구') {
+        const target = rich.on ? $('quoteRich') : $('quoteInput');
+        target.focus({ preventScroll: true });
+      }
+    });
+  })();
+
+  // ============ 설정 되돌리기 ============
+  // 문구는 입력칸 자체의 실행취소가 맡고, 여기선 글씨체·배경·슬라이더 같은 설정만 되돌린다.
+  // 배경 이미지는 커서 비교용 문자열에서 빼고 따로 들고 다닌다.
+  const setHist = { undo: [], redo: [], cur: null, timer: null, applying: false };
+  function setSnap() {
+    const s = lastSnapshot();
+    const img = s.bgImageData;
+    s.bgImageData = '';
+    delete s.title;
+    return { key: JSON.stringify(s), img: img };
+  }
+  function setSameSnap(a, b) { return a && b && a.key === b.key && a.img === b.img; }
+  function setUpdateBtns() {
+    $('setUndoBtn').disabled = !setHist.undo.length;
+    $('setRedoBtn').disabled = !setHist.redo.length;
+  }
+  function setRecordSoon() {
+    if (setHist.applying) return;
+    clearTimeout(setHist.timer);
+    setHist.timer = setTimeout(() => {
+      const now = setSnap();
+      if (setHist.cur && !setSameSnap(now, setHist.cur)) {
+        setHist.undo.push(setHist.cur);
+        if (setHist.undo.length > 60) setHist.undo.shift();
+        setHist.redo = [];
+      }
+      setHist.cur = now;
+      setUpdateBtns();
+    }, 450);
+  }
+  function applySnapObj(s) {
+    if (s.lastHl) state.lastHl = s.lastHl;
+    if (s.lastCol) state.lastCol = s.lastCol;
+    restoreSettings(s);
+    $('outWidthVal').textContent = $('outWidthRange').value + 'px';
+    $('qualityVal').textContent = $('qualityRange').value + '%';
+    if (s.outFormat) {
+      state.outFormat = s.outFormat;
+      document.querySelectorAll('#fmtSeg button').forEach(b =>
+        b.classList.toggle('active', b.dataset.fmt2 === s.outFormat));
+      $('qualityBox').style.display = state.outFormat === 'png' ? 'none' : '';
+    }
+    state.transBg = !!s.transBg;
+    $('transBgToggle').classList.toggle('on', state.transBg);
+    applyHighlightColor();
+    renderCard();
+  }
+  function setStep(redo) {
+    clearTimeout(setHist.timer);
+    const from = redo ? setHist.redo : setHist.undo;
+    const to = redo ? setHist.undo : setHist.redo;
+    if (!from.length) { toast(redo ? '다시 할 설정이 없어요' : '되돌릴 설정이 없어요'); return; }
+    const cur = setHist.cur || setSnap();
+    const st = from.pop();
+    to.push(cur);
+    setHist.applying = true;
+    try {
+      const s = JSON.parse(st.key);
+      s.bgImageData = st.img;
+      applySnapObj(s);
+    } finally { setHist.applying = false; }
+    setHist.cur = st;
+    setUpdateBtns();
+    saveLastSoon();
+    toast(redo ? '설정을 다시 적용했어요' : '설정을 되돌렸어요');
+  }
+  $('setUndoBtn').addEventListener('click', () => setStep(false));
+  $('setRedoBtn').addEventListener('click', () => setStep(true));
+  ['input', 'change', 'click', 'pointerup'].forEach(t =>
+    document.addEventListener(t, setRecordSoon, true));
+  // 글 입력칸 밖에서 Ctrl+Z 는 설정 되돌리기
+  window.addEventListener('keydown', ev => {
+    if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+    const k = (ev.key || '').toLowerCase();
+    if (k !== 'z' && k !== 'y') return;
+    const a = document.activeElement;
+    if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+    if ($('talkEditor') && $('talkEditor').style.display !== 'none') return;   // 메시지 모드
+    ev.preventDefault();
+    setStep(k === 'y' || ev.shiftKey);
+  });
+  setHist.cur = setSnap();
+
+  // ============ 내 기본 모양 ============
+  const MYDEF_KEY = 'quotecard:myDefault';
+  function myDefGet() {
+    try { return JSON.parse(localStorage.getItem(MYDEF_KEY) || 'null'); } catch (e) { return null; }
+  }
+  function myDefHint() {
+    const d = myDefGet();
+    $('myDefStart').disabled = !d;
+    $('myDefHint').textContent = d
+      ? '저장한 기본 모양: ' + d.stamp + ' — "기본 모양으로 새로" 를 누르면 문구를 비우고 이 모양에서 시작해요.'
+      : '늘 쓰는 모양을 저장해 두고, 새 카드를 그 모양에서 바로 시작해요.';
+  }
+  $('myDefSave').addEventListener('click', () => {
+    const s = lastSnapshot();
+    delete s.title;
+    const now = new Date();
+    const item = { stamp: (now.getMonth() + 1) + '월 ' + now.getDate() + '일 '
+      + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), s: s };
+    try { localStorage.setItem(MYDEF_KEY, JSON.stringify(item)); }
+    catch (e) {
+      try { item.s.bgImageData = ''; localStorage.setItem(MYDEF_KEY, JSON.stringify(item));
+            toast('배경 이미지가 너무 커서 이미지만 빼고 저장했어요'); myDefHint(); return; }
+      catch (e2) { toast('저장 공간이 부족해요'); return; }
+    }
+    myDefHint();
+    toast('지금 모양을 기본 모양으로 저장했어요');
+  });
+  $('myDefStart').addEventListener('click', () => {
+    const d = myDefGet();
+    if (!d) return;
+    askConfirm('기본 모양으로 새로 시작할까요?', '문구와 제목을 비우고 저장해 둔 기본 모양을 적용해요. 출처(제작자·캐릭터)는 그대로 둬요.').then(ok => {
+      if (!ok) return;
+      if (typeof exitPageEdit === 'function') try { exitPageEdit(); } catch (e) {}
+      $('quoteInput').value = '';
+      $('titleInput').value = '';
+      curPage = 0;
+      applySnapObj(d.s);
+      $('quoteInput').dispatchEvent(new Event('input'));
+      saveLastSoon();
+      toast('기본 모양으로 새 카드를 시작했어요');
+    });
+  });
+  myDefHint();
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveLastNow(); });
 </script>
 <!-- ☁ 선택적 클라우드 동기화 — 로그인 안 하면 동작하지 않음(기존 로컬 방식 그대로). 데이터·테마·히스토리(이미지 포함) 동기화. -->
