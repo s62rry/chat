@@ -479,6 +479,22 @@
     font-size: 11.5px; font-weight: 600;
   }
   .preset-add:hover { border-color: var(--accent); color: var(--accent) !important; }
+  .preset-grid .preset-head { grid-column: 1 / -1; margin: 2px 0 0; }
+  .preset-grid .preset-add { grid-column: 1 / -1; height: 32px; margin-top: 2px; }
+  .preset-name { padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .preset .preset-tag { top: auto; bottom: 2px; right: auto; left: 3px; }
+  .preset-acts { position: absolute; top: 2px; right: 2px; display: flex; gap: 2px; opacity: 0; transition: opacity 0.13s ease; }
+  .preset:hover .preset-acts { opacity: 1; }
+  @media (hover: none) { .preset-acts { opacity: 0.85; } }
+  .preset-acts button {
+    width: 17px; height: 17px; padding: 0; justify-content: center;
+    border-radius: 50%; font-size: 10px; line-height: 1;
+    background: rgba(0,0,0,0.55); border: 0; color: #fff;
+  }
+  .preset-acts button:hover { background: var(--accent); color: #fff; }
+  .preset.dragging { opacity: 0.4; }
+  .preset-grid.dragging-on .preset-head:not(:first-child) { outline: 1.5px dashed var(--border); outline-offset: 1px; }
+  .preset-grid .preset.drop, .preset-grid .preset-head.drop { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   /* 색상 / 슬라이더 */
   /* 슬라이더 — 얇은 트랙 + 작고 테두리 없는 손잡이 */
@@ -2235,7 +2251,7 @@
     <div class="section" data-tab="card">
       <div class="section-title">색 테마 &amp; 프리셋</div>
       <div class="preset-grid" id="presetGrid"></div>
-      <div class="hint">기본 테마는 색만 바꿉니다. <b>+ 저장</b>으로 직접 저장한 것은 글씨체·여백·꾸미기까지 <b>지금 설정 전체</b>가 담기고, 누르면 그대로 되돌아옵니다. 캐릭터 전용으로 저장하면 <b>제작자·캐릭터 이름까지</b> 함께 되살아납니다. 더블클릭하면 삭제됩니다.</div>
+      <div class="hint">기본 테마는 색만 바꿔요. <b>+ 지금 설정 저장</b>은 글씨체·여백·꾸미기까지 <b>지금 설정 전체</b>를 묶음에 담아요. 캐릭터 전용으로 저장하면 제작자·캐릭터 이름도 함께 되살아나요. 마우스를 올리면 ✎(이름·묶음 옮기기)·×, 끌어서 다른 묶음에 놓아도 옮겨져요.</div>
 
           </div>
 
@@ -3635,33 +3651,37 @@
   ];
   // 기본 + 사용자 프리셋
   function allPresets() { return PRESETS.concat(data.presets); }
+  // ===== 색 테마 — 기본 테마 + 내가 저장한 테마를 묶음(폴더)별로 =====
+  // 예전 저장본엔 묶음이 없어서, 캐릭터 전용이면 '캐릭터 테마', 아니면 '내 테마' 로 보여준다
+  const QP_FOLD_KEY = 'quotecard:presetFold';
+  function qpGroupOf(p) { return p.group || (p.char ? '캐릭터 테마' : '내 테마'); }
+  function qpFolded() { try { return JSON.parse(localStorage.getItem(QP_FOLD_KEY) || '[]'); } catch (e) { return []; } }
+  function qpSetFold(g, fold) {
+    const f = qpFolded(); const k = f.indexOf(g);
+    if (fold && k === -1) f.push(g);
+    if (!fold && k !== -1) f.splice(k, 1);
+    try { localStorage.setItem(QP_FOLD_KEY, JSON.stringify(f)); } catch (e) {}
+  }
+  let qpLastGroup = '';
+  function qpMove(p, g) {
+    p.group = g;
+    qpLastGroup = g;
+    saveData();
+    renderPresetGrid();
+    toast('"' + p.name + '" → ' + g);
+  }
+  function qpGroups() {
+    const out = [];
+    (data.presets || []).forEach(p => { const g = qpGroupOf(p); if (out.indexOf(g) === -1) out.push(g); });
+    return out;
+  }
   function renderPresetGrid() {
     const grid = $('presetGrid');
     grid.innerHTML = '';
     const curChar = plainName(charInput.value);
+    const folded = qpFolded();
 
-    // 그룹으로 나눈다: 기본 테마 / 내 테마(공용) / 캐릭터 테마
-    const builtin = PRESETS.map((p, i) => ({ p: p, i: i }));
-    const mineAll = (data.presets || []).map((p, k) => ({ p: p, i: PRESETS.length + k }));
-    const common = mineAll.filter(x => !x.p.char);
-    const chars = mineAll.filter(x => x.p.char);
-    // 지금 캐릭터의 테마를 캐릭터 그룹 맨 앞으로
-    chars.sort((a, b) => {
-      const am = curChar && a.p.char === curChar, bm = curChar && b.p.char === curChar;
-      if (am !== bm) return am ? -1 : 1;
-      return 0;
-    });
-
-    // 그룹 제목 (그리드 한 줄을 통째로 차지)
-    function header(text) {
-      const h = document.createElement('div');
-      h.className = 'preset-group';
-      h.textContent = text;
-      grid.appendChild(h);
-    }
-
-    function chipFor(entry) {
-      const p = entry.p, i = entry.i;
+    function chipFor(p, isCustom, g) {
       const chip = document.createElement('div');
       chip.className = 'preset';
       const bgCss = p.grad
@@ -3669,8 +3689,10 @@
         : p.bg;
       chip.style.background = bgCss;
       chip.style.color = p.text;
-      chip.textContent = p.name;
-      const isCustom = i >= PRESETS.length;
+      const nm = document.createElement('span');
+      nm.className = 'preset-name';
+      nm.textContent = p.name;
+      chip.appendChild(nm);
       if (p.char) {
         const tag = document.createElement('span');
         tag.className = 'preset-tag';
@@ -3680,29 +3702,122 @@
       }
       chip.title = isCustom
         ? (p.name + (p.char ? ' — "' + p.char + '" 전용 (제작자·캐릭터 이름까지 되살아납니다)' : '')
-           + ' — 클릭 적용 / 더블클릭 삭제')
+           + ' — 누르면 적용, 끌어서 다른 묶음에 놓으면 옮겨져요')
         : (p.name + ' 테마 적용');
-      chip.addEventListener('click', () => applyPreset(p));
       if (isCustom) {
-        chip.addEventListener('dblclick', () => {
-          data.presets = data.presets.filter(x => x !== p);
-          saveData();
-          renderPresetGrid();
-                toast('테마 "' + p.name + '" 삭제됨');
+        const acts = document.createElement('span');
+        acts.className = 'preset-acts';
+        acts.innerHTML = '<button type="button" class="pa-ed" title="이름 바꾸기 · 묶음 옮기기">✎</button>'
+          + '<button type="button" class="pa-del" title="지우기">×</button>';
+        chip.appendChild(acts);
+        chip.draggable = true;
+        chip.addEventListener('dragstart', ev => {
+          ev.dataTransfer.setData('text/qp', String(data.presets.indexOf(p)));
+          chip.classList.add('dragging');
+          grid.classList.add('dragging-on');
         });
+        chip.addEventListener('dragend', () => { chip.classList.remove('dragging'); grid.classList.remove('dragging-on'); });
+        dropOn(chip, g);
       }
+      chip.addEventListener('click', ev => {
+        if (ev.target.closest('.pa-del')) {
+          askConfirm('"' + p.name + '" 테마를 지울까요?').then(ok => {
+            if (!ok) return;
+            data.presets = data.presets.filter(x => x !== p);
+            saveData();
+            renderPresetGrid();
+            toast('테마 "' + p.name + '" 삭제됨');
+          });
+          return;
+        }
+        if (ev.target.closest('.pa-ed')) {
+          ev.stopPropagation();   // 바깥 클릭으로 메뉴가 바로 닫히지 않게
+          const cur = qpGroupOf(p);
+          const items = [{ label: '이름 바꾸기', fn: () => askText('테마 이름', p.name, '바꾸기').then(nn => {
+              nn = (nn && typeof nn === 'object' ? nn.value : nn || '').trim();
+              if (!nn) return;
+              p.name = nn; saveData(); renderPresetGrid();
+            }) }];
+          if (p.char) items.push({ label: '캐릭터 전용 풀기 ("' + p.char + '")', fn: () => {
+            if (!p.group) p.group = qpGroupOf(p);
+            delete p.char; delete p.charRaw; delete p.makerRaw;
+            saveData(); renderPresetGrid();
+          } });
+          items.push({ head: '묶음 옮기기' });
+          qpGroups().forEach(gg => items.push({ label: gg + (gg === cur ? '  ✓' : ''), cur: gg === cur, fn: () => qpMove(p, gg) }));
+          items.push({ label: '+ 새 묶음…', fn: () => askText('새 묶음 이름', '', '옮기기').then(nn => {
+            nn = (nn && typeof nn === 'object' ? nn.value : nn || '').trim();
+            if (nn) qpMove(p, nn);
+          }) });
+          if (window.tkpMenu) window.tkpMenu(ev.target.closest('.pa-ed'), items);
+          return;
+        }
+        applyPreset(p);
+      });
       grid.appendChild(chip);
     }
+    // 끌어온 테마를 이 묶음으로
+    function dropOn(el, g) {
+      el.addEventListener('dragover', ev => {
+        if (!ev.dataTransfer.types.includes('text/qp')) return;
+        ev.preventDefault(); el.classList.add('drop');
+      });
+      el.addEventListener('dragleave', () => el.classList.remove('drop'));
+      el.addEventListener('drop', ev => {
+        el.classList.remove('drop');
+        const i = parseInt(ev.dataTransfer.getData('text/qp'), 10);
+        if (isNaN(i) || !data.presets[i]) return;
+        ev.preventDefault();
+        if (qpGroupOf(data.presets[i]) !== g) qpMove(data.presets[i], g);
+      });
+    }
+    function header(g, count, canRename) {
+      const fold = folded.indexOf(g) !== -1;
+      const h = document.createElement('button');
+      h.type = 'button';
+      h.className = 'tkp-head preset-head' + (fold ? ' fold' : '');
+      h.innerHTML = '<span class="tkp-caret">▾</span><span class="tkp-gname"></span><span class="tkp-count">' + count + '</span>'
+        + (canRename ? '<span class="tkp-gren" title="묶음 이름 바꾸기">✎</span>' : '');
+      h.querySelector('.tkp-gname').textContent = g;
+      h.addEventListener('click', ev => {
+        if (ev.target.closest('.tkp-gren')) {
+          askText('묶음 이름 바꾸기', g, '바꾸기').then(nn => {
+            nn = (nn && typeof nn === 'object' ? nn.value : nn || '').trim();
+            if (!nn || nn === g) return;
+            data.presets.forEach(x => { if (qpGroupOf(x) === g) x.group = nn; });
+            if (folded.indexOf(g) !== -1) { qpSetFold(g, false); qpSetFold(nn, true); }
+            saveData(); renderPresetGrid();
+          });
+          return;
+        }
+        qpSetFold(g, !fold);
+        renderPresetGrid();
+      });
+      if (canRename) dropOn(h, g);
+      grid.appendChild(h);
+      return fold;
+    }
 
-    builtin.forEach(chipFor);
-    if (common.length) { header('내 테마'); common.forEach(chipFor); }
-    if (chars.length) { header('캐릭터 테마'); chars.forEach(chipFor); }
+    // 기본 테마
+    if (!header('기본 테마', PRESETS.length, false)) PRESETS.forEach(p => chipFor(p, false, ''));
+    // 내 묶음들 — 지금 캐릭터 전용 테마가 든 묶음을 먼저
+    const mine = data.presets || [];
+    const groups = qpGroups();
+    groups.sort((a, b) => {
+      const am = mine.some(p => qpGroupOf(p) === a && curChar && p.char === curChar);
+      const bm = mine.some(p => qpGroupOf(p) === b && curChar && p.char === curChar);
+      return (am === bm) ? 0 : (am ? -1 : 1);
+    });
+    groups.forEach(g => {
+      const items = mine.filter(p => qpGroupOf(p) === g);
+      items.sort((a, b) => ((curChar && b.char === curChar) ? 1 : 0) - ((curChar && a.char === curChar) ? 1 : 0));
+      if (!header(g, items.length, true)) items.forEach(p => chipFor(p, true, g));
+    });
 
     // "현재 설정 저장" 칩
-    if (common.length || chars.length) header('');
     const add = document.createElement('div');
     add.className = 'preset preset-add';
-    add.textContent = '+ 저장';
+    add.textContent = '+ 지금 설정 저장';
     add.title = '지금 설정을 통째로 저장 (색·글씨체·여백·꾸미기 모두)';
     add.addEventListener('click', saveCurrentPreset);
     grid.appendChild(add);
@@ -3719,7 +3834,12 @@
     const linked = curChar && raw && typeof raw === 'object' && raw.checked;
     const name = ((raw && typeof raw === 'object' ? raw.value : raw) || '').trim();
     if (!name) return;
-    const p = { name, text: $('textColor').value, accent: $('accentColor').value };
+    const gDefault = qpLastGroup || (linked ? '캐릭터 테마' : '내 테마');
+    const gRaw = await askText('묶음 이름' + (qpGroups().length ? ' (있는 묶음: ' + qpGroups().slice(0, 4).join(', ') + ')' : ''), gDefault, '저장');
+    if (gRaw === null || gRaw === undefined) return;
+    const group = ((gRaw && typeof gRaw === 'object' ? gRaw.value : gRaw) || '').trim() || gDefault;
+    qpLastGroup = group;
+    const p = { name, group, text: $('textColor').value, accent: $('accentColor').value };
     if (linked) {
       p.char = curChar;                    // 목록에서 찾을 때 쓰는 이름(글자만)
       p.charRaw = charInput.value;          // 서식까지 그대로 되살리기 위한 원문
@@ -3734,7 +3854,7 @@
     // 색뿐 아니라 지금의 모든 설정(글씨체·여백·꾸미기 등)을 함께 담는다.
     // 기본 내장 테마에는 settings 가 없어서 예전처럼 색만 바뀐다.
     p.settings = captureSettings();
-    let list = [p].concat(data.presets.filter(x => x.name !== name));
+    let list = [p].concat(data.presets.filter(x => !(x.name === name && qpGroupOf(x) === group)));
     const note0 = p.char ? ('"' + p.char + '" 전용 테마로 ') : '';
     // 배경 이미지가 크면 저장 용량을 넘길 수 있어 그때만 이미지를 뺀다
     let note = '';
@@ -10002,6 +10122,7 @@
   // 카드·묶음 옆에 뜨는 작은 메뉴
   let tkpMenuEl = null;
   function tkpCloseMenu() { if (tkpMenuEl) { tkpMenuEl.remove(); tkpMenuEl = null; } }
+  window.tkpMenu = (a, it) => tkpMenu(a, it);
   function tkpMenu(anchor, items) {
     tkpCloseMenu();
     const m = document.createElement('div');
