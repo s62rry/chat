@@ -1201,7 +1201,7 @@
         <path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>
       </svg>
     </button>
-    <button class="icon" id="txtAllBtn" title="모든 채팅을 txt 로 저장 (방마다 파일 하나, 폴더별로 나눠 zip)">
+    <button class="icon" id="txtAllBtn" title="모든 채팅을 글로 저장 (txt · epub, 폴더별로 나눠 zip)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>
       </svg>
@@ -1272,7 +1272,7 @@
           <path d="M4 4h16v12H4z"/><path d="M8 20h8M12 16v4"/><path d="m9 9 2 2 4-4"/>
         </svg>
       </button>
-      <button class="icon" id="txtBtn" title="이 채팅을 txt 로 저장 (꾸밈 빼고 내용만)">
+      <button class="icon" id="txtBtn" title="이 채팅을 글로 저장 (txt · epub)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/>
         </svg>
@@ -3192,7 +3192,7 @@ function openFolderEditModal(fid) {
     folderColorPickerHtml(cur),
     [
       { label: "폴더 삭제", id: "m_fdel", danger: true },
-      { label: "📄 txt로 받기", id: "m_ftxt" },
+      { label: "📄 글로 받기", id: "m_ftxt" },
       { label: "취소", close: true },
       { label: "저장", primary: true, id: "m_fsave" }
     ]);
@@ -3642,43 +3642,106 @@ function jsxToTxtLines(src) {
   }
   return out;
 }
-function turnToTxt(chat, turn, idx) {
+// 턴 하나를 조각으로: {k:"user"|"char"|"code", text} · {k:"box", title, lines}. opts.plain 이면 상태창·위젯·트래커 뺌
+function turnParts(turn, opts) {
+  opts = opts || {};
   let blocks;
   try { blocks = parseLog(turn.raw); } catch (e) { blocks = [{ kind: "prose", text: turn.raw || "" }]; }
   const parts = [];
-  let userOpen = false;
   for (const b of blocks) {
     try {
-      if (b.kind === "user") { parts.push("[유저]\n" + b.text.trim()); userOpen = true; }
-      else if (b.kind === "prose") {
-        const t = b.text.trim();
-        if (!t) continue;
-        parts.push((userOpen ? "[캐릭터]\n" : "") + t);
-        userOpen = false;
-      }
-      else if (b.kind === "code") parts.push(b.text.trim());
-      else if (b.kind === "status") parts.push(txtBox("상태창: " + (b.data.summary || "상태창"), b.data.items.map(it =>
-        it.type === "kv" ? it.key + ": " + it.val : it.type === "li" ? "· " + it.text : it.text || "")));
+      if (b.kind === "user") { const t = b.text.trim(); if (t) parts.push({ k: "user", text: t }); }
+      else if (b.kind === "prose") { const t = b.text.trim(); if (t) parts.push({ k: "char", text: t }); }
+      else if (b.kind === "code") { const t = b.text.trim(); if (t) parts.push({ k: "code", text: t }); }
+      else if (opts.plain) continue;
+      else if (b.kind === "status") parts.push({ k: "box", title: "상태창: " + (b.data.summary || "상태창"), lines: b.data.items.map(it =>
+        it.type === "kv" ? it.key + ": " + it.val : it.type === "li" ? "· " + it.text : it.text || "") });
       else if (b.kind === "htmlstatus") {
         const ls = htmlToTxtLines(b.html);
-        if (!ls.length) continue;
-        const nm = isHtmlDoc(b.html) ? "트래커" : "상태창";
-        parts.push(txtBox(nm, ls));
+        if (ls.length) parts.push({ k: "box", title: isHtmlDoc(b.html) ? "트래커" : "상태창", lines: ls });
       }
       else if (b.kind === "jsx") {
         const nm = (b.src.match(/^\s*<\s*([A-Za-z_$][\w$]*)/) || [])[1] || "위젯";
-        parts.push(txtBox("위젯: " + nm, jsxToTxtLines(b.src)));
+        parts.push({ k: "box", title: "위젯: " + nm, lines: jsxToTxtLines(b.src) });
       }
     } catch (e) { console.warn("txt block failed", e); }
   }
-  const no = effectiveTurnNo(chat, turn);
-  return "===== TURN " + (no != null ? no : idx + 1) + " =====\n" + parts.join("\n\n");
+  return parts;
 }
-function chatToTxt(chat) {
+function turnLabel(chat, turn, idx) { const no = effectiveTurnNo(chat, turn); return "TURN " + (no != null ? no : idx + 1); }
+function turnToTxt(chat, turn, idx, opts) {
+  const out = [];
+  let prev = null;
+  for (const p of turnParts(turn, opts)) {
+    if (p.k === "box") out.push(txtBox(p.title, p.lines));
+    else out.push((p.k === "user" ? "[유저]\n" : p.k === "char" && prev === "user" ? "[캐릭터]\n" : "") + p.text);
+    prev = p.k;
+  }
+  return "===== " + turnLabel(chat, turn, idx) + " =====\n" + out.join("\n\n");
+}
+function chatHead(chat) {
   const d = new Date(chat.createdAt || Date.now());
-  const head = (chat.emoji || "💬") + " " + chat.title + "\n" + chat.turns.length + "턴 · " +
-    d.getFullYear() + "." + (d.getMonth() + 1) + "." + d.getDate() + " 만듦 · 로그 보관함에서 저장\n";
-  return head + "\n" + sortedTurns(chat).map((t, i) => turnToTxt(chat, t, i)).join("\n\n\n") + "\n";
+  return chat.turns.length + "턴 · " + d.getFullYear() + "." + (d.getMonth() + 1) + "." + d.getDate() + " 만듦 · 로그 보관함에서 저장";
+}
+function chatToTxt(chat, opts) {
+  const head = (chat.emoji || "💬") + " " + chat.title + "\n" + chatHead(chat) + "\n";
+  return head + "\n" + sortedTurns(chat).map((t, i) => turnToTxt(chat, t, i, opts)).join("\n\n\n") + "\n";
+}
+// EPUB — 30턴씩 한 파일, 목차는 턴마다
+function chatToEpub(chat, opts) {
+  const x = t => String(t == null ? "" : t).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const inl = line => x(line).split("*").map((seg, i, a) => i % 2 && i < a.length - 1 ? '<span class="nar">' + seg + "</span>" : (i % 2 ? "*" : "") + seg).join("");
+  const prose = t => t.split(/\n{2,}/).map(pp => pp.trim()).filter(Boolean).map(pp => "<p>" + pp.split("\n").map(inl).join("<br/>") + "</p>").join("");
+  const title = (chat.emoji ? chat.emoji + " " : "") + (chat.title || "채팅");
+  const turns = sortedTurns(chat);
+  const files = [], nav = [];
+  const page = (t, body) => '<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="ko" lang="ko"><head><meta charset="utf-8"/><title>' + x(t) + '</title><link rel="stylesheet" href="style.css"/></head><body>' + body + "</body></html>";
+  files.push({ id: "title", href: "title.xhtml", text: page(title, '<div class="cover"><h1>' + x(title) + '</h1><p class="meta">' + x(chatHead(chat)) + "</p></div>") });
+  nav.push('<li><a href="title.xhtml">' + x(title) + "</a></li>");
+  for (let s = 0; s < turns.length; s += 30) {
+    const href = "c" + String(s / 30 + 1).padStart(3, "0") + ".xhtml";
+    let body = "";
+    for (let i = s; i < Math.min(turns.length, s + 30); i++) {
+      const lb = turnLabel(chat, turns[i], i), id = "t" + i;
+      nav.push('<li><a href="' + href + "#" + id + '">' + x(lb) + "</a></li>");
+      body += '<section id="' + id + '"><h2>' + x(lb) + "</h2>";
+      for (const p of turnParts(turns[i], opts)) {
+        if (p.k === "user") body += '<div class="user"><p class="who">유저</p>' + prose(p.text) + "</div>";
+        else if (p.k === "char") body += prose(p.text);
+        else if (p.k === "code") body += '<pre class="code">' + x(p.text) + "</pre>";
+        else body += '<div class="box"><p class="bt">' + x(p.title) + '</p><p class="bl">' +
+          p.lines.flatMap(l => String(l).split(/\r?\n/)).map(l => { const m = l.match(/^\s*/)[0].length; return "&#160;".repeat(m) + x(l.trim()); }).join("<br/>") + "</p></div>";
+      }
+      body += "</section>";
+    }
+    files.push({ id: "c" + (s / 30 + 1), href, text: page(title, body) });
+  }
+  const uidv = "lk-" + String(chat.id || uid()).replace(/[^\w-]/g, "");
+  const mod = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  const css = "body{font-family:serif;line-height:1.8;margin:0 4%;}h1{font-size:1.5em;margin:30% 0 .5em;text-align:center}.meta{text-align:center;color:#888;font-size:.85em}" +
+    "h2{font-size:.85em;color:#2f6df0;letter-spacing:.05em;margin:2.2em 0 .8em;border-bottom:1px solid #dde3ee;padding-bottom:.2em}p{margin:0 0 .8em}" +
+    ".nar{color:#6b7280;font-style:italic}.user{border-left:3px solid #9db4e8;padding:.1em 0 .1em .8em;margin:0 0 1em;color:#33415c}.who{font-size:.75em;font-weight:bold;color:#2f6df0;margin:0 0 .2em}" +
+    ".box{border:1px solid #d6dbe6;border-radius:6px;background:#f5f7fb;padding:.5em .8em;margin:1em 0;font-size:.85em;line-height:1.6}.bt{font-weight:bold;margin:0 0 .3em}.bl{margin:0}" +
+    ".code{white-space:pre-wrap;font-size:.8em;background:#f4f5f8;padding:.6em}";
+  const opf = '<?xml version="1.0" encoding="utf-8"?>\n<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bid" xml:lang="ko"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/">' +
+    '<dc:identifier id="bid">' + x(uidv) + "</dc:identifier><dc:title>" + x(title) + "</dc:title><dc:language>ko</dc:language><dc:creator>로그 보관함</dc:creator>" +
+    '<meta property="dcterms:modified">' + mod + "</meta></metadata><manifest>" +
+    '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/><item id="css" href="style.css" media-type="text/css"/>' +
+    files.map(f => '<item id="' + f.id + '" href="' + f.href + '" media-type="application/xhtml+xml"/>').join("") +
+    '</manifest><spine toc="ncx">' + files.map(f => '<itemref idref="' + f.id + '"/>').join("") + "</spine></package>";
+  const navX = page("목차", '<nav epub:type="toc" id="toc"><h1>목차</h1><ol>' + nav.join("") + "</ol></nav>");
+  let po = 0;
+  const ncx = '<?xml version="1.0" encoding="utf-8"?>\n<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head><meta name="dtb:uid" content="' + x(uidv) + '"/></head><docTitle><text>' + x(title) + "</text></docTitle><navMap>" +
+    nav.map(li => { const m = li.match(/href="([^"]+)">([\s\S]*?)<\/a>/); po++; return '<navPoint id="n' + po + '" playOrder="' + po + '"><navLabel><text>' + m[2] + '</text></navLabel><content src="' + m[1] + '"/></navPoint>'; }).join("") + "</navMap></ncx>";
+  return makeZipBytes([
+    { name: "mimetype", text: "application/epub+zip" },
+    { name: "META-INF/container.xml", text: '<?xml version="1.0" encoding="utf-8"?>\n<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>' },
+    { name: "OEBPS/content.opf", text: opf },
+    { name: "OEBPS/nav.xhtml", text: navX },
+    { name: "OEBPS/toc.ncx", text: ncx },
+    { name: "OEBPS/style.css", text: css },
+    ...files.map(f => ({ name: "OEBPS/" + f.href, text: f.text }))
+  ]);
 }
 function txtFileName(chat) {
   return ((chat.emoji ? chat.emoji + " " : "") + (chat.title || "채팅")).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_").trim().slice(0, 80) || "채팅";
@@ -3693,11 +3756,47 @@ function downloadBlob(blob, name) {
 function saveChatTxt() {
   const chat = getActive();
   if (!chat || !chat.turns.length) { toast("저장할 로그가 없어요"); return; }
-  downloadBlob(new Blob(["\ufeff" + chatToTxt(chat)], { type: "text/plain;charset=utf-8" }), txtFileName(chat) + ".txt");
-  toast("txt 로 저장했어요");
+  openSaveTextModal([chat], null, false);
+}
+// 저장 창: 형식(txt/epub) + 상태창 빼기. 방 하나면 파일 하나, 여럿이면 zip
+function openSaveTextModal(chats, zipBase, byFolder) {
+  chats = chats.filter(c => c.turns && c.turns.length);
+  if (!chats.length) { toast("저장할 채팅이 없어요"); return; }
+  const isEpub = lsGetSafe("lk_svFmt") === "epub", plain = lsGetSafe("lk_svPlain") === "1";
+  const card = (v, ic, t, d, on) => '<label class="ex-mode"><input type="radio" name="svFmt" value="' + v + '"' + (on ? " checked" : "") + '><span class="ex-mode-card">' +
+    '<span class="ex-mode-top"><span class="ex-mode-ic">' + ic + "</span>" + t + '</span><span class="ex-mode-desc">' + d + "</span></span></label>";
+  const what = chats.length === 1 ? "‘" + escapeHtml(chats[0].title) + "’ " + chats[0].turns.length + "턴" : chats.length + "개 채팅 · 방마다 파일 하나씩 zip 으로" + (byFolder ? " (폴더별로 나눠서)" : "");
+  openModal("글로 저장하기",
+    '<p class="desc">' + what + "</p>" +
+    '<div class="ex-sec"><div class="ex-label">형식</div><div class="ex-modes">' +
+    card("txt", "📄", "txt", "어디서나 열리는 글 파일. 꾸밈 없이 내용만", !isEpub) +
+    card("epub", "📖", "epub", "전자책 앱(리디·구글 북스·애플 북스 등)에서 책처럼. 턴마다 목차", isEpub) +
+    "</div></div>" +
+    '<div class="ex-sec"><div class="ex-label">내용</div><div class="ex-opts">' +
+    '<label class="ex-opt"><span class="ex-opt-txt">대화만 (상태창·위젯·트래커 빼기)<small>끄면 상태창 내용도 글로 풀어서 같이 넣어요</small></span><input type="checkbox" id="svPlain"' + (plain ? " checked" : "") + '><span class="ex-sw"></span></label>' +
+    "</div></div>",
+    [{ label: "취소", close: true }, { label: "저장", primary: true, id: "svGo" }]);
+  $("svGo").addEventListener("click", () => {
+    const fmt = (document.querySelector('input[name="svFmt"]:checked') || {}).value === "epub" ? "epub" : "txt";
+    const opts = { plain: $("svPlain").checked };
+    lsSetSafe("lk_svFmt", fmt); lsSetSafe("lk_svPlain", opts.plain ? "1" : "0");
+    closeModal();
+    const one = c => {
+      try { return fmt === "epub" ? chatToEpub(c, opts) : new TextEncoder().encode("﻿" + chatToTxt(c, opts)); }
+      catch (e) { console.warn("save failed", e); return new TextEncoder().encode("﻿" + c.turns.map(t => t.raw).join("\n\n---\n\n")); }
+    };
+    const type = fmt === "epub" ? "application/epub+zip" : "text/plain;charset=utf-8";
+    if (!zipBase && chats.length === 1) {
+      downloadBlob(new Blob([one(chats[0])], { type }), txtFileName(chats[0]) + "." + fmt);
+      toast(fmt + " 로 저장했어요");
+      return;
+    }
+    saveTextZip(chats, zipBase || "로그보관함", byFolder, fmt, one);
+  });
 }
 // 압축 없는 zip (파일 이름 UTF-8)
-function makeZip(files) {
+function makeZip(files) { return new Blob([makeZipBytes(files)], { type: "application/zip" }); }
+function makeZipBytes(files) {
   const enc = new TextEncoder();
   const crcT = makeZip.t || (makeZip.t = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; }));
   const crc = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = crcT[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
@@ -3707,7 +3806,7 @@ function makeZip(files) {
   const chunks = [], cen = [];
   let off = 0;
   for (const f of files) {
-    const nm = enc.encode(f.name), data = enc.encode(f.text), c = crc(data);
+    const nm = enc.encode(f.name), data = f.data || enc.encode(f.text), c = crc(data);
     const h = new DataView(new ArrayBuffer(30));
     h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
     h.setUint16(10, dt, true); h.setUint16(12, dd, true); h.setUint32(14, c, true);
@@ -3725,32 +3824,32 @@ function makeZip(files) {
   const z = new DataView(new ArrayBuffer(22));
   z.setUint32(0, 0x06054b50, true); z.setUint16(8, files.length, true); z.setUint16(10, files.length, true);
   z.setUint32(12, cenSize, true); z.setUint32(16, off, true);
-  return new Blob([...chunks, ...cen, z.buffer], { type: "application/zip" });
+  const all = [...chunks, ...cen, z.buffer].map(p => p instanceof ArrayBuffer ? new Uint8Array(p) : p);
+  const out = new Uint8Array(all.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of all) { out.set(p, o); o += p.length; }
+  return out;
 }
-// chats 를 방마다 txt 하나씩 zip 으로. 폴더 있는 방은 zip 안에서도 폴더 이름 아래로 (byFolder)
-function saveTxtZip(chats, zipBase, byFolder) {
-  chats = chats.filter(c => c.turns && c.turns.length);
-  if (!chats.length) { toast("저장할 채팅이 없어요"); return; }
+// chats 를 방마다 파일 하나씩 zip 으로. 폴더 있는 방은 zip 안에서도 폴더 이름 아래로 (byFolder)
+function saveTextZip(chats, zipBase, byFolder, fmt, one) {
   const safe = t => String(t || "").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_").trim().slice(0, 60);
   const used = {}, files = [];
   for (const c of chats) {
-    let txt;
-    try { txt = chatToTxt(c); } catch (e) { console.warn("txt failed", e); txt = c.turns.map(t => t.raw).join("\n\n---\n\n"); }
     const f = byFolder && c.folderId && state.folders.find(x => x.id === c.folderId);
     const dir = f ? (safe(f.name) || "폴더") + "/" : "";
     let n = dir + txtFileName(c), k = n, i = 2;
     while (used[k]) k = n + " (" + (i++) + ")";
     used[k] = 1;
-    files.push({ name: k + ".txt", text: "﻿" + txt });
+    files.push({ name: k + "." + fmt, data: one(c) });
   }
   const d = new Date();
-  downloadBlob(makeZip(files), safe(zipBase) + "_txt_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + ".zip");
-  toast(files.length + "개 채팅을 txt 로 묶어 저장했어요");
+  downloadBlob(makeZip(files), safe(zipBase) + "_" + fmt + "_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + ".zip");
+  toast(files.length + "개 채팅을 " + fmt + " 로 묶어 저장했어요");
 }
-function saveAllTxtZip() { saveTxtZip(state.chats, "로그보관함", true); }
+function saveAllTxtZip() { openSaveTextModal(state.chats, "로그보관함", true); }
 function saveFolderTxtZip(fid) {
   const f = state.folders.find(x => x.id === fid);
-  if (f) saveTxtZip(state.chats.filter(c => c.folderId === fid), f.name || "폴더", false);
+  if (f) openSaveTextModal(state.chats.filter(c => c.folderId === fid), f.name || "폴더", false);
 }
 
 function exportAll() {
