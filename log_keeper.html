@@ -1201,6 +1201,11 @@
         <path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>
       </svg>
     </button>
+    <button class="icon" id="txtAllBtn" title="모든 채팅을 txt 로 저장 (방마다 파일 하나, zip)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>
+      </svg>
+    </button>
     <button class="icon" id="importBtn" title="불러오기 (백업 파일에서)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M2 8a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/>
@@ -1265,6 +1270,11 @@
       <button class="icon" id="tistoryBtn" title="티스토리용 내보내기 (상태창 디자인 포함 HTML)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 4h16v12H4z"/><path d="M8 20h8M12 16v4"/><path d="m9 9 2 2 4-4"/>
+        </svg>
+      </button>
+      <button class="icon" id="txtBtn" title="이 채팅을 txt 로 저장 (꾸밈 빼고 내용만)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/>
         </svg>
       </button>
       <button class="icon" id="copyAllBtn" title="전체 로그 복사">
@@ -3523,6 +3533,189 @@ function copyAll() {
   toast("전체 로그를 복사했어요");
 }
 
+/* ===== txt 백업 — 꾸밈은 빼고 내용만. 상태창·트래커·JSX 위젯은 ┌│└ 칸으로 ===== */
+function txtBox(title, lines) {
+  lines = (lines || []).map(l => String(l).replace(/\s+$/, "")).filter((l, i, a) => l.trim() || (i > 0 && a[i - 1].trim()));
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return "┌ " + title + "\n" + lines.map(l => "│ " + l).join("\n") + (lines.length ? "\n" : "") + "└";
+}
+// HTML → 줄 목록. 접힌 칸·탭(details)도 다 펼쳐서, 탭 이름은 [이름] 으로
+function htmlToTxtLines(html) {
+  const doc = new DOMParser().parseFromString(html || "", "text/html");
+  doc.querySelectorAll("style,script,template,noscript,svg,title,head").forEach(e => e.remove());
+  const BLOCK = /^(P|DIV|LI|TR|H[1-6]|TABLE|TBODY|THEAD|UL|OL|SECTION|ARTICLE|HEADER|FOOTER|BLOCKQUOTE|PRE|HR|DETAILS|SUMMARY|FIGURE|FIGCAPTION|DL|DT|DD|NAV|ASIDE|MAIN|FORM|FIELDSET)$/;
+  const out = [];
+  let cur = "", depth = 0;
+  const flush = () => { const t = cur.replace(/[ \t\u00a0]+/g, " ").trim(); if (t) out.push("  ".repeat(depth) + t); cur = ""; };
+  const walk = n => {
+    if (n.nodeType === 3) { cur += n.nodeValue.replace(/\s+/g, " "); return; }
+    if (n.nodeType !== 1) return;
+    const tag = n.tagName;
+    if (tag === "BR") { flush(); return; }
+    if (tag === "IMG") { const al = n.getAttribute("alt"); if (al) cur += "(" + al + ")"; return; }
+    if (tag === "TD" || tag === "TH") { cur += (cur.trim() ? "  " : ""); n.childNodes.forEach(walk); cur += " "; return; }
+    if (tag === "LI") { flush(); cur = "· "; n.childNodes.forEach(walk); flush(); return; }
+    if (tag === "DETAILS") {
+      flush();
+      const sm = [...n.children].find(c => c.tagName === "SUMMARY");
+      const st = sm ? sm.textContent.replace(/\s+/g, " ").trim() : "";
+      if (st) out.push("  ".repeat(depth) + "[" + st + "]");
+      if (st) depth++;
+      n.childNodes.forEach(c => { if (c !== sm) walk(c); });
+      flush();
+      if (st) depth--;
+      return;
+    }
+    const bl = BLOCK.test(tag);
+    if (bl) flush();
+    n.childNodes.forEach(walk);
+    if (bl) flush();
+  };
+  walk(doc.body);
+  flush();
+  return out.filter((l, i) => l !== out[i - 1]);
+}
+// JSX 값 → 줄 목록 (객체는 "키: 값", 배열은 "· 항목")
+function jsxValLines(v, ind) {
+  ind = ind || "";
+  if (v == null) return [];
+  if (typeof v !== "object") return [ind + String(v)];
+  const out = [];
+  if (Array.isArray(v)) {
+    v.forEach(x => {
+      if (x && typeof x === "object") { const sub = jsxValLines(x, ind + "  "); if (sub.length) { out.push(ind + "· " + sub[0].trim()); out.push(...sub.slice(1)); } }
+      else out.push(ind + "· " + String(x));
+    });
+  } else {
+    for (const k of Object.keys(v)) {
+      const x = v[k];
+      if (x && typeof x === "object") { out.push(ind + k + ":"); out.push(...jsxValLines(x, ind + "  ")); }
+      else out.push(ind + k + ": " + (x == null ? "" : String(x)));
+    }
+  }
+  return out;
+}
+function jsxToTxtLines(src) {
+  const tag = parseJsxTag(src);
+  if (!tag) return stripTags(src).split("\n").map(l => l.trim()).filter(Boolean);
+  const out = [];
+  const tryJson = t => { try { return JSON.parse(t); } catch (e) {} try { return JSON.parse(t.replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":').replace(/'([^'\\]*)'/g, '"$1"').replace(/,\s*([}\]])/g, "$1")); } catch (e) {} return undefined; };
+  for (const a of tag.attrs) {
+    if (a.kind === "bool") { out.push(a.name); continue; }
+    let v = a.value;
+    if (a.kind === "expr") { const j = tryJson(v.trim()); v = j !== undefined ? j : v.trim().replace(/^(["'`])([\s\S]*)\1$/, "$2"); }
+    else if (/^\s*[\[{]/.test(v)) { const j = tryJson(v); if (j !== undefined) v = j; }
+    if (v && typeof v === "object") { out.push(a.name + ":"); out.push(...jsxValLines(v, "  ")); }
+    else {
+      const ls = String(v).split("\n");
+      out.push(a.name + ": " + ls[0]);
+      ls.slice(1).forEach(l => out.push("  " + l));
+    }
+  }
+  return out;
+}
+function turnToTxt(chat, turn, idx) {
+  let blocks;
+  try { blocks = parseLog(turn.raw); } catch (e) { blocks = [{ kind: "prose", text: turn.raw || "" }]; }
+  const parts = [];
+  let userOpen = false;
+  for (const b of blocks) {
+    try {
+      if (b.kind === "user") { parts.push("[유저]\n" + b.text.trim()); userOpen = true; }
+      else if (b.kind === "prose") {
+        const t = b.text.trim();
+        if (!t) continue;
+        parts.push((userOpen ? "[캐릭터]\n" : "") + t);
+        userOpen = false;
+      }
+      else if (b.kind === "code") parts.push(b.text.trim());
+      else if (b.kind === "status") parts.push(txtBox("상태창: " + (b.data.summary || "상태창"), b.data.items.map(it =>
+        it.type === "kv" ? it.key + ": " + it.val : it.type === "li" ? "· " + it.text : it.text || "")));
+      else if (b.kind === "htmlstatus") {
+        const ls = htmlToTxtLines(b.html);
+        if (!ls.length) continue;
+        const nm = isHtmlDoc(b.html) ? "트래커" : "상태창";
+        parts.push(txtBox(nm, ls));
+      }
+      else if (b.kind === "jsx") {
+        const nm = (b.src.match(/^\s*<\s*([A-Za-z_$][\w$]*)/) || [])[1] || "위젯";
+        parts.push(txtBox("위젯: " + nm, jsxToTxtLines(b.src)));
+      }
+    } catch (e) { console.warn("txt block failed", e); }
+  }
+  const no = effectiveTurnNo(chat, turn);
+  return "===== TURN " + (no != null ? no : idx + 1) + " =====\n" + parts.join("\n\n");
+}
+function chatToTxt(chat) {
+  const d = new Date(chat.createdAt || Date.now());
+  const head = (chat.emoji || "💬") + " " + chat.title + "\n" + chat.turns.length + "턴 · " +
+    d.getFullYear() + "." + (d.getMonth() + 1) + "." + d.getDate() + " 만듦 · 로그 보관함에서 저장\n";
+  return head + "\n" + sortedTurns(chat).map((t, i) => turnToTxt(chat, t, i)).join("\n\n\n") + "\n";
+}
+function txtFileName(chat) {
+  return ((chat.emoji ? chat.emoji + " " : "") + (chat.title || "채팅")).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_").trim().slice(0, 80) || "채팅";
+}
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+function saveChatTxt() {
+  const chat = getActive();
+  if (!chat || !chat.turns.length) { toast("저장할 로그가 없어요"); return; }
+  downloadBlob(new Blob(["\ufeff" + chatToTxt(chat)], { type: "text/plain;charset=utf-8" }), txtFileName(chat) + ".txt");
+  toast("txt 로 저장했어요");
+}
+// 압축 없는 zip (파일 이름 UTF-8)
+function makeZip(files) {
+  const enc = new TextEncoder();
+  const crcT = makeZip.t || (makeZip.t = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; }));
+  const crc = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = crcT[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const d = new Date();
+  const dt = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xFFFF;
+  const dd = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xFFFF;
+  const chunks = [], cen = [];
+  let off = 0;
+  for (const f of files) {
+    const nm = enc.encode(f.name), data = enc.encode(f.text), c = crc(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+    h.setUint16(10, dt, true); h.setUint16(12, dd, true); h.setUint32(14, c, true);
+    h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, nm.length, true); h.setUint16(28, 0, true);
+    chunks.push(h.buffer, nm, data);
+    const e = new DataView(new ArrayBuffer(46));
+    e.setUint32(0, 0x02014b50, true); e.setUint16(4, 20, true); e.setUint16(6, 20, true); e.setUint16(8, 0x0800, true); e.setUint16(10, 0, true);
+    e.setUint16(12, dt, true); e.setUint16(14, dd, true); e.setUint32(16, c, true);
+    e.setUint32(20, data.length, true); e.setUint32(24, data.length, true); e.setUint16(28, nm.length, true);
+    e.setUint32(42, off, true);
+    cen.push(e.buffer, nm);
+    off += 30 + nm.length + data.length;
+  }
+  const cenSize = cen.reduce((n, x) => n + (x.byteLength != null ? x.byteLength : x.length), 0);
+  const z = new DataView(new ArrayBuffer(22));
+  z.setUint32(0, 0x06054b50, true); z.setUint16(8, files.length, true); z.setUint16(10, files.length, true);
+  z.setUint32(12, cenSize, true); z.setUint32(16, off, true);
+  return new Blob([...chunks, ...cen, z.buffer], { type: "application/zip" });
+}
+function saveAllTxtZip() {
+  const chats = state.chats.filter(c => c.turns && c.turns.length);
+  if (!chats.length) { toast("저장할 채팅이 없어요"); return; }
+  const used = {}, files = [];
+  for (const c of chats) {
+    let txt;
+    try { txt = chatToTxt(c); } catch (e) { console.warn("txt failed", e); txt = c.turns.map(t => t.raw).join("\n\n---\n\n"); }
+    let n = txtFileName(c), k = n, i = 2;
+    while (used[k]) k = n + " (" + (i++) + ")";
+    used[k] = 1;
+    files.push({ name: k + ".txt", text: "\ufeff" + txt });
+  }
+  const d = new Date();
+  downloadBlob(makeZip(files), "로그보관함_txt_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + ".zip");
+  toast(files.length + "개 채팅을 txt 로 묶어 저장했어요");
+}
+
 function exportAll() {
   if (!state.chats.length) { toast("내보낼 채팅이 없어요"); return; }
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
@@ -3693,6 +3886,8 @@ $("composerToggle").addEventListener("click", () => {
   $("composer").classList.toggle("collapsed");
 });
 $("copyAllBtn").addEventListener("click", copyAll);
+$("txtBtn").addEventListener("click", saveChatTxt);
+$("txtAllBtn").addEventListener("click", saveAllTxtZip);
 /* ===== 티스토리용 내보내기 =====
    채팅방을 글자색·상태창 디자인째로 HTML 하나로 묶는다. 티스토리 글쓰기의 HTML 모드에 붙여넣으면 그대로 보인다.
    JSX 상태창은 실제로 그린 뒤 계산된 스타일째로 굳혀서 넣는다 (화면에 펼쳐 둔 상태창은 펼친 모습 그대로). */
