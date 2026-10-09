@@ -1563,7 +1563,7 @@ async function compileJsxComponent(name, code) {
   jsxCachePut(k, out);
   return out;
 }
-let _jsxObs = null, _jsxSeq = 0, _jsxMsgBound = false;
+let _jsxObs = null, _jsxFar = null, _jsxSeq = 0, _jsxMsgBound = false;
 function hydrateJsxIn(root) {
   const slots = root.querySelectorAll(".jsx-slot:not([data-ready])");
   if (!slots.length) return;
@@ -1580,6 +1580,18 @@ function hydrateJsxIn(root) {
     _jsxObs = new IntersectionObserver(ents => {
       ents.forEach(en => { if (en.isIntersecting) { _jsxObs.unobserve(en.target); mountJsx(en.target); } });
     }, { rootMargin: "800px 0px" });
+    // 화면에서 멀리 벗어난 상태창은 내려놓는다 (같은 높이 빈칸으로) — 상태창마다 React 가 하나씩 떠 있어서,
+    // 긴 채팅을 쭉 내려 읽으면 메모리가 넘쳐 탭이 죽던 문제("페이지를 표시할 수 없음")
+    _jsxFar = new IntersectionObserver(ents => {
+      ents.forEach(en => {
+        const sl = en.target;
+        if (en.isIntersecting || !sl.querySelector("iframe")) return;
+        const h = sl.getBoundingClientRect().height;
+        _jsxFar.unobserve(sl);
+        sl.innerHTML = '<div class="jsx-loading" style="height:' + Math.max(40, Math.round(h)) + 'px"></div>';
+        _jsxObs.observe(sl);
+      });
+    }, { rootMargin: "3000px 0px" });
   }
   slots.forEach(sl => { sl.dataset.ready = "1"; if (_jsxObs) _jsxObs.observe(sl); else mountJsx(sl); });
 }
@@ -2025,8 +2037,12 @@ async function mountJsx(slot) {
     slot.innerHTML = '<div class="jsx-missing">' + escapeHtml(r.error) + '</div><div class="codeblock">' + escapeHtml(src.slice(0, 4000)) + "</div>";
     return;
   }
+  const keep = slot.firstElementChild && slot.firstElementChild.style.height;
   slot.innerHTML = "";
-  slot.appendChild(makeJsxFrame(r.doc));
+  const ifr = makeJsxFrame(r.doc);
+  if (keep) ifr.style.height = keep;
+  slot.appendChild(ifr);
+  if (_jsxFar) _jsxFar.observe(slot);
 }
 
 function parseLog(raw) {
