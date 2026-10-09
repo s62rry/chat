@@ -3582,7 +3582,9 @@ function htmlToTxtLines(html) {
 function looseJson(t) {
   t = String(t).trim();
   if (!/^[\[{]/.test(t)) return undefined;
-  const tries = [t, t.replace(/\r?\n/g, "\\n").replace(/\t/g, "\\t"), t.replace(/\\'/g, "'").replace(/\r?\n/g, "\\n")];
+  const tries = [t, t.replace(/\r?\n/g, "\\n").replace(/\t/g, "\\t"), t.replace(/\\'/g, "'").replace(/\r?\n/g, "\\n"),
+    // 티팟이 한 번 더 이스케이프해 둔 값 (\\" · 줄 끝 \) — 한 겹 벗긴다
+    t.replace(/\\\r?\n/g, "\\n").replace(/\\\\/g, "\\").replace(/\\'/g, "'").replace(/\r?\n/g, "\\n")];
   for (const x of tries) { try { return JSON.parse(x); } catch (e) {} }
   try { return JSON.parse(t.replace(/\r?\n/g, " ").replace(/([{,]\s*)([A-Za-z_$\uAC00-\uD7A3][\w$\uAC00-\uD7A3]*)\s*:/g, '$1"$2":').replace(/'([^'\\]*)'/g, '"$1"').replace(/,\s*([}\]])/g, "$1")); } catch (e) {}
   return undefined;
