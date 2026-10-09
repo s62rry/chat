@@ -3537,9 +3537,9 @@ function copyAll() {
 
 /* ===== txt 백업 — 꾸밈은 빼고 내용만. 상태창·트래커·JSX 위젯은 ┌│└ 칸으로 ===== */
 function txtBox(title, lines) {
-  lines = (lines || []).map(l => String(l).replace(/\s+$/, "")).filter((l, i, a) => l.trim() || (i > 0 && a[i - 1].trim()));
+  lines = (lines || []).flatMap(l => String(l).split(/\r?\n/)).map(l => l.replace(/\s+$/, "")).filter((l, i, a) => l.trim() || (i > 0 && a[i - 1].trim()));
   while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-  return "┌ " + title + "\n" + lines.map(l => "│ " + l).join("\n") + (lines.length ? "\n" : "") + "└";
+  return "┌ " + title + "\n" + lines.map(l => l.trim() ? "│ " + l : "│").join("\n") + (lines.length ? "\n" : "") + "└";
 }
 // HTML → 줄 목록. 접힌 칸·탭(details)도 다 펼쳐서, 탭 이름은 [이름] 으로
 function htmlToTxtLines(html) {
@@ -3578,21 +3578,40 @@ function htmlToTxtLines(html) {
   return out.filter((l, i) => l !== out[i - 1]);
 }
 // JSX 값 → 줄 목록 (객체는 "키: 값", 배열은 "· 항목")
+// 느슨한 JSON 읽기 — 문자열 안 진짜 줄바꿈, \' , 따옴표 없는 키, 작은따옴표, 끝 쉼표까지 봐준다
+function looseJson(t) {
+  t = String(t).trim();
+  if (!/^[\[{]/.test(t)) return undefined;
+  const tries = [t, t.replace(/\r?\n/g, "\\n").replace(/\t/g, "\\t"), t.replace(/\\'/g, "'").replace(/\r?\n/g, "\\n")];
+  for (const x of tries) { try { return JSON.parse(x); } catch (e) {} }
+  try { return JSON.parse(t.replace(/\r?\n/g, " ").replace(/([{,]\s*)([A-Za-z_$\uAC00-\uD7A3][\w$\uAC00-\uD7A3]*)\s*:/g, '$1"$2":').replace(/'([^'\\]*)'/g, '"$1"').replace(/,\s*([}\]])/g, "$1")); } catch (e) {}
+  return undefined;
+}
+// JSX 값 → 줄 목록 (객체는 "키: 값", 배열은 "· 항목", 여러 줄 글은 키 아래로 들여서)
 function jsxValLines(v, ind) {
   ind = ind || "";
-  if (v == null) return [];
-  if (typeof v !== "object") return [ind + String(v)];
+  if (typeof v === "string") { const j = looseJson(v); if (j !== undefined && typeof j === "object") v = j; }
+  if (v == null || v === "") return [];
+  if (typeof v !== "object") return String(v).split(/\r?\n/).map(l => ind + l.trim()).filter(l => l.trim());
   const out = [];
   if (Array.isArray(v)) {
     v.forEach(x => {
-      if (x && typeof x === "object") { const sub = jsxValLines(x, ind + "  "); if (sub.length) { out.push(ind + "· " + sub[0].trim()); out.push(...sub.slice(1)); } }
-      else out.push(ind + "· " + String(x));
+      const sub = jsxValLines(x, ind + "  ");
+      if (sub.length) { out.push(ind + "· " + sub[0].trim()); out.push(...sub.slice(1)); }
     });
   } else {
     for (const k of Object.keys(v)) {
-      const x = v[k];
-      if (x && typeof x === "object") { out.push(ind + k + ":"); out.push(...jsxValLines(x, ind + "  ")); }
-      else out.push(ind + k + ": " + (x == null ? "" : String(x)));
+      let x = v[k];
+      if (typeof x === "string") { const j = looseJson(x); if (j !== undefined && typeof j === "object") x = j; }
+      if (x && typeof x === "object") {
+        const sub = jsxValLines(x, ind + "  ");
+        if (!sub.length) out.push(ind + k + ": 없음");
+        else { out.push(ind + k + ":"); out.push(...sub); }
+      } else {
+        const ls = String(x == null ? "" : x).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (ls.length <= 1) out.push(ind + k + ": " + (ls[0] || "-"));
+        else { out.push(ind + k + ":"); ls.forEach(l => out.push(ind + "  " + l)); }
+      }
     }
   }
   return out;
@@ -3601,18 +3620,23 @@ function jsxToTxtLines(src) {
   const tag = parseJsxTag(src);
   if (!tag) return stripTags(src).split("\n").map(l => l.trim()).filter(Boolean);
   const out = [];
-  const tryJson = t => { try { return JSON.parse(t); } catch (e) {} try { return JSON.parse(t.replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":').replace(/'([^'\\]*)'/g, '"$1"').replace(/,\s*([}\]])/g, "$1")); } catch (e) {} return undefined; };
+  let lastSec = false;
   for (const a of tag.attrs) {
     if (a.kind === "bool") { out.push(a.name); continue; }
     let v = a.value;
-    if (a.kind === "expr") { const j = tryJson(v.trim()); v = j !== undefined ? j : v.trim().replace(/^(["'`])([\s\S]*)\1$/, "$2"); }
-    else if (/^\s*[\[{]/.test(v)) { const j = tryJson(v); if (j !== undefined) v = j; }
-    if (v && typeof v === "object") { out.push(a.name + ":"); out.push(...jsxValLines(v, "  ")); }
-    else {
-      const ls = String(v).split("\n");
-      out.push(a.name + ": " + ls[0]);
-      ls.slice(1).forEach(l => out.push("  " + l));
+    if (a.kind === "expr") {
+      v = v.trim();
+      const j = looseJson(v);
+      if (j !== undefined) v = j;
+      else v = v.replace(/^(["'`])([\s\S]*)\1$/, "$2").replace(/\\n/g, "\n").replace(/\\(["'`])/g, "$1");
     }
+    const lines = jsxValLines(v, "  ");
+    if (!lines.length) continue;
+    const sec = (v && typeof v === "object") || lines.length > 1;
+    if (out.length && (sec || lastSec)) out.push("");
+    lastSec = sec;
+    if (sec) { out.push("▸ " + a.name); out.push(...lines); }
+    else out.push(a.name + ": " + lines[0].trim());
   }
   return out;
 }
