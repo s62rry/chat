@@ -1201,7 +1201,7 @@
         <path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>
       </svg>
     </button>
-    <button class="icon" id="txtAllBtn" title="모든 채팅을 txt 로 저장 (방마다 파일 하나, zip)">
+    <button class="icon" id="txtAllBtn" title="모든 채팅을 txt 로 저장 (방마다 파일 하나, 폴더별로 나눠 zip)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>
       </svg>
@@ -3192,10 +3192,12 @@ function openFolderEditModal(fid) {
     folderColorPickerHtml(cur),
     [
       { label: "폴더 삭제", id: "m_fdel", danger: true },
+      { label: "📄 txt로 받기", id: "m_ftxt" },
       { label: "취소", close: true },
       { label: "저장", primary: true, id: "m_fsave" }
     ]);
   const getColor = bindFolderColorPicker(cur);
+  $("m_ftxt").addEventListener("click", () => saveFolderTxtZip(fid));
   $("m_fsave").addEventListener("click", () => {
     const name = $("m_fname").value.trim();
     if (!name) { toast("폴더 이름을 입력해 주세요"); return; }
@@ -3699,21 +3701,30 @@ function makeZip(files) {
   z.setUint32(12, cenSize, true); z.setUint32(16, off, true);
   return new Blob([...chunks, ...cen, z.buffer], { type: "application/zip" });
 }
-function saveAllTxtZip() {
-  const chats = state.chats.filter(c => c.turns && c.turns.length);
+// chats 를 방마다 txt 하나씩 zip 으로. 폴더 있는 방은 zip 안에서도 폴더 이름 아래로 (byFolder)
+function saveTxtZip(chats, zipBase, byFolder) {
+  chats = chats.filter(c => c.turns && c.turns.length);
   if (!chats.length) { toast("저장할 채팅이 없어요"); return; }
+  const safe = t => String(t || "").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_").trim().slice(0, 60);
   const used = {}, files = [];
   for (const c of chats) {
     let txt;
     try { txt = chatToTxt(c); } catch (e) { console.warn("txt failed", e); txt = c.turns.map(t => t.raw).join("\n\n---\n\n"); }
-    let n = txtFileName(c), k = n, i = 2;
+    const f = byFolder && c.folderId && state.folders.find(x => x.id === c.folderId);
+    const dir = f ? (safe(f.name) || "폴더") + "/" : "";
+    let n = dir + txtFileName(c), k = n, i = 2;
     while (used[k]) k = n + " (" + (i++) + ")";
     used[k] = 1;
-    files.push({ name: k + ".txt", text: "\ufeff" + txt });
+    files.push({ name: k + ".txt", text: "﻿" + txt });
   }
   const d = new Date();
-  downloadBlob(makeZip(files), "로그보관함_txt_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + ".zip");
+  downloadBlob(makeZip(files), safe(zipBase) + "_txt_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + ".zip");
   toast(files.length + "개 채팅을 txt 로 묶어 저장했어요");
+}
+function saveAllTxtZip() { saveTxtZip(state.chats, "로그보관함", true); }
+function saveFolderTxtZip(fid) {
+  const f = state.folders.find(x => x.id === fid);
+  if (f) saveTxtZip(state.chats.filter(c => c.folderId === fid), f.name || "폴더", false);
 }
 
 function exportAll() {
