@@ -3695,7 +3695,7 @@ function chatToTxt(chat, opts) {
 // EPUB — 30턴씩 한 파일, 목차는 턴마다
 function chatToEpub(chat, opts) {
   const x = t => String(t == null ? "" : t).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const inl = line => x(line).split("*").map((seg, i, a) => (i % 2 && i === a.length - 1 ? "*" : "") + seg).join("");
+  const inl = line => x(line).split("*").map((seg, i, a) => i % 2 && i < a.length - 1 ? '<span class="nar">' + seg + "</span>" : (i % 2 ? "*" : "") + seg).join("");
   const prose = t => t.split(/\n{2,}/).map(pp => pp.trim()).filter(Boolean).map(pp => "<p>" + pp.split("\n").map(inl).join("<br/>") + "</p>").join("");
   const title = (chat.emoji ? chat.emoji + " " : "") + (chat.title || "채팅");
   const turns = sortedTurns(chat);
@@ -3727,7 +3727,7 @@ function chatToEpub(chat, opts) {
   const mod = new Date().toISOString().replace(/\.\d+Z$/, "Z");
   const css = "body{font-family:serif;line-height:1.8;margin:0 4%;}h1{font-size:1.5em;margin:30% 0 .5em;text-align:center}.meta{text-align:center;color:#888;font-size:.85em}" +
     "h2{font-size:.85em;color:#2f6df0;letter-spacing:.05em;margin:2.2em 0 .8em;border-bottom:1px solid #dde3ee;padding-bottom:.2em}p{margin:0 0 .8em}" +
-    ".user{border-left:3px solid #9db4e8;padding:.1em 0 .1em .8em;margin:0 0 1em}.user p:last-child{margin-bottom:0}" +
+    ".nar{color:#6b7280}.user{border-left:3px solid #9db4e8;padding:.1em 0 .1em .8em;margin:0 0 1em}.user p:last-child{margin-bottom:0}" +
     ".box{border:1px solid #d6dbe6;border-radius:6px;background:#f5f7fb;padding:.5em .8em;margin:1em 0;font-size:.85em;line-height:1.6}.bt{font-weight:bold;margin:0 0 .3em}.bl{margin:0}" +
     ".code{white-space:pre-wrap;font-size:.8em;background:#f4f5f8;padding:.6em}.cv{margin:0;padding:0;text-align:center}.cv img{max-width:100%;max-height:100%}";
   const opf = '<?xml version="1.0" encoding="utf-8"?>\n<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bid" xml:lang="ko"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/">' +
