@@ -2278,12 +2278,17 @@
           </span>
         </label>
         <div id="bookOpts" style="display:none; margin-top:6px;">
+          <label class="field-label">카드 가로 폭 (원래 카드의 몇 배)</label>
+          <div class="slider-row">
+            <input type="range" id="bookWidthRange" min="120" max="200" step="10" value="160">
+            <span class="slider-val" id="bookWidthVal">×1.6</span>
+          </div>
           <label class="field-label">단 사이 간격</label>
           <div class="slider-row">
             <input type="range" id="bookGapRange" min="8" max="120" value="32">
             <span class="slider-val" id="bookGapVal">32px</span>
           </div>
-          <div class="hint">카드가 옆으로 두 배 넓어지고(1:1 → 2:1), 글이 왼쪽 단 → 오른쪽 단으로 이어져요.</div>
+          <div class="hint">카드가 옆으로 넓어지고, 글이 왼쪽 단 → 오른쪽 단으로 이어져요. 높이는 글 길이에 맞춰져서 위아래엔 '카드 여백' 만큼만 남아요.</div>
         </div>
       </div>
       <div class="field-group" style="margin-top:14px;">
@@ -5554,12 +5559,13 @@
     const pvs = card.closest('.preview-stack');
     let mul = 1;
     if (two && pvs) {
-      mul = 2;
+      // 원래 카드보다 몇 배 넓게 (1.2~2배) — 두 단이 들어갈 만큼만 넓히면 단이 적당히 좁아진다
+      mul = Math.max(1.2, Math.min(2, (parseInt($('bookWidthRange').value, 10) || 160) / 100));
       const par = pvs.parentElement;
       const ps = par ? getComputedStyle(par) : null;
       const avail = par ? par.clientWidth - parseFloat(ps.paddingLeft) - parseFloat(ps.paddingRight) : 540;
       const base = Math.max(260, Math.min(540, avail));
-      pvs.style.maxWidth = pvs.style.width = (base * 2) + 'px';
+      pvs.style.maxWidth = pvs.style.width = Math.round(base * mul) + 'px';
       pvs.style.flexShrink = '0';
     } else if (pvs) { pvs.style.maxWidth = pvs.style.width = pvs.style.flexShrink = ''; }
     card.style.width = '100%';
@@ -5568,7 +5574,8 @@
     if (window.__spreadLockW) card.style.maxWidth = Math.min(r.w * mul, window.__spreadLockW) + 'px';
     card.style.width = '100%';
     card.style.height = 'auto';
-    card.style.aspectRatio = (state.ratio === 'fit' && !state.vertical) ? 'auto' : (r.w * mul) + ' / ' + r.h;
+    // 2단은 높이를 글에 맞춘다 — 정해진 비율이면 위아래에 빈 띠가 크게 남아서
+    card.style.aspectRatio = ((state.ratio === 'fit' || two) && !state.vertical) ? 'auto' : (r.w * mul) + ' / ' + r.h;
 
     // 본문 크기 = 슬라이더 크기 × 글씨체 보정 배율
     const realSize = size * fontScale;
@@ -6026,7 +6033,7 @@
       panelColor: '#000000', panelOpacityRange: 35,
       panelPadRange: 22, panelRadiusRange: 8,
       panelBorderRange: 0, panelBorderColor: '#ffffff', cornerColor: '#ffffff',
-      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18, imgWidthRange: 100, bookGapRange: 32,
+      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18, imgWidthRange: 100, bookGapRange: 32, bookWidthRange: 160,
       shX: 0, shY: 2, shBlur: 8, shColor: '#000000', shAlpha: 45
     };
 
@@ -6138,12 +6145,17 @@
   function applyBook() {
     const on = !!state.book && !state.vertical;
     card.classList.toggle('book', on);
+    $('bookWidthVal').textContent = '×' + ((parseInt($('bookWidthRange').value, 10) || 160) / 100).toFixed(1);
     const g = parseInt($('bookGapRange').value, 10) || 32;
     $('bookGapVal').textContent = g + 'px';
     if (on) card.style.setProperty('--book-gap', g + 'px');
   }
   window.addEventListener('resize', () => { if (state.book) applyStyle(); });
   $('bookGapRange').addEventListener('input', () => { applyBook(); });
+  $('bookWidthRange').addEventListener('input', () => {
+    $('bookWidthVal').textContent = '×' + (parseInt($('bookWidthRange').value, 10) / 100).toFixed(1);
+    applyStyle(); renderCard();
+  });
   function syncBookUI() {
     document.querySelectorAll('#bookSeg button').forEach(b =>
       b.classList.toggle('active', (b.dataset.book === '1') === !!state.book));
@@ -7718,7 +7730,7 @@
       'shX','shY','shBlur','shColor','shAlpha',
       'dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange',
       'offsetRange','offsetXRange','indentRange','sepWidthRange',
-      'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange','imgWidthRange','bookGapRange'];
+      'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange','imgWidthRange','bookGapRange','bookWidthRange'];
     const sliders = {};
     ids.forEach(id => { if ($(id)) sliders[id] = $(id).value; });
     return {
