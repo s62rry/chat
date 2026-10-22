@@ -629,7 +629,7 @@
     overflow: auto;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: safe center;   /* 카드가 칸보다 넓어도 왼쪽 끝까지 스크롤되게 */
     padding: 32px;
     background:
       repeating-conic-gradient(var(--border) 0% 25%, transparent 0% 50%)
@@ -2278,12 +2278,7 @@
           </span>
         </label>
         <div id="bookOpts" style="display:none; margin-top:6px;">
-          <label class="field-label">단 사이 간격</label>
-          <div class="slider-row">
-            <input type="range" id="bookGapRange" min="12" max="120" value="40">
-            <span class="slider-val" id="bookGapVal">40px</span>
-          </div>
-          <div class="hint">문구가 왼쪽 단을 채우고 오른쪽 단으로 이어져요. 같은 카드에 글이 더 많이 들어가요.</div>
+          <div class="hint">카드가 옆으로 두 배 넓어지고(1:1 → 2:1), 원래 카드 한 장 크기의 단 두 개에 글이 왼쪽 → 오른쪽으로 이어져요.</div>
         </div>
       </div>
       <div class="field-group" style="margin-top:14px;">
@@ -5548,13 +5543,27 @@
     $('borderVal').textContent = bw + 'px';
     // 카드 비율 — 너비는 가변(최대치 제한), 높이는 비율로 자동
     const r = RATIOS[state.ratio];
+    // 2단 — 카드가 옆으로 두 배. 한 단이 원래 카드 한 장과 같은 폭이 되도록
+    // 미리보기 칸도 원래 카드 폭의 두 배로 늘린다 (화면보다 넓으면 옆으로 스크롤)
+    const two = !!state.book && !state.vertical;
+    const pvs = card.closest('.preview-stack');
+    let mul = 1;
+    if (two && pvs) {
+      mul = 2;
+      const par = pvs.parentElement;
+      const ps = par ? getComputedStyle(par) : null;
+      const avail = par ? par.clientWidth - parseFloat(ps.paddingLeft) - parseFloat(ps.paddingRight) : 540;
+      const base = Math.max(260, Math.min(540, avail));
+      pvs.style.maxWidth = pvs.style.width = (base * 2) + 'px';
+      pvs.style.flexShrink = '0';
+    } else if (pvs) { pvs.style.maxWidth = pvs.style.width = pvs.style.flexShrink = ''; }
     card.style.width = '100%';
-    card.style.maxWidth = r.w + 'px';
+    card.style.maxWidth = (r.w * mul) + 'px';
     // 모아보기(크게) 중엔 미리보기 칸이 넓어져도 카드 폭은 원래대로 묶어 둔다
-    if (window.__spreadLockW) card.style.maxWidth = Math.min(r.w, window.__spreadLockW) + 'px';
+    if (window.__spreadLockW) card.style.maxWidth = Math.min(r.w * mul, window.__spreadLockW) + 'px';
     card.style.width = '100%';
     card.style.height = 'auto';
-    card.style.aspectRatio = (state.ratio === 'fit' && !state.vertical) ? 'auto' : r.w + ' / ' + r.h;
+    card.style.aspectRatio = (state.ratio === 'fit' && !state.vertical) ? 'auto' : (r.w * mul) + ' / ' + r.h;
 
     // 본문 크기 = 슬라이더 크기 × 글씨체 보정 배율
     const realSize = size * fontScale;
@@ -6012,7 +6021,7 @@
       panelColor: '#000000', panelOpacityRange: 35,
       panelPadRange: 22, panelRadiusRange: 8,
       panelBorderRange: 0, panelBorderColor: '#ffffff', cornerColor: '#ffffff',
-      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18, imgWidthRange: 100, bookGapRange: 40,
+      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18, imgWidthRange: 100,
       shX: 0, shY: 2, shBlur: 8, shColor: '#000000', shAlpha: 45
     };
 
@@ -6124,10 +6133,13 @@
   function applyBook() {
     const on = !!state.book && !state.vertical;
     card.classList.toggle('book', on);
-    const g = parseInt($('bookGapRange').value, 10) || 40;
-    $('bookGapVal').textContent = g + 'px';
-    if (on) card.style.setProperty('--book-gap', g + 'px');
+    if (!on) return;
+    // 단 사이 = 왼쪽+오른쪽 여백 → 한 단이 원래 카드 한 장의 글 폭과 딱 같다
+    const pl = state.padSplit ? parseInt($('padLeftRange').value, 10) : parseInt($('padRange').value, 10);
+    const pr = state.padSplit ? parseInt($('padRightRange').value, 10) : parseInt($('padRange').value, 10);
+    card.style.setProperty('--book-gap', Math.max(16, (pl || 0) + (pr || 0)) + 'px');
   }
+  window.addEventListener('resize', () => { if (state.book) applyStyle(); });
   function syncBookUI() {
     document.querySelectorAll('#bookSeg button').forEach(b =>
       b.classList.toggle('active', (b.dataset.book === '1') === !!state.book));
@@ -6142,7 +6154,6 @@
     applyStyle();
     renderCard();
   }));
-  $('bookGapRange').addEventListener('input', () => { applyBook(); });
 
   function applyDecor() {
     const pat = $('cardPattern'), vig = $('cardVignette');
@@ -7703,7 +7714,7 @@
       'shX','shY','shBlur','shColor','shAlpha',
       'dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange',
       'offsetRange','offsetXRange','indentRange','sepWidthRange',
-      'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange','imgWidthRange','bookGapRange'];
+      'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange','imgWidthRange'];
     const sliders = {};
     ids.forEach(id => { if ($(id)) sliders[id] = $(id).value; });
     return {
