@@ -480,6 +480,7 @@
   }
   .preset-add:hover { border-color: var(--accent); color: var(--accent) !important; }
   .preset-grid .preset-head { grid-column: 1 / -1; margin: 2px 0 0; }
+  #bookSeg button { height: 22px; padding: 0 10px; font-size: 11px; }
   .preset-grid .preset-add { grid-column: 1 / -1; height: 32px; margin-top: 2px; }
   .preset-name { padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .preset .preset-tag { top: auto; bottom: 2px; right: auto; left: 3px; }
@@ -997,6 +998,16 @@
   .card-icon.icon-sel { outline: 2px dashed color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
   #cardPattern { background-repeat: repeat; }
   #cardVignette { background-size: 100% 100%; background-repeat: no-repeat; }
+  /* 펼친 책 — 글이 왼쪽 쪽 → 오른쪽 쪽으로 흐르고, 가운데에 접힌 그림자 */
+  #cardFold { position: absolute; inset: 0; pointer-events: none; display: none;
+              background-size: 100% 100%; background-repeat: no-repeat; }
+  #card.book #cardFold { display: block; }
+  #card.book #quoteText { column-count: 2; column-gap: var(--book-gap, 112px); column-fill: balance; }
+  #card.book #quoteText .qblock { break-inside: auto; }
+  #card.book #cardTitle { width: calc(50% - var(--book-gap, 112px) / 2); }
+  /* 구분선·출처는 오른쪽 쪽 아래에 */
+  #card.book .card-sep, #card.book .card-credit { margin-left: calc(50% + var(--book-gap, 112px) / 2) !important; }
+  #card.book .card-credit { width: calc(50% - var(--book-gap, 112px) / 2); }
   #cardCorners .corner { position: absolute; box-sizing: border-box; }
 
   /* 형광펜 둥근끝 — 높이의 절반까지 자동으로 굴려 알약 모양이 된다 */
@@ -2265,6 +2276,23 @@
         <button data-ratio="header" title="트위터 헤더 1500×500">3:1</button>
         <button data-ratio="fit" title="카드 높이가 문구 길이에 맞춰 늘고 줄어요 — 위아래 여백은 '여백' 으로">내용 맞춤</button>
       </div>
+      <div class="field-group" style="margin-top:12px;">
+        <label class="field-label" style="display:flex;align-items:center;">
+          펼친 책 (2단)
+          <span class="seg" id="bookSeg" style="margin-left:auto; width:auto;">
+            <button type="button" data-book="0" class="active">끄기</button>
+            <button type="button" data-book="1">켜기</button>
+          </span>
+        </label>
+        <div id="bookOpts" style="display:none; margin-top:6px;">
+          <label class="field-label">가운데 접힘 진하기</label>
+          <div class="slider-row">
+            <input type="range" id="bookShadeRange" min="0" max="100" value="45">
+            <span class="slider-val" id="bookShadeVal">45%</span>
+          </div>
+          <div class="hint">글이 왼쪽 쪽에서 오른쪽 쪽으로 이어져요. 구분선·출처는 오른쪽 쪽 아래에 놓여요. 가로 비율(16:9 · 3:1)이 잘 어울려요.</div>
+        </div>
+      </div>
       <div class="field-group" style="margin-top:14px;">
         <label class="field-label">세로 배치</label>
         <div class="seg" id="vAlignSeg">
@@ -3000,6 +3028,7 @@
         <div id="cardOverlay"></div>
         <div id="cardPattern"></div>
         <div id="cardVignette"></div>
+        <div id="cardFold"></div>
         <div id="cardPanel"></div>
         <div id="cardCorners"></div>
 
@@ -5510,6 +5539,7 @@
     } else {
       card.style.padding = pad + 'px';
     }
+    applyBook();
     card.style.textAlign = state.align;
     // 세로쓰기 — 위에서 아래로, 오른쪽에서 왼쪽으로
     cardInner.style.writingMode = state.vertical
@@ -5990,7 +6020,7 @@
       panelColor: '#000000', panelOpacityRange: 35,
       panelPadRange: 22, panelRadiusRange: 8,
       panelBorderRange: 0, panelBorderColor: '#ffffff', cornerColor: '#ffffff',
-      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18, imgWidthRange: 100,
+      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18, imgWidthRange: 100, bookShadeRange: 45,
       shX: 0, shY: 2, shBlur: 8, shColor: '#000000', shAlpha: 45
     };
 
@@ -6098,6 +6128,75 @@
   }
 
   let patternCache = '';   // 같은 설정이면 다시 그리지 않기 위한 키
+  // ===== 펼친 책 =====
+  // 접힌 그림자는 저장(html2canvas)에서도 그대로 나오도록 캔버스로 그린 그림을 깐다
+  let bookFoldCache = '';
+  function makeFoldURL(strength) {
+    const W = 600, H = 8;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    const k = strength / 100;
+    const g = x.createLinearGradient(0, 0, W, 0);
+    g.addColorStop(0, 'rgba(0,0,0,' + (0.16 * k) + ')');          // 바깥쪽 책장 끝
+    g.addColorStop(0.06, 'rgba(0,0,0,0)');
+    g.addColorStop(0.40, 'rgba(0,0,0,0)');
+    g.addColorStop(0.47, 'rgba(0,0,0,' + (0.18 * k) + ')');
+    g.addColorStop(0.496, 'rgba(0,0,0,' + (0.55 * k) + ')');       // 가운데 골
+    g.addColorStop(0.504, 'rgba(0,0,0,' + (0.55 * k) + ')');
+    g.addColorStop(0.53, 'rgba(0,0,0,' + (0.18 * k) + ')');
+    g.addColorStop(0.60, 'rgba(0,0,0,0)');
+    g.addColorStop(0.94, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,' + (0.16 * k) + ')');
+    x.fillStyle = g;
+    x.fillRect(0, 0, W, H);
+    // 골 양옆의 살짝 밝은 결 — 종이가 휘어 빛을 받는 느낌
+    const hl = x.createLinearGradient(0, 0, W, 0);
+    hl.addColorStop(0.505, 'rgba(255,255,255,0)');
+    hl.addColorStop(0.53, 'rgba(255,255,255,' + (0.10 * k) + ')');
+    hl.addColorStop(0.57, 'rgba(255,255,255,0)');
+    x.fillStyle = hl;
+    x.fillRect(0, 0, W, H);
+    return c.toDataURL('image/png');
+  }
+  function applyBook() {
+    const on = !!state.book && !state.vertical;
+    card.classList.toggle('book', on);
+    if (!on) return;
+    // 가운데 사이 = 바깥 여백 정도 (각 쪽 안쪽 여백이 바깥의 절반 — 실제 책처럼 골 쪽이 조금 좁다)
+    const pl = state.padSplit ? parseInt($('padLeftRange').value, 10) : parseInt($('padRange').value, 10);
+    const pr = state.padSplit ? parseInt($('padRightRange').value, 10) : parseInt($('padRange').value, 10);
+    card.style.setProperty('--book-gap', Math.max(24, Math.round(((pl || 0) + (pr || 0)) / 2)) + 'px');
+    const sh = parseInt($('bookShadeRange').value, 10) || 0;
+    $('bookShadeVal').textContent = sh + '%';
+    const key = String(sh);
+    if (key !== bookFoldCache) {
+      $('cardFold').style.backgroundImage = sh > 0 ? 'url(' + makeFoldURL(sh) + ')' : 'none';
+      bookFoldCache = key;
+    }
+  }
+  function syncBookUI() {
+    document.querySelectorAll('#bookSeg button').forEach(b =>
+      b.classList.toggle('active', (b.dataset.book === '1') === !!state.book));
+    if ($('bookOpts')) $('bookOpts').style.display = state.book ? '' : 'none';
+  }
+  document.querySelectorAll('#bookSeg button').forEach(b => b.addEventListener('click', () => {
+    const on = b.dataset.book === '1';
+    if (on === !!state.book) return;
+    state.book = on;
+    syncBookUI();
+    if (on && state.vertical) toast('세로쓰기에선 펼친 책을 쓸 수 없어요');
+    else if (on && (state.ratio === 'square' || state.ratio === 'portrait')) {
+      // 정사각·세로 카드는 두 쪽으로 나누면 너무 좁아서 가로 비율로
+      const wb = document.querySelector('#ratioSeg button[data-ratio="wide"]');
+      if (wb) wb.click();
+      toast('펼친 책은 가로가 잘 어울려서 16:9 로 바꿨어요');
+    }
+    applyStyle();
+    renderCard();
+  }));
+  $('bookShadeRange').addEventListener('input', () => { applyBook(); });
+
   function applyDecor() {
     const pat = $('cardPattern'), vig = $('cardVignette');
     const corners = $('cardCorners');
@@ -6881,6 +6980,8 @@
     state.panelTail = 'none';
     state.pageBg = {};
     state.blockOff = {};
+    state.book = false;
+    syncBookUI();
     state.dragPlace = false;
     $('dragPlaceToggle').classList.remove('on');
     $('dragPlaceToggle').textContent = '\uCF1C\uAE30';
@@ -7655,7 +7756,7 @@
       'shX','shY','shBlur','shColor','shAlpha',
       'dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange',
       'offsetRange','offsetXRange','indentRange','sepWidthRange',
-      'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange','imgWidthRange'];
+      'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange','imgWidthRange','bookShadeRange'];
     const sliders = {};
     ids.forEach(id => { if ($(id)) sliders[id] = $(id).value; });
     return {
@@ -7689,6 +7790,7 @@
       panelTail: state.panelTail,
       pageBg: state.pageBg,
       blockOff: state.blockOff,
+      book: !!state.book,
       // 문구에 실제로 쓰인 이미지만 담는다
       inlineImgs: (function () {
         const used = {};
@@ -7833,6 +7935,8 @@
     state.panelTail = s.panelTail || 'none';
     state.pageBg = s.pageBg || {};
     state.blockOff = s.blockOff || {};
+    state.book = !!s.book;
+    syncBookUI();
     if (s.inlineImgs && Object.keys(s.inlineImgs).length) {
       state.inlineImgs = Object.assign({}, state.inlineImgs || {}, s.inlineImgs);
     }
