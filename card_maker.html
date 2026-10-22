@@ -2278,7 +2278,12 @@
           </span>
         </label>
         <div id="bookOpts" style="display:none; margin-top:6px;">
-          <div class="hint">카드가 옆으로 두 배 넓어지고(1:1 → 2:1), 원래 카드 한 장 크기의 단 두 개에 글이 왼쪽 → 오른쪽으로 이어져요.</div>
+          <label class="field-label">단 사이 간격</label>
+          <div class="slider-row">
+            <input type="range" id="bookGapRange" min="8" max="120" value="32">
+            <span class="slider-val" id="bookGapVal">32px</span>
+          </div>
+          <div class="hint">카드가 옆으로 두 배 넓어지고(1:1 → 2:1), 글이 왼쪽 단 → 오른쪽 단으로 이어져요.</div>
         </div>
       </div>
       <div class="field-group" style="margin-top:14px;">
@@ -6021,7 +6026,7 @@
       panelColor: '#000000', panelOpacityRange: 35,
       panelPadRange: 22, panelRadiusRange: 8,
       panelBorderRange: 0, panelBorderColor: '#ffffff', cornerColor: '#ffffff',
-      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18, imgWidthRange: 100,
+      cornerSizeRange: 18, cornerInsetRange: 18, sepThickRange: 1, sepGapRange: 18, imgWidthRange: 100, bookGapRange: 32,
       shX: 0, shY: 2, shBlur: 8, shColor: '#000000', shAlpha: 45
     };
 
@@ -6133,13 +6138,12 @@
   function applyBook() {
     const on = !!state.book && !state.vertical;
     card.classList.toggle('book', on);
-    if (!on) return;
-    // 단 사이 = 왼쪽+오른쪽 여백 → 한 단이 원래 카드 한 장의 글 폭과 딱 같다
-    const pl = state.padSplit ? parseInt($('padLeftRange').value, 10) : parseInt($('padRange').value, 10);
-    const pr = state.padSplit ? parseInt($('padRightRange').value, 10) : parseInt($('padRange').value, 10);
-    card.style.setProperty('--book-gap', Math.max(16, (pl || 0) + (pr || 0)) + 'px');
+    const g = parseInt($('bookGapRange').value, 10) || 32;
+    $('bookGapVal').textContent = g + 'px';
+    if (on) card.style.setProperty('--book-gap', g + 'px');
   }
   window.addEventListener('resize', () => { if (state.book) applyStyle(); });
+  $('bookGapRange').addEventListener('input', () => { applyBook(); });
   function syncBookUI() {
     document.querySelectorAll('#bookSeg button').forEach(b =>
       b.classList.toggle('active', (b.dataset.book === '1') === !!state.book));
@@ -7714,7 +7718,7 @@
       'shX','shY','shBlur','shColor','shAlpha',
       'dimRange','bgSizeRange','bgPosXRange','bgPosYRange','bgBlurRange',
       'offsetRange','offsetXRange','indentRange','sepWidthRange',
-      'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange','imgWidthRange'];
+      'padTopRange','padBottomRange','padLeftRange','padRightRange','hlPadRange','imgWidthRange','bookGapRange'];
     const sliders = {};
     ids.forEach(id => { if ($(id)) sliders[id] = $(id).value; });
     return {
