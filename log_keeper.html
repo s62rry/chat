@@ -1499,11 +1499,12 @@ async function load() {
   if (!state.folders) state.folders = []; // 채팅방 폴더 [{id, name}]
   window.__lkLoaded = true;
   if (_dirtyAll && _idb) await doSave();
-  // 지워진 방의 턴 조각 정리
+  // 목록에 없는데 턴 조각이 남아 있는 방 — 지우지 않고 되살리기를 권한다
   if (_idb) {
     try {
       const live = new Set(state.chats.map(c => TURN_KEY(c.id)));
-      for (const k of await idbKeys()) if (typeof k === "string" && k.indexOf("t:") === 0 && !live.has(k)) await idbDel(k);
+      const orphans = (await idbKeys()).filter(k => typeof k === "string" && k.indexOf("t:") === 0 && !live.has(k));
+      if (orphans.length) window.__lkOrphans = orphans;
     } catch (e) {}
   }
 }
@@ -1518,6 +1519,8 @@ function save() {
   _saveTimer = setTimeout(doSave, 300);
 }
 async function doSave() {
+  // 저장된 데이터를 다 불러오기 전에는 절대 저장하지 않는다 (빈 상태로 덮어쓰는 사고 방지)
+  if (!window.__lkLoaded) { clearTimeout(_saveTimer); _saveTimer = setTimeout(doSave, 500); return; }
   try {
     if (_idb) {
       const all = _dirtyAll, dirty = _dirty;
@@ -1529,7 +1532,8 @@ async function doSave() {
         if (all || dirty.has(c.id) || !_savedIds.has(c.id)) await idbSet(TURN_KEY(c.id), c.turns || []);
       }
       await idbSet(IDB_KEY, metaOf(state));
-      for (const id of _savedIds) if (!ids.has(id)) { try { await idbDel(TURN_KEY(id)); } catch (e) {} }
+      try { const rm = {}; state.chats.forEach(c => { rm[c.id] = { title: c.title, emoji: c.emoji, folderId: c.folderId || null }; }); localStorage.setItem("lk:recoverMeta", JSON.stringify(rm)); } catch (e) {}
+      // 지운 방의 턴 조각은 바로 지우지 않는다 (사고 때 되살릴 수 있게)
       _savedIds = ids;
       try { window.dispatchEvent(new Event("lk-saved")); } catch (e) {}
     } else {
@@ -4127,6 +4131,28 @@ function saveFolderTxtZip(fid) {
   if (f) openSaveTextModal(state.chats.filter(c => c.folderId === fid), f.name || "폴더", false);
 }
 
+// 목록에서 빠졌지만 데이터가 남아 있는 방 되살리기
+function offerRecover() {
+  const ks = window.__lkOrphans || [];
+  if (!ks.length) return;
+  confirmModal("되살릴 수 있는 방이 있어요",
+    "목록에는 없지만 이 기기에 내용이 남아 있는 방이 " + ks.length + "개 있어요. 되살릴까요?\n(제목·폴더는 사라져서 '복구된 방'으로 들어가요. 안 되살려도 지우지 않고 남겨 둬요.)",
+    async () => {
+      const prev = new Map();
+      try { const syn = JSON.parse(localStorage.getItem("lk:recoverMeta") || "{}"); Object.keys(syn).forEach(k => prev.set(k, syn[k])); } catch (e) {}
+      let i = 0;
+      for (const k of ks) {
+        const id = k.slice(2), turns = (await idbGet(k)) || [];
+        if (!turns.length || state.chats.some(c => c.id === id)) continue;
+        const m = prev.get(id) || {};
+        state.chats.push({ id, title: m.title || ("복구된 방 " + (++i)), emoji: m.emoji || "♻️", folderId: m.folderId || null, createdAt: now(), updatedAt: now(), turns });
+        _dirty.add(id);
+      }
+      window.__lkOrphans = [];
+      save(); renderAll();
+      toast("방을 되살렸어요");
+    }, null, "되살리기", "나중에");
+}
 function exportAll() {
   if (!state.chats.length) { toast("내보낼 채팅이 없어요"); return; }
   // 방마다 따로 글로 바꿔 이어 붙인다 (전체를 한 번에 문자열로 만들면 메모리가 크게 튄다)
@@ -5041,6 +5067,7 @@ updateSortIcon();
 // 접속하면 특정 채팅이 아니라 메인 화면을 보여준다 (activeId는 null 유지)
 load().then(() => {
   renderAll();
+  if (window.__lkOrphans && window.__lkOrphans.length) setTimeout(offerRecover, 400);
   updateLogSearchStickyState();
   updateContentTitleAutoHide();
 });
@@ -5260,6 +5287,7 @@ window.addEventListener("visibilitychange", () => {
   }
 
   /* ===== 동기화 ===== */
+  let blocked = false;
   let user = null, pulling = false, pushing = false, pushTimer = null, pollTimer = null, lastCanon = null, lastFail = 0;
   const metaDoc = () => doc(db, 'users', user.uid, C_META, 'main');
 
@@ -5285,6 +5313,13 @@ window.addEventListener("visibilitychange", () => {
         newMap[c.id] = { len: j.length, n: chunks.length, fp: f, h };
       }
       const live = new Set(chats.map(c => c.id));
+      const dels = Object.keys(synced).filter(id => !live.has(id)).length;
+      if (dels >= 5 && dels > Object.keys(synced).length * 0.3) {
+        // 한 번에 너무 많이 지워지는 건 사고일 가능성이 커서 클라우드에서 지우지 않는다
+        setSt({ errAt: Date.now(), err: '방 ' + dels + '개가 한꺼번에 사라져서 클라우드 삭제를 멈췄어요' });
+        toast('방이 한꺼번에 많이 사라져서 클라우드 동기화를 멈췄어요');
+        return;
+      }
       for (const id of Object.keys(synced)) {
         if (!live.has(id)) {
           const pn = synced[id] && synced[id].n ? synced[id].n : 1;
@@ -5374,7 +5409,7 @@ window.addEventListener("visibilitychange", () => {
     }, 20000);
   }
   function stopPoll() { clearInterval(pollTimer); pollTimer = null; }
-  window.addEventListener('lk-saved', () => { if (user && !pulling) schedulePush(); });
+  window.addEventListener('lk-saved', () => { if (user && !pulling && !blocked) schedulePush(); });
   window.addEventListener('pagehide', () => { if (user && pushTimer) { clearTimeout(pushTimer); pushAll(); } });
 
   async function firstSync() {
@@ -5394,6 +5429,22 @@ window.addEventListener("visibilitychange", () => {
           }
         } catch (e) { console.warn('[sync] 복구 점검 실패', e); }
       }
+    }
+    const cloudN = meta.exists() && Array.isArray(meta.data().order) ? meta.data().order.length : 0, localN = (st.chats || []).length;
+    if (meta.exists() && ((cloudN >= 5 && localN < cloudN * 0.5) || (localN >= 5 && cloudN < localN * 0.5))) {
+      // 한쪽 방 수가 다른 쪽의 절반도 안 됨 — 자동으로 맞추지 않고 물어본다
+      card.innerHTML =
+        '<h3>방 수가 크게 달라요</h3>' +
+        '<p>이 기기에는 방이 <b>' + localN + '개</b>, 클라우드에는 <b>' + cloudN + '개</b> 있어요. 사고일 수 있어서 자동으로 맞추지 않았어요.</p>' +
+        '<div class="row"><button id="syPullG" class="primary">클라우드 불러오기 <small>(' + cloudN + '개로)</small></button></div>' +
+        '<div class="row"><button id="syPushG">이 기기 올리기 <small>(' + localN + '개로)</small></button></div>' +
+        '<div class="row"><button id="syLater">그대로 두기 <small>(동기화 멈춤)</small></button></div>';
+      mask.classList.add('show');
+      card.querySelector('#syPullG').onclick = async () => { closeModal(); toast('불러오는 중…'); await pull(); };
+      card.querySelector('#syPushG').onclick = async () => { closeModal(); toast('올리는 중…'); setSynced({}); await pushAll(true); toast('클라우드에 올렸어요'); startPoll(); };
+      card.querySelector('#syLater').onclick = () => { closeModal(); toast('동기화를 멈췄어요 — ☁ 버튼에서 직접 맞출 수 있어요'); };
+      blocked = true;
+      return;
     }
     const localSig = hash(canon(st));
     const cloudSig = meta.exists() ? meta.data().sig : null;
@@ -5439,8 +5490,8 @@ window.addEventListener("visibilitychange", () => {
     return new Promise(function (res) {
       var n = 0;
       var t = setInterval(function () {
-        if (typeof state !== "undefined" && state && state.chats) { clearInterval(t); res(true); }
-        else if (++n > 240) { clearInterval(t); res(false); }
+        if (window.__lkLoaded && typeof state !== "undefined" && state && state.chats) { clearInterval(t); res(true); }
+        else if (++n > 2400) { clearInterval(t); res(false); }
       }, 50);
     });
   }
