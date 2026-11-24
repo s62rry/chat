@@ -1504,7 +1504,10 @@ async function load() {
     try {
       const live = new Set(state.chats.map(c => TURN_KEY(c.id)));
       const orphans = (await idbKeys()).filter(k => typeof k === "string" && k.indexOf("t:") === 0 && !live.has(k));
-      if (orphans.length) window.__lkOrphans = orphans;
+      let seen = [];
+      try { seen = JSON.parse(localStorage.getItem("lk:orphanSeen") || "[]"); } catch (e) {}
+      const fresh = orphans.filter(k => seen.indexOf(k) < 0);
+      if (fresh.length) window.__lkOrphans = orphans;
     } catch (e) {}
   }
 }
@@ -3610,6 +3613,8 @@ function delChat() {
       state.chats = state.chats.filter(c => c.id !== chat.id);
       activeId = state.chats.length ? state.chats[0].id : null;
       save(); renderAll();
+      // 직접 지운 방은 저장소에서도 지운다 (되살리기 목록에 안 뜨게)
+      setTimeout(() => { if (_idb && !state.chats.some(c => c.id === chat.id)) idbDel(TURN_KEY(chat.id)).catch(() => {}); }, 1500);
       toast("채팅을 삭제했어요");
     }, null, "삭제하기");
 }
@@ -4151,7 +4156,7 @@ function offerRecover() {
       window.__lkOrphans = [];
       save(); renderAll();
       toast("방을 되살렸어요");
-    }, null, "되살리기", "나중에");
+    }, () => { try { localStorage.setItem("lk:orphanSeen", JSON.stringify(ks)); } catch (e) {} toast("안 되살렸어요 — 내용은 지우지 않고 남겨 둘게요"); }, "되살리기", "그만 묻기");
 }
 function exportAll() {
   if (!state.chats.length) { toast("내보낼 채팅이 없어요"); return; }
@@ -5431,7 +5436,7 @@ window.addEventListener("visibilitychange", () => {
       }
     }
     const cloudN = meta.exists() && Array.isArray(meta.data().order) ? meta.data().order.length : 0, localN = (st.chats || []).length;
-    if (meta.exists() && ((cloudN >= 5 && localN < cloudN * 0.5) || (localN >= 5 && cloudN < localN * 0.5))) {
+    if (meta.exists() && localN > 0 && ((cloudN >= 5 && localN < cloudN * 0.5) || (localN >= 5 && cloudN < localN * 0.5))) {
       // 한쪽 방 수가 다른 쪽의 절반도 안 됨 — 자동으로 맞추지 않고 물어본다
       card.innerHTML =
         '<h3>방 수가 크게 달라요</h3>' +
