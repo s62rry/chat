@@ -5111,7 +5111,7 @@ window.addEventListener("visibilitychange", () => {
     const home = () => {
       card.innerHTML =
         '<h3>클라우드 동기화 켜짐</h3>' +
-        '<p>' + (email || '') + '<br>로그를 바꾸면 자동으로 저장돼요. 직접 맞추려면 아래 버튼을 쓰세요.</p>' +
+        '<p>' + (email || '') + '<br>로그를 바꾸면 자동으로 저장돼요. 직접 맞추려면 아래 버튼을 쓰세요.</p>' + syncStatusHtml() +
         '<div class="row"><button id="sySyncNow" class="primary">이 기기 → 클라우드 (올리기)</button></div>' +
         '<div class="row"><button id="syPullNow">클라우드 → 이 기기 (받기)</button></div>' +
         '<div class="row"><button id="syLogout">로그아웃</button></div>' +
@@ -5134,6 +5134,22 @@ window.addEventListener("visibilitychange", () => {
     mask.classList.add('show');
   }
 
+  /* ===== 동기화 상태 기록 (계정 창에 보여 줌) ===== */
+  const ST_KEY = 'lk:syncStatus';
+  const getSt = () => { try { return JSON.parse(localStorage.getItem(ST_KEY) || '{}'); } catch (e) { return {}; } };
+  const setSt = o => { try { localStorage.setItem(ST_KEY, JSON.stringify(Object.assign(getSt(), o))); } catch (e) {} };
+  const ago = t => { if (!t) return '없음'; const s = (Date.now() - t) / 1000; return s < 60 ? '방금' : s < 3600 ? Math.round(s / 60) + '분 전' : s < 86400 ? Math.round(s / 3600) + '시간 전' : new Date(t).toLocaleString('ko-KR'); };
+  function syncStatusHtml() {
+    const st = getSt(), syn = getSynced(), up = Object.keys(syn).length;
+    let local = 0, mb = 0;
+    try { local = (state && state.chats || []).length; mb = Object.values(syn).reduce((a, e) => a + ((e && e.len) || 0), 0) * 2 / 1e6; } catch (e) {}
+    return '<p style="font-size:11.5px;line-height:1.7;background:var(--bg,#f1f3f7);border-radius:10px;padding:9px 11px">' +
+      '마지막으로 올림: <b>' + ago(st.okAt) + '</b>' + (st.okN != null ? ' (' + st.okN + '개 방 올림, ' + (st.okMB || 0).toFixed(1) + 'MB)' : '') + '<br>' +
+      '클라우드에 기록된 방: <b>' + up + '</b> / 이 기기 방: <b>' + local + '</b> · 대략 ' + mb.toFixed(0) + 'MB' +
+      (st.errAt && (!st.okAt || st.errAt > st.okAt) ? '<br><span style="color:#e2466b">마지막 실패: ' + ago(st.errAt) + ' — ' + String(st.err || '').replace(/[<>&]/g, '').slice(0, 160) + '</span>' : '') +
+      '</p>';
+  }
+
   /* ===== 동기화 ===== */
   let user = null, pulling = false, pushing = false, pushTimer = null, pollTimer = null, lastCanon = null, lastFail = 0;
   const metaDoc = () => doc(db, 'users', user.uid, C_META, 'main');
@@ -5145,7 +5161,7 @@ window.addEventListener("visibilitychange", () => {
       const st = await readState();
       const chats = st.chats || [], folders = st.folders || [];
       const synced = force ? {} : getSynced(), newMap = {};
-      let batch = writeBatch(db), ops = 0, bytes = 0;
+      let batch = writeBatch(db), ops = 0, bytes = 0, upN = 0, upB = 0;
       const flush = async () => { if (ops >= 200 || bytes > 4000000) { await batch.commit(); batch = writeBatch(db); ops = 0; bytes = 0; } };
       for (const c of chats) {
         const prev = synced[c.id], prevN = prev ? (prev.n || 1) : 0, f = fpOf(c);
@@ -5153,7 +5169,7 @@ window.addEventListener("visibilitychange", () => {
         const j = JSON.stringify(c);
         const prevLen = prev ? (prev.len != null ? prev.len : prev) : -1;
         if (prevLen === j.length) { newMap[c.id] = { len: j.length, n: prevN, fp: f }; continue; }   // 변동 없음
-        const chunks = chunkStr(j);
+        const chunks = chunkStr(j); upN++; upB += j.length;
         if (chunks.length <= 1) { const jj = chunks.length ? chunks[0] : j; batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: 1, j: jj }); ops++; bytes += jj.length * 3; await flush(); }
         else { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: chunks.length }); ops++; await flush(); for (let i = 0; i < chunks.length; i++) { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i), { d: chunks[i] }); ops++; bytes += chunks[i].length * 3; await flush(); } }
         for (let i = chunks.length; i < prevN; i++) { batch.delete(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i)); ops++; await flush(); }
@@ -5174,8 +5190,9 @@ window.addEventListener("visibilitychange", () => {
       await batch.commit();
       setSynced(newMap);
       setLastSig(sg);
+      setSt({ okAt: Date.now(), okN: upN, okMB: upB * 2 / 1e6 });
       lastCanon = canon(st);
-    } catch (e) { console.warn('[sync] push 실패', e); const t = Date.now(); if (t - lastFail > 30000) { lastFail = t; toast('동기화 지연 — 잠시 후 자동으로 다시 시도해요'); } }
+    } catch (e) { console.warn('[sync] push 실패', e); setSt({ errAt: Date.now(), err: (e && (e.code || e.message)) || String(e) }); const t = Date.now(); if (t - lastFail > 30000) { lastFail = t; toast('동기화 지연 — 잠시 후 자동으로 다시 시도해요'); } }
     finally { pushing = false; }
   }
 
