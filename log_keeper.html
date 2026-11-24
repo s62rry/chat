@@ -236,6 +236,27 @@
     letter-spacing: 0.05em; text-transform: uppercase;
     color: var(--text-dim); padding: 13px 16px 7px;
   }
+  .side-title { display: flex; align-items: center; }
+  .sel-toggle { margin-left: auto; font: 600 11px/1 var(--ui, inherit); letter-spacing: 0; text-transform: none; color: var(--accent); background: none; border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+  .sel-toggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ci-check { flex-shrink: 0; width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--border); display: grid; place-items: center; font-size: 11px; color: transparent; margin-right: 4px; background: var(--panel); }
+  .chat-item.picked { background: var(--accent-soft); border-color: var(--accent); }
+  .chat-item.picked .ci-check { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .selmode .ci-edit { display: none; }
+  .sel-bar { padding: 10px 12px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--panel); }
+  .sel-bar .sel-n { font-size: 12px; font-weight: 700; color: var(--text-strong); margin-right: auto; }
+  .sel-bar button { font-size: 11.5px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--field); color: var(--text-strong); cursor: pointer; }
+  .sel-bar button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sel-bar button:disabled { opacity: .45; cursor: default; }
+  .mv-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+  .mv-list button { display: flex; align-items: center; gap: 8px; text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--field); color: var(--text-strong); font-size: 13px; cursor: pointer; }
+  .mv-list button:hover { border-color: var(--accent); }
+  .mv-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .mv-new { display: flex; gap: 6px; margin-top: 10px; }
+  .mv-new input { flex: 1; min-width: 0; padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--field); color: var(--text-strong); font-size: 13px; outline: none; }
+  .mv-new input:focus { border-color: var(--accent); }
+  .sel-bar .sel-n { flex-basis: 100%; }
+  .sel-bar button { flex: 1; }
   .chat-list { flex: 1; overflow-y: auto; padding: 0 8px 14px; }
   .chat-item {
     position: relative;
@@ -1256,9 +1277,10 @@
       </svg>
       <input type="text" id="searchInput" placeholder="채팅 제목 검색…">
     </div>
-    <div class="side-title">내 채팅 <span id="chatCount"></span></div>
+    <div class="side-title">내 채팅&nbsp;<span id="chatCount"></span><button type="button" class="sel-toggle" id="selToggle" title="여러 개 골라서 폴더로 옮기기·저장">선택</button></div>
     <div class="chat-list" id="chatList"></div>
-    <div class="side-foot">데이터는 이 브라우저에만 저장돼요</div>
+    <div class="sel-bar" id="selBar" hidden></div>
+    <div class="side-foot" id="sideFoot">데이터는 이 브라우저에만 저장돼요</div>
   </aside>
   <div class="sb-backdrop" id="sbBackdrop"></div>
   <section class="content">
@@ -2642,6 +2664,57 @@ function moveLogHit(dir) {
 
 // 펼친 폴더 id 기억 (기본은 접힘 — 펼친 것만 기록)
 const expandedFolders = new Set();
+// 여러 개 선택 모드
+let selMode = false;
+const selIds = new Set();
+function renderSelBar() {
+  const bar = $("selBar"), foot = $("sideFoot"), tg = $("selToggle"), list = $("chatList");
+  if (!bar) return;
+  for (const id of [...selIds]) if (!state.chats.some(c => c.id === id)) selIds.delete(id);
+  bar.hidden = !selMode; if (foot) foot.hidden = selMode;
+  if (tg) { tg.classList.toggle("on", selMode); tg.textContent = selMode ? "완료" : "선택"; }
+  if (list) list.classList.toggle("selmode", selMode);
+  if (!selMode) return;
+  const n = selIds.size;
+  bar.innerHTML = '<span class="sel-n">' + n + '개 선택</span>' +
+    '<button type="button" id="selAll">' + (n && n >= visibleChatIds().length ? "선택 해제" : "모두 선택") + '</button>' +
+    '<button type="button" id="selSave"' + (n ? "" : " disabled") + '>💾 저장</button>' +
+    '<button type="button" class="primary" id="selMove"' + (n ? "" : " disabled") + '>📁 폴더로</button>';
+  $("selAll").onclick = () => { const ids = visibleChatIds(); if (selIds.size >= ids.length) selIds.clear(); else ids.forEach(id => selIds.add(id)); renderSidebar(); };
+  $("selSave").onclick = () => { if (selIds.size) openSaveTextModal(state.chats.filter(c => selIds.has(c.id)), "선택한 방", true); };
+  $("selMove").onclick = () => { if (selIds.size) openMoveToFolderModal([...selIds]); };
+}
+function visibleChatIds() {
+  const q = $("searchInput").value.trim().toLowerCase();
+  return state.chats.filter(c => !q || c.title.toLowerCase().includes(q)).map(c => c.id);
+}
+function setSelMode(on) { selMode = on; if (!on) selIds.clear(); renderSidebar(); }
+function openMoveToFolderModal(ids) {
+  const fl = state.folders.slice().sort((a, b) => (a.order != null && b.order != null ? a.order - b.order : 0));
+  openModal("폴더로 옮기기",
+    '<p class="desc">' + ids.length + '개 방을 어디로 옮길까요?</p><div class="mv-list">' +
+    fl.map(f => '<button type="button" data-fid="' + f.id + '"><span class="mv-dot" style="background:' + folderColorHex(f.color) + '"></span>' + escapeHtml(f.name) + '<span style="margin-left:auto;font-size:11px;color:var(--text-dim)">' + state.chats.filter(c => c.folderId === f.id).length + '</span></button>').join("") +
+    '<button type="button" data-fid=""><span class="mv-dot" style="background:var(--border)"></span>폴더 밖으로 빼기</button></div>' +
+    '<div class="mv-new"><input type="text" id="mvNewName" placeholder="새 폴더 이름"><button type="button" class="primary" id="mvNewGo">새 폴더 만들어 넣기</button></div>',
+    [{ label: "취소", close: true }]);
+  const move = fid => {
+    let n = 0;
+    state.chats.forEach(c => { if (ids.includes(c.id) && (c.folderId || "") !== (fid || "")) { c.folderId = fid || null; n++; } });
+    if (fid) expandedFolders.add(fid);
+    save(); closeModal(); setSelMode(false);
+    const f = fid && state.folders.find(x => x.id === fid);
+    toast(n + "개 방을 " + (f ? "‘" + f.name + "’ 폴더로" : "폴더 밖으로") + " 옮겼어요");
+  };
+  document.querySelectorAll(".mv-list button").forEach(b => b.addEventListener("click", () => move(b.dataset.fid)));
+  $("mvNewGo").addEventListener("click", () => {
+    const name = $("mvNewName").value.trim();
+    if (!name) { toast("폴더 이름을 입력해 주세요"); return; }
+    const f = { id: uid(), name, color: "blue" };
+    state.folders.push(f);
+    move(f.id);
+  });
+  $("mvNewName").addEventListener("keydown", e => { if (e.key === "Enter") $("mvNewGo").click(); });
+}
 // 폴더 색 팔레트
 const FOLDER_COLORS = {
   gray:   "#9aa3b2", red: "#e0556b", orange: "#e8893b",
@@ -2675,7 +2748,8 @@ function renderSidebar() {
   const chatItemHtml = c => {
     const d = new Date(c.updatedAt);
     const dateStr = (d.getMonth() + 1) + "." + d.getDate();
-    return '<div class="chat-item ' + (c.id === activeId ? "active" : "") + '" data-id="' + c.id + '" draggable="true">' +
+    return '<div class="chat-item ' + (c.id === activeId && !selMode ? "active" : "") + (selMode && selIds.has(c.id) ? " picked" : "") + '" data-id="' + c.id + '" draggable="' + (selMode ? "false" : "true") + '">' +
+      (selMode ? '<span class="ci-check">✓</span>' : "") +
       '<div class="ci-main">' +
         '<div class="ci-title"><span class="ci-emoji">' + (c.emoji || "💬") + '</span>' +
           '<span class="ci-name">' + escapeHtml(c.title) + '</span></div>' +
@@ -2716,12 +2790,22 @@ function renderSidebar() {
       : '<div class="empty-list" style="padding:10px">' + (q ? "검색 결과가 없어요." : "폴더 밖 채팅이 없어요.") + '</div>') +
     '</div>';
   list.innerHTML = html;
+  renderSelBar();
   bindSidebarEvents();
 }
 function bindSidebarEvents() {
   // 채팅 클릭 → 열기
   $$(".chat-item").forEach(el => {
+    el.addEventListener("click", e => {
+      if (!selMode) return;
+      e.stopPropagation();
+      const id = el.dataset.id;
+      if (selIds.has(id)) selIds.delete(id); else selIds.add(id);
+      el.classList.toggle("picked", selIds.has(id));
+      renderSelBar();
+    }, true);
     el.querySelector(".ci-main").addEventListener("click", () => {
+      if (selMode) return;
       activeId = el.dataset.id;
       closeSidebar();
       logQuery = ""; logHitIdx = -1;
@@ -4677,6 +4761,7 @@ $("fabBottom").addEventListener("click", () => {
 });
 $("delChatBtn").addEventListener("click", delChat);
 $("searchInput").addEventListener("input", renderSidebar);
+$("selToggle").addEventListener("click", () => setSelMode(!selMode));
 $("menuToggle").addEventListener("click", openSidebar);
 $("sbBackdrop").addEventListener("click", closeSidebar);
 $("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeModal(); });
