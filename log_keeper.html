@@ -1225,7 +1225,7 @@
         <path d="M2 8a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/>
       </svg>
     </button>
-    <input type="file" id="fileInput" accept="application/json,.json" style="display:none">
+    <input type="file" id="fileInput" accept="application/json,.json" multiple style="display:none">
     <button class="icon" id="themeBtn" title="테마 전환">
       <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <circle cx="12" cy="12" r="4"/>
@@ -3910,17 +3910,18 @@ function saveChatTxt() {
 function openSaveTextModal(chats, zipBase, byFolder) {
   chats = chats.filter(c => c.turns && c.turns.length);
   if (!chats.length) { toast("저장할 채팅이 없어요"); return; }
-  const isEpub = lsGetSafe("lk_svFmt") === "epub", plain = lsGetSafe("lk_svPlain") === "1";
+  const svFmt = lsGetSafe("lk_svFmt") || "txt", isEpub = svFmt === "epub", isJson = svFmt === "json", plain = lsGetSafe("lk_svPlain") === "1";
   const card = (v, ic, t, d, on) => '<label class="ex-mode"><input type="radio" name="svFmt" value="' + v + '"' + (on ? " checked" : "") + '><span class="ex-mode-card">' +
     '<span class="ex-mode-top"><span class="ex-mode-ic">' + ic + "</span>" + t + '</span><span class="ex-mode-desc">' + d + "</span></span></label>";
   const what = chats.length === 1 ? "‘" + escapeHtml(chats[0].title) + "’ " + chats[0].turns.length + "턴" : chats.length + "개 채팅 · 방마다 파일 하나씩 zip 으로" + (byFolder ? " (폴더별로 나눠서)" : "");
-  openModal("글로 저장하기",
+  openModal("저장하기",
     '<p class="desc">' + what + "</p>" +
     '<div class="ex-sec"><div class="ex-label">형식</div><div class="ex-modes">' +
-    card("txt", "📄", "txt", "어디서나 열리는 글 파일. 꾸밈 없이 내용만", !isEpub) +
+    card("txt", "📄", "txt", "어디서나 열리는 글 파일. 꾸밈 없이 내용만", !isEpub && !isJson) +
     card("epub", "📖", "epub", "전자책 앱(리디·구글 북스·애플 북스 등)에서 책처럼. 턴마다 목차", isEpub) +
+    card("json", "💾", "백업", "보관함으로 그대로 다시 불러올 수 있는 파일 (상태창·형광펜·설정 다 포함)", isJson) +
     "</div></div>" +
-    '<div class="ex-sec"><div class="ex-label">내용</div><div class="ex-opts">' +
+    '<div class="ex-sec" id="svPlainSec"' + (isJson ? " hidden" : "") + '><div class="ex-label">내용</div><div class="ex-opts">' +
     '<label class="ex-opt"><span class="ex-opt-txt">대화만 (상태창·위젯·트래커 빼기)<small>끄면 상태창 내용도 글로 풀어서 같이 넣어요</small></span><input type="checkbox" id="svPlain"' + (plain ? " checked" : "") + '><span class="ex-sw"></span></label>' +
     "</div></div>" +
     '<div class="ex-sec" id="svCoverSec"' + (isEpub ? "" : " hidden") + '><div class="ex-label">표지<span class="ex-sub">epub 만 · 비우면 글자 표지' + (chats.length > 1 ? " · 모든 방에 같은 표지" : "") + '</span></div>' +
@@ -3928,7 +3929,7 @@ function openSaveTextModal(chats, zipBase, byFolder) {
     '<button type="button" class="sv-clear" id="svCoverClear" hidden>빼기</button></div></div>',
     [{ label: "취소", close: true }, { label: "저장", primary: true, id: "svGo" }]);
   let coverFile = null;
-  document.querySelectorAll('input[name="svFmt"]').forEach(r => r.addEventListener("change", () => { $("svCoverSec").hidden = r.value !== "epub" || !r.checked; }));
+  document.querySelectorAll('input[name="svFmt"]').forEach(r => r.addEventListener("change", () => { if (!r.checked) return; $("svCoverSec").hidden = r.value !== "epub"; $("svPlainSec").hidden = r.value === "json"; }));
   const showCover = f => {
     coverFile = f;
     const img = $("svCoverImg");
@@ -3940,7 +3941,7 @@ function openSaveTextModal(chats, zipBase, byFolder) {
   $("svCover").addEventListener("change", e => showCover(e.target.files[0] || null));
   $("svCoverClear").addEventListener("click", () => { $("svCover").value = ""; showCover(null); });
   $("svGo").addEventListener("click", async () => {
-    const fmt = (document.querySelector('input[name="svFmt"]:checked') || {}).value === "epub" ? "epub" : "txt";
+    const fv = (document.querySelector('input[name="svFmt"]:checked') || {}).value, fmt = fv === "epub" || fv === "json" ? fv : "txt";
     const opts = { plain: $("svPlain").checked };
     if (fmt === "epub" && coverFile) {
       try { opts.cover = await coverJpeg(coverFile); } catch (e) { toast("표지 이미지를 읽지 못했어요"); return; }
@@ -3948,10 +3949,13 @@ function openSaveTextModal(chats, zipBase, byFolder) {
     lsSetSafe("lk_svFmt", fmt); lsSetSafe("lk_svPlain", opts.plain ? "1" : "0");
     closeModal();
     const one = c => {
-      try { return fmt === "epub" ? chatToEpub(c, opts) : new TextEncoder().encode("﻿" + chatToTxt(c, opts)); }
+      try {
+        if (fmt === "json") { const f = c.folderId && state.folders.find(x => x.id === c.folderId); return new TextEncoder().encode(JSON.stringify({ chats: [c], folders: f ? [f] : [] })); }
+        return fmt === "epub" ? chatToEpub(c, opts) : new TextEncoder().encode("﻿" + chatToTxt(c, opts));
+      }
       catch (e) { console.warn("save failed", e); return new TextEncoder().encode("﻿" + c.turns.map(t => t.raw).join("\n\n---\n\n")); }
     };
-    const type = fmt === "epub" ? "application/epub+zip" : "text/plain;charset=utf-8";
+    const type = fmt === "epub" ? "application/epub+zip" : fmt === "json" ? "application/json" : "text/plain;charset=utf-8";
     if (!zipBase && chats.length === 1) {
       downloadBlob(new Blob([one(chats[0])], { type }), txtFileName(chats[0]) + "." + fmt);
       toast(fmt + " 로 저장했어요");
@@ -3961,8 +3965,15 @@ function openSaveTextModal(chats, zipBase, byFolder) {
   });
 }
 // 압축 없는 zip (파일 이름 UTF-8)
-function makeZip(files) { return new Blob([makeZipBytes(files)], { type: "application/zip" }); }
+function makeZip(files) { return new Blob(makeZipParts(files), { type: "application/zip" }); }
 function makeZipBytes(files) {
+  const all = makeZipParts(files);
+  const out = new Uint8Array(all.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of all) { out.set(p, o); o += p.length; }
+  return out;
+}
+function makeZipParts(files) {
   const enc = new TextEncoder();
   const crcT = makeZip.t || (makeZip.t = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; }));
   const crc = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = crcT[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
@@ -3990,11 +4001,7 @@ function makeZipBytes(files) {
   const z = new DataView(new ArrayBuffer(22));
   z.setUint32(0, 0x06054b50, true); z.setUint16(8, files.length, true); z.setUint16(10, files.length, true);
   z.setUint32(12, cenSize, true); z.setUint32(16, off, true);
-  const all = [...chunks, ...cen, z.buffer].map(p => p instanceof ArrayBuffer ? new Uint8Array(p) : p);
-  const out = new Uint8Array(all.reduce((n, p) => n + p.length, 0));
-  let o = 0;
-  for (const p of all) { out.set(p, o); o += p.length; }
-  return out;
+  return [...chunks, ...cen, z.buffer].map(p => p instanceof ArrayBuffer ? new Uint8Array(p) : p);
 }
 // 표지 이미지 → JPEG 바이트 (긴 변 1600px 까지 줄임)
 function coverJpeg(file) {
@@ -4053,6 +4060,21 @@ function exportAll() {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
   toast("백업 파일을 저장했어요");
+}
+// 백업 파일 여러 개를 한 번에 — 모두 합치기 (같은 방은 건너뜀)
+async function importFilesMerge(files) {
+  let added = 0, bad = 0;
+  const exC = new Set(state.chats.map(c => c.id)), exF = new Set(state.folders.map(f => f.id));
+  for (const f of files) {
+    try {
+      const data = JSON.parse(await f.text());
+      if (!data || !Array.isArray(data.chats)) throw 0;
+      data.chats.forEach(c => { if (c && c.id && !exC.has(c.id)) { exC.add(c.id); state.chats.push(c); _dirty.add(c.id); added++; } });
+      (data.folders || []).forEach(x => { if (x && x.id && !exF.has(x.id)) { exF.add(x.id); state.folders.push(x); } });
+    } catch (e) { bad++; }
+  }
+  save(); renderAll();
+  toast(added + "개 방을 합쳤어요" + (bad ? " · 못 읽은 파일 " + bad + "개" : ""));
 }
 function importFile(file) {
   const reader = new FileReader();
@@ -4206,7 +4228,9 @@ $("newFolderBtn").addEventListener("click", openNewFolderModal);
 $("exportBtn").addEventListener("click", exportAll);
 $("importBtn").addEventListener("click", () => $("fileInput").click());
 $("fileInput").addEventListener("change", e => {
-  if (e.target.files[0]) importFile(e.target.files[0]);
+  const fl = [...e.target.files];
+  if (fl.length === 1) importFile(fl[0]);
+  else if (fl.length > 1) importFilesMerge(fl);
   e.target.value = "";
 });
 $("addLogBtn").addEventListener("click", addLog);
@@ -5165,15 +5189,15 @@ window.addEventListener("visibilitychange", () => {
       const flush = async () => { if (ops >= 200 || bytes > 4000000) { await batch.commit(); batch = writeBatch(db); ops = 0; bytes = 0; } };
       for (const c of chats) {
         const prev = synced[c.id], prevN = prev ? (prev.n || 1) : 0, f = fpOf(c);
-        if (prev && prev.fp === f && prev.len != null) { newMap[c.id] = prev; continue; }   // 지문 같음 — 글로 바꾸지도 않음
-        const j = JSON.stringify(c);
+        if (prev && prev.fp === f && prev.len != null && prev.h) { newMap[c.id] = prev; continue; }   // 지문 같음 — 글로 바꾸지도 않음
+        const j = JSON.stringify(c), h = hash(j) + ':' + j.length;
         const prevLen = prev ? (prev.len != null ? prev.len : prev) : -1;
-        if (prevLen === j.length) { newMap[c.id] = { len: j.length, n: prevN, fp: f }; continue; }   // 변동 없음
+        if (prev && (prev.h ? prev.h === h : prevLen === j.length)) { newMap[c.id] = { len: j.length, n: prevN, fp: f, h }; continue; }   // 변동 없음
         const chunks = chunkStr(j); upN++; upB += j.length;
         if (chunks.length <= 1) { const jj = chunks.length ? chunks[0] : j; batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: 1, j: jj }); ops++; bytes += jj.length * 3; await flush(); }
         else { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: chunks.length }); ops++; await flush(); for (let i = 0; i < chunks.length; i++) { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i), { d: chunks[i] }); ops++; bytes += chunks[i].length * 3; await flush(); } }
         for (let i = chunks.length; i < prevN; i++) { batch.delete(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i)); ops++; await flush(); }
-        newMap[c.id] = { len: j.length, n: chunks.length, fp: f };
+        newMap[c.id] = { len: j.length, n: chunks.length, fp: f, h };
       }
       const live = new Set(chats.map(c => c.id));
       for (const id of Object.keys(synced)) {
@@ -5186,7 +5210,8 @@ window.addEventListener("visibilitychange", () => {
       }
       Object.keys(newMap).forEach(id => { if (newMap[id] && newMap[id].fp) sigCache[id] = { len: newMap[id].len, fp: newMap[id].fp }; });
       const sg = hash(canon(st));
-      batch.set(metaDoc(), { folders: JSON.stringify(folders), order: chats.map(c => c.id), sig: sg }); ops++;
+      const vers = {}; chats.forEach(c => { if (newMap[c.id] && newMap[c.id].h) vers[c.id] = newMap[c.id].h; });
+      batch.set(metaDoc(), { folders: JSON.stringify(folders), order: chats.map(c => c.id), sig: sg, vers: JSON.stringify(vers) }); ops++;
       await batch.commit();
       setSynced(newMap);
       setLastSig(sg);
@@ -5201,7 +5226,36 @@ window.addEventListener("visibilitychange", () => {
     try {
       const meta = await getDoc(metaDoc());
       let folders = [], order = [];
-      if (meta.exists()) { const d = meta.data(); try { folders = JSON.parse(d.folders || '[]'); } catch (e) {} order = Array.isArray(d.order) ? d.order : []; }
+      let vers = null;
+      if (meta.exists()) { const d = meta.data(); try { folders = JSON.parse(d.folders || '[]'); } catch (e) {} order = Array.isArray(d.order) ? d.order : []; try { vers = d.vers ? JSON.parse(d.vers) : null; } catch (e) {} }
+      /* 방마다 버전이 기록돼 있으면 — 바뀐 방만 받아온다 */
+      if (vers && order.length && order.every(id => vers[id])) {
+        const syn = getSynced(), local = new Map(((window.__lkLoaded && state && state.chats) || []).map(c => [c.id, c]));
+        const need = order.filter(id => { const c = local.get(id), e = syn[id]; return !(c && e && e.h === vers[id] && e.fp === fpOf(c)); });
+        toast(need.length ? '바뀐 방 ' + need.length + '개 받는 중…' : '이미 최신이에요');
+        const got = {}, newSyn = {};
+        let k = 0;
+        for (const id of need) {
+          const man = await getDoc(doc(db, 'users', user.uid, C_CHATS, id));
+          if (!man.exists()) continue;
+          const md = man.data(), n = md.n || 1;
+          let raw;
+          if (n <= 1) raw = md.j != null ? md.j : '';
+          else { const parts = await Promise.all(Array.from({ length: n }, (_, i) => getDoc(doc(db, 'users', user.uid, C_CHATS, id + '__' + i)).then(x => (x.exists() && x.data().d) || ''))); raw = parts.join(''); }
+          try { const c = JSON.parse(raw || 'null'); if (c && c.id) { got[id] = c; newSyn[id] = { len: raw.length, n, fp: fpOf(c), h: vers[id] }; } } catch (e) {}
+          if (++k % 5 === 0) toast('바뀐 방 받는 중… ' + k + ' / ' + need.length);
+        }
+        const chats = order.map(id => got[id] || local.get(id)).filter(Boolean);
+        chats.forEach(c => { if (!newSyn[c.id] && syn[c.id]) newSyn[c.id] = syn[c.id]; });
+        state.chats = chats; state.folders = folders;
+        Object.keys(got).forEach(id => _dirty.add(id));
+        await doSave();
+        setSynced(newSyn);
+        setLastSig(meta.data().sig);
+        pulling = false;
+        location.reload();
+        return;
+      }
       const snap = await getDocs(collection(db, 'users', user.uid, C_CHATS));
       const manifests = {}, chunkMap = {};
       snap.forEach(dd => {
