@@ -494,6 +494,9 @@
     box-shadow: var(--shadow); overflow: hidden;
     animation: rise 0.34s ease backwards;
   }
+  /* 화면 밖 턴은 그리지 않고 자리만 잡아 둔다 — 긴 방이 무거워지는 걸 막음 */
+  .turn { content-visibility: auto; contain-intrinsic-size: auto 700px; }
+  .turn.no-anim { animation: none; }
   @keyframes rise {
     from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -2550,6 +2553,17 @@ function updateLogSearchUI(hitCount) {
   if (next) next.disabled = false;
   markCurrentHit();
 }
+// 화면 밖 턴은 크기를 어림만 해 두기 때문에(content-visibility), 멀리 이동할 땐
+// 몇 프레임 동안 다시 맞춰 줘야 정확한 자리에 멈춘다
+function settleScrollTo(el, block) {
+  if (!el) return;
+  const sa = $("scrollArea");
+  const r = el.getBoundingClientRect(), far = Math.abs(r.top) > (sa.clientHeight || 800) * 3;
+  if (!far) { el.scrollIntoView({ behavior: "smooth", block: block || "start" }); return; }
+  let n = 0;
+  const go = () => { el.scrollIntoView({ behavior: "instant", block: block || "start" }); if (++n < 8) requestAnimationFrame(go); };
+  go();
+}
 // 현재 인덱스의 일치 항목을 강조하고 화면에 보이게 스크롤
 function markCurrentHit(doScroll) {
   const marks = $("scrollInner").querySelectorAll("mark.log-hit");
@@ -2558,7 +2572,7 @@ function markCurrentHit(doScroll) {
   const cur = marks[logHitIdx];
   cur.classList.add("current");
   if (doScroll !== false)
-    cur.scrollIntoView({ behavior: "smooth", block: "center" });
+    settleScrollTo(cur, "center");
 }
 // 다음/이전 일치 항목으로 이동
 function moveLogHit(dir) {
@@ -3020,7 +3034,7 @@ function renderTurn(turn, idx) {
   let label;
   if (effNo != null) label = "TURN " + effNo;
   else label = "#" + (origIdx + 1);
-  return '<div class="turn" data-tid="' + turn.id + '" style="animation-delay:' + (Math.min(idx, 8) * 0.04) + 's">' +
+  return '<div class="turn' + (idx >= 12 ? " no-anim" : "") + '" data-tid="' + turn.id + '" style="animation-delay:' + (Math.min(idx, 8) * 0.04) + 's">' +
     '<div class="turn-head">' +
       '<button class="turn-num turn-num-edit" title="턴 번호 수정">' + label + '</button>' +
       '<span class="spacer"></span>' +
@@ -3337,7 +3351,7 @@ function addLog() {
   } else {
     renderAll();
   }
-  setTimeout(() => { $("scrollArea").scrollTop = $("scrollArea").scrollHeight; }, 80);
+  setTimeout(() => { const ts = $("scrollArea").querySelectorAll(".turn"); if (ts.length) settleScrollTo(ts[ts.length - 1], "end"); }, 80);
   if (composerMode === "turn") toast("턴을 추가했어요");
 }
 // 화면에 아직 안 그려진 턴들만 골라 뒤에 덧붙인다
@@ -4564,13 +4578,13 @@ $("logSearchNext").addEventListener("click", () => moveLogHit(1));
 $("fabTop").addEventListener("click", () => {
   const sa = $("scrollArea");
   const turns = sa.querySelectorAll(".turn");
-  if (turns.length) turns[0].scrollIntoView({ behavior: "smooth", block: "start" });
+  if (turns.length) settleScrollTo(turns[0], "start");
   else sa.scrollTop = 0;
 });
 $("fabBottom").addEventListener("click", () => {
   const sa = $("scrollArea");
   const turns = sa.querySelectorAll(".turn");
-  if (turns.length) turns[turns.length - 1].scrollIntoView({ behavior: "smooth", block: "end" });
+  if (turns.length) settleScrollTo(turns[turns.length - 1], "end");
   else sa.scrollTop = sa.scrollHeight;
 });
 $("delChatBtn").addEventListener("click", delChat);
