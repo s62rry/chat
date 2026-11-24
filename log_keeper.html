@@ -1416,6 +1416,28 @@ function idbSet(key, val) {
   });
 }
 
+// 저장 구조: "state" 에는 방 목록·설정만(턴 없이), 턴은 방마다 "t:<방 id>" 에 따로.
+// 바뀐 방만 다시 저장하면 돼서, 데이터가 커도 저장할 때 전체를 통째로 복사하지 않는다
+const TURN_KEY = id => "t:" + id;
+let _dirty = new Set(), _dirtyAll = false, _savedIds = new Set();
+function idbDel(key) {
+  return new Promise((resolve, reject) => {
+    const tx = _idb.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+function idbKeys() {
+  return new Promise((resolve, reject) => {
+    const req = _idb.transaction(IDB_STORE, "readonly").objectStore(IDB_STORE).getAllKeys();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+function metaOf(st) {
+  return Object.assign({}, st, { _split: 1, chats: (st.chats || []).map(c => { const m = Object.assign({}, c); delete m.turns; m.n = (c.turns || []).length; return m; }) });
+}
 async function load() {
   try {
     _idb = await openIDB();
@@ -1426,14 +1448,25 @@ async function load() {
         const old = localStorage.getItem(STORE_KEY);
         if (old) {
           data = JSON.parse(old);
-          await idbSet(IDB_KEY, data);
           localStorage.removeItem(STORE_KEY); // 옮겼으니 정리
+          _dirtyAll = true;
         }
       } catch (e) { console.warn("migration failed", e); }
+    }
+    if (data && data._split) {
+      for (const c of data.chats || []) {
+        c.turns = (await idbGet(TURN_KEY(c.id))) || [];
+        delete c.n;
+        _savedIds.add(c.id);
+      }
+      delete data._split;
+    } else if (data) {
+      _dirtyAll = true; // 예전(한 덩어리) 구조 — 방마다 나눠 다시 저장
     }
     if (data) state = data;
   } catch (e) {
     console.warn("IndexedDB load failed, falling back to localStorage", e);
+    _idb = null;
     // IndexedDB를 못 쓰는 환경 — localStorage로 폴백
     try {
       const raw = localStorage.getItem(STORE_KEY);
@@ -1442,10 +1475,22 @@ async function load() {
   }
   if (!state.chats) state.chats = [];
   if (!state.folders) state.folders = []; // 채팅방 폴더 [{id, name}]
+  window.__lkLoaded = true;
+  if (_dirtyAll && _idb) await doSave();
+  // 지워진 방의 턴 조각 정리
+  if (_idb) {
+    try {
+      const live = new Set(state.chats.map(c => TURN_KEY(c.id)));
+      for (const k of await idbKeys()) if (typeof k === "string" && k.indexOf("t:") === 0 && !live.has(k)) await idbDel(k);
+    } catch (e) {}
+  }
 }
 
 let _saveTimer = null;
 function save() {
+  // 지금 보고 있는 방이 바뀐 것으로 본다 (턴을 고치는 건 늘 보고 있는 방)
+  const ac = typeof getActive === "function" ? getActive() : null;
+  if (ac) { _dirty.add(ac.id); ac._rev = (ac._rev || 0) + 1; }
   // 연속 저장 시 마지막 것만 — 0.3초 디바운스
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(doSave, 300);
@@ -1453,7 +1498,18 @@ function save() {
 async function doSave() {
   try {
     if (_idb) {
-      await idbSet(IDB_KEY, state);
+      const all = _dirtyAll, dirty = _dirty;
+      _dirtyAll = false; _dirty = new Set();
+      const ids = new Set();
+      for (const c of state.chats) {
+        ids.add(c.id);
+        // 새 방이거나 바뀐 방만 턴을 다시 쓴다
+        if (all || dirty.has(c.id) || !_savedIds.has(c.id)) await idbSet(TURN_KEY(c.id), c.turns || []);
+      }
+      await idbSet(IDB_KEY, metaOf(state));
+      for (const id of _savedIds) if (!ids.has(id)) { try { await idbDel(TURN_KEY(id)); } catch (e) {} }
+      _savedIds = ids;
+      try { window.dispatchEvent(new Event("lk-saved")); } catch (e) {}
     } else {
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
     }
@@ -3982,14 +4038,20 @@ function saveFolderTxtZip(fid) {
 
 function exportAll() {
   if (!state.chats.length) { toast("내보낼 채팅이 없어요"); return; }
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  // 방마다 따로 글로 바꿔 이어 붙인다 (전체를 한 번에 문자열로 만들면 메모리가 크게 튄다)
+  const rest = Object.assign({}, state); delete rest.chats;
+  const head = JSON.stringify(rest);
+  const parts = [head.slice(0, -1) + (head.length > 2 ? "," : "") + '"chats":['];
+  state.chats.forEach((c, i) => parts.push((i ? "," : "") + JSON.stringify(c)));
+  parts.push("]}");
+  const blob = new Blob(parts, { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   const d = new Date();
   a.href = url;
   a.download = "로그보관함_" + d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + ".json";
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
   toast("백업 파일을 저장했어요");
 }
 function importFile(file) {
@@ -4002,7 +4064,7 @@ function importFile(file) {
         data.chats.length + "개의 채팅을 발견했어요.\n현재 채팅에 합칠지, 전부 교체할지 골라주세요.",
         () => {
           const existing = new Set(state.chats.map(c => c.id));
-          data.chats.forEach(c => { if (!existing.has(c.id)) state.chats.push(c); });
+          data.chats.forEach(c => { if (!existing.has(c.id)) { state.chats.push(c); _dirty.add(c.id); } });
           // 폴더도 함께 합친다
           if (Array.isArray(data.folders)) {
             const exF = new Set(state.folders.map(f => f.id));
@@ -4013,6 +4075,8 @@ function importFile(file) {
         },
         () => {
           state = data;
+          _dirtyAll = true;
+          (state.chats || []).forEach(c => { c._rev = (c._rev || 0) + 1; });
           if (!state.chats) state.chats = [];
           if (!state.folders) state.folders = [];
           activeId = state.chats.length ? state.chats[0].id : null;
@@ -4918,11 +4982,20 @@ window.addEventListener("visibilitychange", () => {
   const idbOpen = () => new Promise((res, rej) => { const r = indexedDB.open(IDB_NAME, 1); r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains(IDB_STORE)) d.createObjectStore(IDB_STORE); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   const idbGetState = () => idbOpen().then(d => new Promise((res, rej) => { const t = d.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(IDB_KEY); t.onsuccess = () => res(t.result); t.onerror = () => rej(t.error); }));
   const idbSetState = v => idbOpen().then(d => new Promise((res, rej) => { const tx = d.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).put(v, IDB_KEY); tx.oncomplete = () => res(1); tx.onerror = () => rej(tx.error); }));
-  const readState = async () => { try { return (await idbGetState()) || { chats: [], folders: [] }; } catch (e) { return { chats: [], folders: [] }; } };
+  // 화면에 올라와 있는 데이터를 그대로 쓴다 (저장소를 통째로 다시 읽지 않음 — 큰 보관함에서 메모리가 폭증하던 원인)
+  const readState = async () => {
+    for (let i = 0; i < 200 && !window.__lkLoaded; i++) await new Promise(r => setTimeout(r, 50));
+    try { if (window.__lkLoaded && typeof state !== 'undefined' && state) return state; } catch (e) {}
+    return { chats: [], folders: [] };
+  };
   // 로딩 경합으로 잠깐 빈 것처럼 읽히는 것 방지(빈 결과면 한 번 더 확인)
   const readStateStable = async () => { let s = await readState(); if (!(s && s.chats && s.chats.length)) { await new Promise(r => setTimeout(r, 500)); s = await readState(); } return s; };
 
-  const canon = st => JSON.stringify({ folders: st.folders || [], chats: (st.chats || []).slice().sort((a, b) => (a.id < b.id ? -1 : 1)) });
+  // 방마다 "바뀌었는지" 를 싸게 알아보는 지문 (방 정보 + 턴 수 + 고친 횟수). 지문이 같으면 글자 길이를 다시 재지 않는다
+  const fpOf = c => { const m = Object.assign({}, c); delete m.turns; return hash(JSON.stringify(m)) + ':' + ((c.turns || []).length); };
+  const lenOf = (c, cache) => { const f = fpOf(c), e = cache[c.id]; if (e && e.fp === f && e.len != null) return e; return { len: JSON.stringify(c).length, fp: f, fresh: 1 }; };
+  const sigCache = {};
+  const canon = st => { const syn = getSynced(); return JSON.stringify({ v: 3, folders: st.folders || [], chats: (st.chats || []).map(c => { const e = lenOf(c, Object.assign({}, syn, sigCache)); sigCache[c.id] = { len: e.len, fp: e.fp }; return [c.id, e.len]; }).sort((a, b) => (a[0] < b[0] ? -1 : 1)) }); };
   const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h; };
   const getSynced = () => { try { return JSON.parse(localStorage.getItem(SYNCED_KEY) || '{}'); } catch { return {}; } };
   const setSynced = m => { try { localStorage.setItem(SYNCED_KEY, JSON.stringify(m)); } catch (e) {} };
@@ -5075,14 +5148,16 @@ window.addEventListener("visibilitychange", () => {
       let batch = writeBatch(db), ops = 0, bytes = 0;
       const flush = async () => { if (ops >= 200 || bytes > 4000000) { await batch.commit(); batch = writeBatch(db); ops = 0; bytes = 0; } };
       for (const c of chats) {
+        const prev = synced[c.id], prevN = prev ? (prev.n || 1) : 0, f = fpOf(c);
+        if (prev && prev.fp === f && prev.len != null) { newMap[c.id] = prev; continue; }   // 지문 같음 — 글로 바꾸지도 않음
         const j = JSON.stringify(c);
-        const prev = synced[c.id], prevLen = prev ? (prev.len != null ? prev.len : prev) : -1, prevN = prev ? (prev.n || 1) : 0;
-        if (prevLen === j.length) { newMap[c.id] = { len: j.length, n: prevN }; continue; }   // 변동 없음
+        const prevLen = prev ? (prev.len != null ? prev.len : prev) : -1;
+        if (prevLen === j.length) { newMap[c.id] = { len: j.length, n: prevN, fp: f }; continue; }   // 변동 없음
         const chunks = chunkStr(j);
         if (chunks.length <= 1) { const jj = chunks.length ? chunks[0] : j; batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: 1, j: jj }); ops++; bytes += jj.length * 3; await flush(); }
         else { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id), { n: chunks.length }); ops++; await flush(); for (let i = 0; i < chunks.length; i++) { batch.set(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i), { d: chunks[i] }); ops++; bytes += chunks[i].length * 3; await flush(); } }
         for (let i = chunks.length; i < prevN; i++) { batch.delete(doc(db, 'users', user.uid, C_CHATS, c.id + '__' + i)); ops++; await flush(); }
-        newMap[c.id] = { len: j.length, n: chunks.length };
+        newMap[c.id] = { len: j.length, n: chunks.length, fp: f };
       }
       const live = new Set(chats.map(c => c.id));
       for (const id of Object.keys(synced)) {
@@ -5093,6 +5168,7 @@ window.addEventListener("visibilitychange", () => {
           await flush();
         }
       }
+      Object.keys(newMap).forEach(id => { if (newMap[id] && newMap[id].fp) sigCache[id] = { len: newMap[id].len, fp: newMap[id].fp }; });
       const sg = hash(canon(st));
       batch.set(metaDoc(), { folders: JSON.stringify(folders), order: chats.map(c => c.id), sig: sg }); ops++;
       await batch.commit();
@@ -5139,9 +5215,10 @@ window.addEventListener("visibilitychange", () => {
       if (!user || pulling || pushing) return;
       const sig = hash(canon(await readState()));
       if (sig !== getLastSig()) schedulePush();   // 클라우드 반영분과 다르면 올림(성공 시 lastSig 갱신→멈춤, 실패 시 다음 폴에서 재시도)
-    }, 4000);
+    }, 20000);
   }
   function stopPoll() { clearInterval(pollTimer); pollTimer = null; }
+  window.addEventListener('lk-saved', () => { if (user && !pulling) schedulePush(); });
   window.addEventListener('pagehide', () => { if (user && pushTimer) { clearTimeout(pushTimer); pushAll(); } });
 
   async function firstSync() {
