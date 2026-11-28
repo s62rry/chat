@@ -2648,13 +2648,17 @@ function updateLogSearchUI(hitCount) {
 }
 // 화면 밖 턴은 크기를 어림만 해 두기 때문에(content-visibility), 멀리 이동할 땐
 // 몇 프레임 동안 다시 맞춰 줘야 정확한 자리에 멈춘다
-function settleScrollTo(el, block) {
+function settleScrollTo(el, block, instant) {
   if (!el) return;
   const sa = $("scrollArea");
-  const r = el.getBoundingClientRect(), far = Math.abs(r.top) > (sa.clientHeight || 800) * 3;
+  // 아직 안 그린 턴 안의 글자(검색 결과 등)는 크기가 0 으로 잡혀 부드러운 이동이 안 먹으니, 턴 기준으로 거리를 잰다
+  const box = el.closest(".turn") || el;
+  const r = el.getBoundingClientRect(), rb = box.getBoundingClientRect();
+  const hidden = !r.width && !r.height;
+  const far = instant || hidden || Math.abs(rb.top) > (sa.clientHeight || 800) * 3;
   if (!far) { el.scrollIntoView({ behavior: "smooth", block: block || "start" }); return; }
   let n = 0;
-  const go = () => { el.scrollIntoView({ behavior: "instant", block: block || "start" }); if (++n < 8) requestAnimationFrame(go); };
+  const go = () => { (n === 0 && hidden ? box : el).scrollIntoView({ behavior: "instant", block: block || "start" }); if (++n < 8) requestAnimationFrame(go); };
   go();
 }
 // 현재 인덱스의 일치 항목을 강조하고 화면에 보이게 스크롤
@@ -2665,7 +2669,7 @@ function markCurrentHit(doScroll) {
   const cur = marks[logHitIdx];
   cur.classList.add("current");
   if (doScroll !== false)
-    settleScrollTo(cur, "center");
+    settleScrollTo(cur, "center", true);
 }
 // 다음/이전 일치 항목으로 이동
 function moveLogHit(dir) {
