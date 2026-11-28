@@ -6231,50 +6231,65 @@
   // 장식 HTML 은 #cardTpl(배경 위·글자 아래)에 들어가고 {{char}} 같은 값이 채워진다.
   const TPL_HIDE_CREDIT = '.card .card-credit, .card .card-sep { display: none !important; }\n';
   const TPL_BUILTIN = [
-    { id: 'letter', name: '편지지', ic: '✉', colors: { text: '#4a3b2c', accent: '#b5895a', bg: '#f6efe2' },
+    { id: 'letter', name: '편지지', ic: '✉', colors: { text: '#4a3b2c', accent: '#c0896a', bg: '#f7f0e3' },
       html: '<div class="lt-frame"></div><div class="tpl-lines"></div>' +
-            '<div class="lt-to">To. {{char}}</div><div class="lt-from">From. {{maker}}</div>',
+            '<div class="lt-stamp"><span>♥</span></div>' +
+            '<div class="lt-to"><em>Dear.</em> {{char}}</div><div class="lt-from"><em>from.</em> {{maker}}</div>',
       css: TPL_HIDE_CREDIT +
-        '.card .card-inner { margin: 34px 4px 40px; }\n' +
-        '.lt-frame { position: absolute; inset: 14px; border: 1px solid var(--tpl-accent); border-radius: 4px; opacity: .55; }\n' +
-        '.lt-to { position: absolute; top: 26px; left: 32px; font-size: 15px; font-weight: 600; opacity: .85; }\n' +
-        '.lt-from { position: absolute; bottom: 26px; right: 32px; font-size: 13px; opacity: .75; }' },
+        '.card { padding: 108px 64px 104px !important; }\n' +
+        '.lt-frame { position: absolute; inset: 16px; border: 3px double var(--tpl-accent); border-radius: 3px; opacity: .55; }\n' +
+        '.tpl-lines { top: 94px; bottom: 78px; left: 64px; right: 64px; }\n' +
+        '.lt-to { position: absolute; top: 50px; left: 64px; right: 140px; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
+        '.lt-from { position: absolute; bottom: 44px; right: 64px; left: 64px; text-align: right; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
+        '.lt-to em, .lt-from em { font-style: italic; font-weight: 400; opacity: .6; margin-right: 3px; }\n' +
+        '.lt-stamp { position: absolute; top: 36px; right: 64px; width: 44px; height: 52px; border: 2px dashed var(--tpl-accent); border-radius: 3px; display: flex; align-items: center; justify-content: center; color: var(--tpl-accent); font-size: 19px; opacity: .85; }' },
     { id: 'note', name: '노트', ic: '✎', colors: { text: '#2d3340', accent: '#7aa2d6', bg: '#fdfdfb' },
-      html: '<div class="nt-top"></div><div class="nt-margin"></div><div class="tpl-lines"></div><div class="nt-date">{{date}}</div>',
-      css: '.card .card-inner { margin: 22px 0 6px 30px; }\n' +
-        '.nt-top { position: absolute; left: 0; right: 0; top: 0; height: 10px; background: var(--tpl-accent); }\n' +
-        '.nt-margin { position: absolute; top: 10px; bottom: 0; left: 54px; border-left: 2px solid #e8a3a3; }\n' +
-        '.nt-date { position: absolute; top: 22px; right: 26px; font-size: 12px; opacity: .55; }' },
+      html: '<div class="nt-top"></div><div class="nt-holes"><i></i><i></i><i></i></div><div class="nt-margin"></div>' +
+            '<div class="tpl-lines"></div><div class="nt-date">{{date}}</div>',
+      css: '.card { padding: 88px 56px 76px 96px !important; }\n' +
+        '.nt-top { position: absolute; left: 0; right: 0; top: 0; height: 12px; background: var(--tpl-accent); }\n' +
+        '.nt-margin { position: absolute; top: 12px; bottom: 0; left: 74px; border-left: 2px solid #eba9a9; }\n' +
+        '.nt-holes { position: absolute; top: 12px; bottom: 0; left: 0; width: 74px; }\n' +
+        '.nt-holes i { position: absolute; left: 26px; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; background: #e3e6eb; box-shadow: inset 0 1px 2px rgba(0,0,0,.22); }\n' +
+        '.nt-holes i:nth-child(1) { top: 20%; } .nt-holes i:nth-child(2) { top: 50%; } .nt-holes i:nth-child(3) { top: 80%; }\n' +
+        '.tpl-lines { top: 58px; bottom: 34px; left: 76px; right: 30px; }\n' +
+        '.nt-date { position: absolute; top: 30px; right: 34px; font-size: 12px; letter-spacing: .06em; opacity: .55; }' },
     { id: 'sns', name: 'SNS 게시글', ic: '◍', colors: { text: '#14171a', accent: '#4a90e2', bg: '#dfe6ee' },
-      html: '<div class="sn-box"><div class="sn-head"><div class="sn-av">{{initial}}</div><div>' +
-            '<div class="sn-name">{{char}}</div><div class="sn-id">@{{maker}} · {{date}}</div></div></div>' +
+      html: '<div class="sn-box"><div class="sn-head"><div class="sn-av">{{initial}}</div><div class="sn-who">' +
+            '<div class="sn-name">{{char}}</div><div class="sn-id">@{{maker}} · {{date}}</div></div><div class="sn-more">···</div></div>' +
             '<div class="sn-foot"><span>♡ 좋아요</span><span>답글</span><span>공유</span></div></div>',
       css: TPL_HIDE_CREDIT +
-        '.card { padding: 112px 58px 84px !important; }\n' +
-        '.sn-box { position: absolute; inset: 26px; background: #ffffff; border-radius: 16px; box-shadow: 0 6px 22px rgba(0,0,0,.12); }\n' +
-        '.sn-head { position: absolute; top: 22px; left: 24px; right: 24px; display: flex; gap: 11px; align-items: center; }\n' +
-        '.sn-av { width: 42px; height: 42px; border-radius: 50%; background: var(--tpl-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; flex-shrink: 0; }\n' +
-        '.sn-name { font-weight: 700; font-size: 15px; color: #14171a; }\n' +
-        '.sn-id { font-size: 12px; color: #8899a6; margin-top: 2px; }\n' +
-        '.sn-foot { position: absolute; left: 24px; right: 24px; bottom: 16px; border-top: 1px solid #e6ecf0; padding-top: 11px; font-size: 12.5px; color: #8899a6; display: flex; gap: 22px; }' },
+        '.card { padding: 120px 64px 96px !important; }\n' +
+        '.sn-box { position: absolute; inset: 30px; background: #ffffff; border-radius: 18px; box-shadow: 0 8px 26px rgba(0,0,0,.12); }\n' +
+        '.sn-head { position: absolute; top: 24px; left: 34px; right: 28px; display: flex; gap: 12px; align-items: center; }\n' +
+        '.sn-av { width: 44px; height: 44px; border-radius: 50%; background: var(--tpl-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; flex-shrink: 0; }\n' +
+        '.sn-who { flex: 1; min-width: 0; }\n' +
+        '.sn-name { font-weight: 700; font-size: 15px; color: #14171a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
+        '.sn-id { font-size: 12px; color: #8899a6; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
+        '.sn-more { color: #8899a6; font-size: 16px; letter-spacing: 1px; }\n' +
+        '.sn-foot { position: absolute; left: 34px; right: 34px; bottom: 18px; border-top: 1px solid #e6ecf0; padding-top: 12px; font-size: 12.5px; color: #8899a6; display: flex; gap: 24px; }' },
     { id: 'polaroid', name: '폴라로이드', ic: '▣', colors: { text: '#ffffff', accent: '#ffffff', bg: '#3a4152' },
-      html: '<div class="pl-frame"></div><div class="pl-cap">{{char}}</div><div class="pl-sub">{{maker}} · {{date}}</div>',
+      html: '<div class="pl-photo"></div><div class="pl-frame"></div><div class="pl-tape"></div>' +
+            '<div class="pl-cap">{{char}}</div><div class="pl-sub">{{maker}}</div><div class="pl-date">{{date}}</div>',
       css: TPL_HIDE_CREDIT +
-        '.card { padding: 62px 62px 150px !important; }\n' +
-        '.pl-frame { position: absolute; inset: 0; border: 26px solid #fbfaf6; border-bottom-width: 116px; }\n' +
-        '.pl-cap { position: absolute; left: 30px; right: 30px; bottom: 48px; text-align: center; color: #34302c; font-size: 19px; font-weight: 600; }\n' +
-        '.pl-sub { position: absolute; left: 30px; right: 30px; bottom: 26px; text-align: center; color: #34302c; font-size: 12px; opacity: .55; }' },
+        '.card { padding: 76px 70px 176px !important; }\n' +
+        '.pl-frame { position: absolute; inset: 0; border: 30px solid #fbfaf6; border-bottom-width: 130px; }\n' +
+        '.pl-photo { position: absolute; top: 30px; left: 30px; right: 30px; bottom: 130px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), inset 0 0 30px rgba(0,0,0,.25); }\n' +
+        '.pl-tape { position: absolute; top: 12px; left: 50%; width: 120px; height: 34px; margin-left: -60px; background: rgba(238,230,208,.8); box-shadow: 0 1px 3px rgba(0,0,0,.12); transform: rotate(-2.5deg); }\n' +
+        '.pl-cap { position: absolute; left: 44px; right: 44px; bottom: 68px; text-align: center; color: #33302b; font-size: 21px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
+        '.pl-sub { position: absolute; left: 44px; right: 44px; bottom: 44px; text-align: center; color: #33302b; font-size: 12.5px; opacity: .55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
+        '.pl-date { position: absolute; right: 34px; bottom: 12px; color: #33302b; font-size: 10px; letter-spacing: .1em; opacity: .35; }' },
     { id: 'memo', name: '메모지', ic: '▤', colors: { text: '#4a4020', accent: '#c9a227', bg: '#cdb38a' },
       html: '<div class="mm-note"></div><div class="mm-tape"></div>',
-      css: '.card { padding: 84px 72px 70px !important; }\n' +
-        '.mm-note { position: absolute; inset: 36px 36px 32px; background: #fff3a6; border-radius: 2px 2px 22px 2px; box-shadow: 0 8px 18px rgba(0,0,0,.2); }\n' +
-        '.mm-tape { position: absolute; top: 22px; left: 50%; width: 112px; height: 30px; margin-left: -56px; background: rgba(255,255,255,.6); box-shadow: 0 1px 3px rgba(0,0,0,.12); transform: rotate(-3deg); }' },
+      css: '.card { padding: 100px 80px 88px !important; }\n' +
+        '.mm-note { position: absolute; inset: 40px 40px 36px; background: #fff3a6; border-radius: 2px 2px 24px 2px; box-shadow: 0 10px 22px rgba(0,0,0,.2); }\n' +
+        '.mm-tape { position: absolute; top: 24px; left: 50%; width: 116px; height: 32px; margin-left: -58px; background: rgba(255,255,255,.6); box-shadow: 0 1px 3px rgba(0,0,0,.12); transform: rotate(-3deg); }' },
     { id: 'book', name: '책 페이지', ic: '❦', colors: { text: '#3b3127', accent: '#8a6d4b', bg: '#f3ead8' },
       html: '<div class="bk-head">{{char}}</div><div class="bk-rule"></div><div class="bk-num">— {{page}} —</div>',
-      css: '.card .card-inner { margin: 26px 0; }\n' +
-        '.bk-head { position: absolute; top: 22px; left: 40px; right: 40px; text-align: center; font-size: 11px; letter-spacing: .25em; opacity: .6; }\n' +
-        '.bk-rule { position: absolute; left: 40px; right: 40px; top: 44px; border-top: 1px solid var(--tpl-accent); opacity: .35; }\n' +
-        '.bk-num { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center; font-size: 12px; opacity: .6; }' }
+      css: '.card { padding: 100px 68px 96px !important; }\n' +
+        '.bk-head { position: absolute; top: 36px; left: 68px; right: 68px; text-align: center; font-size: 11px; letter-spacing: .28em; opacity: .6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
+        '.bk-rule { position: absolute; left: 68px; right: 68px; top: 60px; border-top: 1px solid var(--tpl-accent); opacity: .35; }\n' +
+        '.bk-num { position: absolute; bottom: 36px; left: 0; right: 0; text-align: center; font-size: 12px; letter-spacing: .1em; opacity: .6; }' }
   ];
   state.template = state.template || '';
   let tplPreviewObj = null;          // 편집 창에서 '미리보기' 중인 템플릿
@@ -6376,15 +6391,21 @@
     const k = cr.width ? card.offsetWidth / cr.width : 1;     // 미리보기가 축소돼 있어도 카드 좌표로
     const qr = quoteText.getBoundingClientRect();
     const top = (qr.top - cr.top) * k;
-    const left = parseFloat(ccs.paddingLeft), right = parseFloat(ccs.paddingRight);
-    const bottom = card.offsetHeight - Math.max(20, parseFloat(ccs.paddingBottom) * 0.6);
+    // 줄선 상자(.tpl-lines)의 자리를 템플릿 CSS 로 정했으면 그 안에만, 카드 전체면 여백 안쪽에 긋는다
+    const W = card.offsetWidth, H = card.offsetHeight;
+    const bl = box.offsetLeft, bt = box.offsetTop, bw = box.offsetWidth, bh = box.offsetHeight;
+    const fullX = bl <= 0 && bl + bw >= W - 1, fullY = bt <= 0 && bt + bh >= H - 1;
+    const left = fullX ? parseFloat(ccs.paddingLeft) : bl;
+    const right = fullX ? W - parseFloat(ccs.paddingRight) : bl + bw;
+    const topLim = fullY ? Math.max(20, parseFloat(ccs.paddingTop) * 0.6) : bt;
+    const bottom = fullY ? H - Math.max(20, parseFloat(ccs.paddingBottom) * 0.6) : bt + bh;
     // 글 위쪽 빈자리도 같은 간격으로 채운다
-    const topLim = Math.max(20, parseFloat(ccs.paddingTop) * 0.6);
     let y0 = top + lh - 2;
     while (y0 - lh >= topLim) y0 -= lh;
+    while (y0 < topLim) y0 += lh;
     let html = '';
-    for (let y = y0, n = 0; y < bottom && n < 200; y += lh, n++) {
-      html += '<i style="top:' + y.toFixed(1) + 'px;left:' + left + 'px;right:' + right + 'px"></i>';
+    for (let y = y0, n = 0; y <= bottom && n < 200; y += lh, n++) {
+      html += '<i style="top:' + (y - bt).toFixed(1) + 'px;left:' + (left - bl) + 'px;width:' + (right - left) + 'px"></i>';
     }
     box.innerHTML = html;
   }
