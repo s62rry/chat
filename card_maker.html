@@ -905,12 +905,17 @@
     display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; }
   .tpl-item.tpl-add { border-style: dashed; background: transparent; color: var(--text-dim, var(--text)); justify-content: center; align-items: center; font-weight: 500; }
   #tplOverlay .modal { width: 560px; }
-  .tpl-opts { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
-  .tpl-opt-row { display: flex; align-items: center; gap: 7px; }
-  .tpl-opt-row .field-label { flex: 0 0 auto; min-width: 60px; white-space: nowrap; font-size: 12px; }
-  #tplOpts .swatch-input { flex: 0 0 auto; width: 34px !important; height: 26px; }
-  .tpl-opt-row #tplFromBg { margin-left: auto; }
-  .tpl-opt-row #tplDate { flex: 1; min-width: 0; }
+  .tpl-opts { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; padding: 10px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--field); }
+  .tpl-opt-row { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+  .tpl-opt-k { flex: 0 0 30px; font-size: 11.5px; font-weight: 600; color: var(--text-dim, var(--text)); opacity: .8; }
+  .tpl-sw { position: relative; flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%; overflow: hidden; cursor: pointer;
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--border); }
+  .tpl-sw input { position: absolute; inset: -8px; width: 42px; height: 42px; padding: 0; border: 0; cursor: pointer; background: none; }
+  .tpl-gprev { flex: 1; min-width: 20px; height: 8px; border-radius: 4px; }
+  .tpl-opt-row .mini-btn { flex: 0 0 auto; }
+  #tplDate { flex: 1; min-width: 0; font-family: var(--ui); font-size: 12.5px; color: var(--text); background: var(--panel); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 9px; outline: none; color-scheme: light dark; }
+  #tplDate:focus { border-color: var(--accent); }
   #tplOverlay textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, Menlo, Consolas, monospace;
     font-size: 12px; line-height: 1.5; min-height: 120px; resize: vertical; tab-size: 2; }
   #tplOverlay .tpl-help { font-size: 11.5px; line-height: 1.6; opacity: .8; margin-top: 8px; }
@@ -2279,25 +2284,6 @@
       </div>
     </div>
 
-    <!-- 템플릿 -->
-    <div class="section" data-tab="card">
-      <div class="section-title">템플릿</div>
-      <div class="tpl-grid" id="tplGrid"></div>
-      <div class="tpl-opts" id="tplOpts">
-        <div class="tpl-opt-row">
-          <span class="field-label" style="margin:0;">템플릿 색</span>
-          <input type="color" class="swatch-input" id="tplC1" value="#5fb0f7" title="색 1">
-          <input type="color" class="swatch-input" id="tplC2" value="#ff7fb0" title="색 2">
-          <button type="button" class="mini-btn" id="tplFromBg" title="배경이 그라데이션이면 그 두 색, 단색이면 배경색·강조색">배경에서 가져오기</button>
-        </div>
-        <div class="tpl-opt-row">
-          <span class="field-label" style="margin:0;">날짜</span>
-          <input type="date" id="tplDate" title="비우면 오늘 날짜"><span class="hint" style="margin:0;white-space:nowrap;">비우면 오늘</span>
-        </div>
-      </div>
-      <div class="hint">카드 모양을 통째로 바꿔요. 고르면 어울리는 색으로 바뀌고, 색·글씨는 그 뒤에 마음대로 바꿔도 돼요. ⧉ 로 복제해 고치거나 <b>+ 만들기</b>로 직접 HTML·CSS를 써서 넣을 수 있어요.</div>
-    </div>
-
     <!-- 색 테마 프리셋 -->
     <div class="section" data-tab="card">
       <div class="section-title">색 테마 &amp; 프리셋</div>
@@ -2747,6 +2733,27 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- 템플릿 -->
+    <div class="section" data-tab="card">
+      <div class="section-title">템플릿</div>
+      <div class="tpl-grid" id="tplGrid"></div>
+      <div class="tpl-opts" id="tplOpts">
+        <div class="tpl-opt-row">
+          <span class="tpl-opt-k">색</span>
+          <label class="tpl-sw" title="템플릿 색 1"><input type="color" id="tplC1" value="#5fb0f7"></label>
+          <label class="tpl-sw" title="템플릿 색 2"><input type="color" id="tplC2" value="#ff7fb0"></label>
+          <span class="tpl-gprev" id="tplGradPrev"></span>
+          <button type="button" class="mini-btn" id="tplFromBg" title="배경이 그라데이션이면 그 두 색, 단색이면 배경색·강조색">배경에서</button>
+        </div>
+        <div class="tpl-opt-row">
+          <span class="tpl-opt-k">날짜</span>
+          <input type="date" id="tplDate" title="비우면 오늘 날짜">
+          <button type="button" class="mini-btn" id="tplDateToday" title="오늘 날짜로 (칸 비우기)">오늘</button>
+        </div>
+      </div>
+      <div class="hint">카드 모양을 통째로 바꿔요. 고르면 어울리는 색으로 바뀌고, 색·글씨는 그 뒤에 마음대로 바꿔도 돼요. ⧉ 로 복제해 고치거나 <b>+ 만들기</b>로 직접 HTML·CSS를 써서 넣을 수 있어요.</div>
     </div>
 
     <!-- 저장 / 미리보기 -->
@@ -6250,65 +6257,66 @@
   // 장식 HTML 은 #cardTpl(배경 위·글자 아래)에 들어가고 {{char}} 같은 값이 채워진다.
   const TPL_HIDE_CREDIT = '.card .card-credit, .card .card-sep { display: none !important; }\n';
   const TPL_BUILTIN = [
-    { id: 'letter', name: '편지지', ic: '✉', size: 16, colors: { text: '#4a3b2c', accent: '#c0896a', bg: '#f7f0e3' },
+    { id: 'letter', name: '편지지', ic: '✉', size: 16, tc: ['#c0896a', '#d48f8f'], colors: { text: '#4a3b2c', accent: '#c0896a', bg: '#f7f0e3' },
       html: '<div class="lt-frame"></div><div class="tpl-lines"></div>' +
             '<div class="lt-stamp"><span>♥</span></div>' +
             '<div class="lt-to"><em>Dear.</em> {{char}}</div><div class="lt-from"><em>from.</em> {{maker}}</div>',
       css: TPL_HIDE_CREDIT +
         '.card { padding: 108px 64px 104px !important; }\n' +
-        '.lt-frame { position: absolute; inset: 16px; border: 3px double var(--tpl-accent); border-radius: 3px; opacity: .55; }\n' +
+        '.lt-frame { position: absolute; inset: 16px; border: 3px double var(--tpl-c1); border-radius: 3px; opacity: .55; }\n' +
         '.tpl-lines { top: 94px; bottom: 78px; left: 64px; right: 64px; }\n' +
         '.lt-to { position: absolute; top: 50px; left: 64px; right: 140px; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
         '.lt-from { position: absolute; bottom: 44px; right: 64px; left: 64px; text-align: right; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
         '.lt-to em, .lt-from em { font-style: italic; font-weight: 400; opacity: .6; margin-right: 3px; }\n' +
-        '.lt-stamp { position: absolute; top: 36px; right: 64px; width: 44px; height: 52px; border: 2px dashed var(--tpl-accent); border-radius: 3px; display: flex; align-items: center; justify-content: center; color: var(--tpl-accent); font-size: 19px; opacity: .85; }' },
-    { id: 'note', name: '노트', ic: '✎', size: 16, colors: { text: '#2d3340', accent: '#7aa2d6', bg: '#fdfdfb' },
+        '.lt-stamp { position: absolute; top: 36px; right: 64px; width: 44px; height: 52px; border: 2px dashed var(--tpl-c2); border-radius: 3px; display: flex; align-items: center; justify-content: center; color: var(--tpl-c2); font-size: 19px; opacity: .85; }' },
+    { id: 'note', name: '노트', ic: '✎', size: 16, tc: ['#7aa2d6', '#eba9a9'], colors: { text: '#2d3340', accent: '#7aa2d6', bg: '#fdfdfb' },
       html: '<div class="nt-top"></div><div class="nt-holes"><i></i><i></i><i></i></div><div class="nt-margin"></div>' +
             '<div class="tpl-lines"></div><div class="nt-date">{{date}}</div>',
       css: '.card { padding: 88px 56px 76px 96px !important; }\n' +
-        '.nt-top { position: absolute; left: 0; right: 0; top: 0; height: 12px; background: var(--tpl-accent); }\n' +
-        '.nt-margin { position: absolute; top: 12px; bottom: 0; left: 74px; border-left: 2px solid #eba9a9; }\n' +
+        '.nt-top { position: absolute; left: 0; right: 0; top: 0; height: 12px; background: var(--tpl-c1); }\n' +
+        '.nt-margin { position: absolute; top: 12px; bottom: 0; left: 74px; border-left: 2px solid var(--tpl-c2); }\n' +
         '.nt-holes { position: absolute; top: 12px; bottom: 0; left: 0; width: 74px; }\n' +
         '.nt-holes i { position: absolute; left: 26px; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; background: #e3e6eb; box-shadow: inset 0 1px 2px rgba(0,0,0,.22); }\n' +
         '.nt-holes i:nth-child(1) { top: 20%; } .nt-holes i:nth-child(2) { top: 50%; } .nt-holes i:nth-child(3) { top: 80%; }\n' +
         '.tpl-lines { top: 58px; bottom: 34px; left: 76px; right: 30px; }\n' +
         '.nt-date { position: absolute; top: 30px; right: 34px; font-size: 12px; letter-spacing: .06em; opacity: .55; }' },
-    { id: 'sns', name: 'SNS 게시글', ic: '◍', size: 16, colors: { text: '#14171a', accent: '#4a90e2', bg: '#dfe6ee' },
+    { id: 'sns', name: 'SNS 게시글', ic: '◍', size: 16, tc: ['#4a90e2', '#ff7fb0'], colors: { text: '#14171a', accent: '#4a90e2', bg: '#dfe6ee' },
       html: '<div class="sn-box"><div class="sn-head"><div class="sn-av">{{initial}}</div><div class="sn-who">' +
             '<div class="sn-name">{{char}}</div><div class="sn-id">@{{maker}} · {{date}}</div></div><div class="sn-more">···</div></div>' +
-            '<div class="sn-foot"><span>♡ 좋아요</span><span>답글</span><span>공유</span></div></div>',
+            '<div class="sn-foot"><span class="sn-like">♡ 좋아요</span><span>답글</span><span>공유</span></div></div>',
       css: TPL_HIDE_CREDIT +
         '.card { padding: 120px 64px 96px !important; }\n' +
         '.sn-box { position: absolute; inset: 30px; background: #ffffff; border-radius: 18px; box-shadow: 0 8px 26px rgba(0,0,0,.12); }\n' +
         '.sn-head { position: absolute; top: 24px; left: 34px; right: 28px; display: flex; gap: 12px; align-items: center; }\n' +
-        '.sn-av { width: 44px; height: 44px; border-radius: 50%; background: var(--tpl-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; flex-shrink: 0; }\n' +
+        '.sn-av { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--tpl-c1), var(--tpl-c2)); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; flex-shrink: 0; }\n' +
         '.sn-who { flex: 1; min-width: 0; }\n' +
         '.sn-name { font-weight: 700; font-size: 15px; color: #14171a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
         '.sn-id { font-size: 12px; color: #8899a6; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
         '.sn-more { color: #8899a6; font-size: 16px; letter-spacing: 1px; }\n' +
-        '.sn-foot { position: absolute; left: 34px; right: 34px; bottom: 18px; border-top: 1px solid #e6ecf0; padding-top: 12px; font-size: 12.5px; color: #8899a6; display: flex; gap: 24px; }' },
-    { id: 'polaroid', name: '폴라로이드', ic: '▣', size: 16, colors: { text: '#ffffff', accent: '#ffffff', bg: '#3a4152' },
+        '.sn-foot { position: absolute; left: 34px; right: 34px; bottom: 18px; border-top: 1px solid #e6ecf0; padding-top: 12px; font-size: 12.5px; color: #8899a6; display: flex; gap: 24px; }\n' +
+        '.sn-like { color: var(--tpl-c2); }' },
+    { id: 'polaroid', name: '폴라로이드', ic: '▣', size: 16, tc: ['#eee6d0', '#33302b'], colors: { text: '#ffffff', accent: '#ffffff', bg: '#3a4152' },
       html: '<div class="pl-photo"></div><div class="pl-frame"></div><div class="pl-tape"></div>' +
             '<div class="pl-cap">{{char}}</div><div class="pl-sub">{{maker}}</div><div class="pl-date">{{date}}</div>',
       css: TPL_HIDE_CREDIT +
         '.card { padding: 76px 70px 176px !important; }\n' +
         '.pl-frame { position: absolute; inset: 0; border: 30px solid #fbfaf6; border-bottom-width: 130px; }\n' +
         '.pl-photo { position: absolute; top: 30px; left: 30px; right: 30px; bottom: 130px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), inset 0 0 30px rgba(0,0,0,.25); }\n' +
-        '.pl-tape { position: absolute; top: 12px; left: 50%; width: 120px; height: 34px; margin-left: -60px; background: rgba(238,230,208,.8); box-shadow: 0 1px 3px rgba(0,0,0,.12); transform: rotate(-2.5deg); }\n' +
+        '.pl-tape { position: absolute; top: 12px; left: 50%; width: 120px; height: 34px; margin-left: -60px; background: var(--tpl-c1); opacity: .85; box-shadow: 0 1px 3px rgba(0,0,0,.12); transform: rotate(-2.5deg); }\n' +
         '.pl-cap { position: absolute; left: 44px; right: 44px; bottom: 68px; text-align: center; color: #33302b; font-size: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
         '.pl-sub { position: absolute; left: 44px; right: 44px; bottom: 44px; text-align: center; color: #33302b; font-size: 12px; opacity: .55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
         '.pl-date { position: absolute; right: 34px; bottom: 12px; color: #33302b; font-size: 10px; letter-spacing: .1em; opacity: .35; }' },
-    { id: 'memo', name: '메모지', ic: '▤', size: 17, colors: { text: '#4a4020', accent: '#c9a227', bg: '#cdb38a' },
+    { id: 'memo', name: '메모지', ic: '▤', size: 17, tc: ['#fff3a6', '#ffffff'], colors: { text: '#4a4020', accent: '#c9a227', bg: '#cdb38a' },
       html: '<div class="mm-note"></div><div class="mm-tape"></div>',
       css: '.card { padding: 100px 80px 88px !important; }\n' +
-        '.mm-note { position: absolute; inset: 40px 40px 36px; background: #fff3a6; border-radius: 2px; box-shadow: 0 10px 22px rgba(0,0,0,.2); }\n' +
-        '.mm-tape { position: absolute; top: 24px; left: 50%; width: 116px; height: 32px; margin-left: -58px; background: rgba(255,255,255,.6); box-shadow: 0 1px 3px rgba(0,0,0,.12); transform: rotate(-3deg); }' },
-    { id: 'book', name: '책 페이지', ic: '❦', size: 16, colors: { text: '#3b3127', accent: '#8a6d4b', bg: '#f3ead8' },
+        '.mm-note { position: absolute; inset: 40px 40px 36px; background: var(--tpl-c1); border-radius: 2px; box-shadow: 0 10px 22px rgba(0,0,0,.2); }\n' +
+        '.mm-tape { position: absolute; top: 24px; left: 50%; width: 116px; height: 32px; margin-left: -58px; background: var(--tpl-c2); opacity: .6; box-shadow: 0 1px 3px rgba(0,0,0,.12); transform: rotate(-3deg); }' },
+    { id: 'book', name: '책 페이지', ic: '❦', size: 16, tc: ['#8a6d4b', '#8a6d4b'], colors: { text: '#3b3127', accent: '#8a6d4b', bg: '#f3ead8' },
       html: '<div class="bk-head">{{char}}</div><div class="bk-rule"></div><div class="bk-num">— {{page}} —</div>',
       css: '.card { padding: 100px 68px 96px !important; }\n' +
         '.bk-head { position: absolute; top: 36px; left: 68px; right: 68px; text-align: center; font-size: 11px; letter-spacing: .28em; opacity: .6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n' +
-        '.bk-rule { position: absolute; left: 68px; right: 68px; top: 60px; border-top: 1px solid var(--tpl-accent); opacity: .35; }\n' +
-        '.bk-num { position: absolute; bottom: 36px; left: 0; right: 0; text-align: center; font-size: 12px; letter-spacing: .1em; opacity: .6; }' }
+        '.bk-rule { position: absolute; left: 68px; right: 68px; top: 60px; border-top: 1px solid var(--tpl-c1); opacity: .35; }\n' +
+        '.bk-num { position: absolute; bottom: 36px; left: 0; right: 0; text-align: center; font-size: 12px; letter-spacing: .1em; opacity: .7; color: var(--tpl-c2); }' }
   ];
   state.template = state.template || '';
   let tplPreviewObj = null;          // 편집 창에서 '미리보기' 중인 템플릿
@@ -6442,6 +6450,7 @@
     if (!t || !t.colors) return;
     const set = (id, v) => { const el = $(id); if (el && v) { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); } };
     if (t.size) set('sizeRange', String(t.size));
+    if (t.tc) { state.tplC1 = t.tc[0]; state.tplC2 = t.tc[1]; }
     set('textColor', t.colors.text);
     set('accentColor', t.colors.accent);
     if (t.colors.bg) {
@@ -6471,6 +6480,7 @@
     $('tplC1').value = state.tplC1 || '#5fb0f7';
     $('tplC2').value = state.tplC2 || '#ff7fb0';
     $('tplDate').value = state.tplDate || '';
+    $('tplGradPrev').style.background = 'linear-gradient(90deg,' + $('tplC1').value + ',' + $('tplC2').value + ')';
   }
   function renderTplGrid() {
     if (!window.__tplReady) return;
@@ -6570,8 +6580,9 @@
     ta.selectionStart = ta.selectionEnd = a + 2;
   }));
   ['tplC1', 'tplC2'].forEach(id => $(id).addEventListener('input', () => {
-    state[id] = $(id).value; renderCard();
+    state[id] = $(id).value; syncTplOpts(); renderCard();
   }));
+  $('tplDateToday').addEventListener('click', () => { state.tplDate = ''; syncTplOpts(); renderCard(); });
   $('tplDate').addEventListener('input', () => { state.tplDate = $('tplDate').value; renderCard(); });
   $('tplFromBg').addEventListener('click', () => {
     const grad = state.bgMode === 'gradient';
