@@ -887,6 +887,28 @@
     pointer-events: none;
   }
   .card-inner { position: relative; z-index: 1; }
+  /* 템플릿 장식 레이어 — 배경 위, 글자 아래 */
+  #cardTpl { position: absolute; inset: 0; pointer-events: none; display: none; color: var(--tpl-ink, inherit); }
+  #card.tpl-on #cardTpl { display: block; }
+  #cardTpl .tpl-lines { position: absolute; inset: 0; }
+  #cardTpl .tpl-lines > i { position: absolute; display: block; height: 0; border-bottom: 1px solid var(--tpl-line, rgba(0,0,0,.15)); }
+  /* 템플릿 고르기 */
+  .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 7px; }
+  .tpl-item { position: relative; height: 54px; border-radius: 8px; border: 1px solid var(--border);
+    display: flex; align-items: flex-end; justify-content: flex-start; padding: 6px 8px;
+    font-size: 11.5px; font-weight: 600; cursor: pointer; overflow: hidden; text-align: left; line-height: 1.2; }
+  .tpl-item.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tpl-item .tpl-ic { position: absolute; top: 6px; left: 8px; font-size: 15px; opacity: .8; }
+  .tpl-item .tpl-acts { position: absolute; top: 3px; right: 3px; display: none; gap: 2px; }
+  .tpl-item:hover .tpl-acts, .tpl-item:focus-within .tpl-acts { display: flex; }
+  .tpl-item .tpl-acts span { width: 19px; height: 19px; border-radius: 5px; background: rgba(0,0,0,.55); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; }
+  .tpl-item.tpl-add { border-style: dashed; background: transparent; color: var(--text-dim, var(--text)); justify-content: center; align-items: center; font-weight: 500; }
+  #tplOverlay .modal { width: 560px; }
+  #tplOverlay textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px; line-height: 1.5; min-height: 120px; resize: vertical; tab-size: 2; }
+  #tplOverlay .tpl-help { font-size: 11.5px; line-height: 1.6; opacity: .8; margin-top: 8px; }
+  #tplOverlay .tpl-help code { background: var(--accent-soft, rgba(127,127,127,.15)); padding: 0 4px; border-radius: 3px; }
   /* 투명 배경 미리보기 — 저장했을 때처럼 배경을 빼고 격자만 보여준다 */
   #card.trans-preview { background: transparent !important; }
   #card.trans-preview #cardBg,
@@ -2251,6 +2273,13 @@
       </div>
     </div>
 
+    <!-- 템플릿 -->
+    <div class="section" data-tab="card">
+      <div class="section-title">템플릿</div>
+      <div class="tpl-grid" id="tplGrid"></div>
+      <div class="hint">카드 모양을 통째로 바꿔요. 고르면 어울리는 색으로 바뀌고, 색·글씨는 그 뒤에 마음대로 바꿔도 돼요. ⧉ 로 복제해 고치거나 <b>+ 만들기</b>로 직접 HTML·CSS를 써서 넣을 수 있어요.</div>
+    </div>
+
     <!-- 색 테마 프리셋 -->
     <div class="section" data-tab="card">
       <div class="section-title">색 테마 &amp; 프리셋</div>
@@ -3030,6 +3059,7 @@
         <div id="cardCorners"></div>
 
         <div id="cardBorder"></div>
+        <div id="cardTpl"></div>
         <div class="card-inner">
           <div id="cardTitle" style="display:none;"></div>
           <div id="quoteText">문구를 입력하면 여기에 표시됩니다.</div>
@@ -3079,6 +3109,29 @@
 </main>
 
 <!-- 글씨체 추가 모달 -->
+<div class="overlay" id="tplOverlay">
+  <div class="modal">
+    <div class="modal-head" id="tplHead">템플릿 만들기</div>
+    <div class="modal-body">
+      <label class="field-label">이름</label>
+      <input type="text" id="tplName" placeholder="내 템플릿" maxlength="30">
+      <label class="field-label" style="margin-top:12px;">HTML <span style="opacity:.6;font-weight:400;">— 글 뒤에 깔리는 장식</span></label>
+      <textarea id="tplHtml" spellcheck="false" placeholder='<div class="frame"></div>&#10;<div class="name">{{char}}</div>'></textarea>
+      <label class="field-label" style="margin-top:12px;">CSS</label>
+      <textarea id="tplCss" spellcheck="false" placeholder=".frame { position:absolute; inset:16px; border:2px solid currentColor; }"></textarea>
+      <div class="tpl-help">
+        넣을 수 있는 값: <code>{{char}}</code> 캐릭터 <code>{{maker}}</code> 제작자 <code>{{title}}</code> 제목 <code>{{date}}</code> 오늘 <code>{{page}}</code>/<code>{{pages}}</code> 장 <code>{{initial}}</code> 캐릭터 첫 글자<br>
+        CSS 는 카드 안에서만 적용돼요. <code>.card</code> 카드 자체 · <code>.card-inner</code> 글 묶음 · <code>#quoteText</code> 본문 · <code>.card-credit</code> 출처 · <code>.card-sep</code> 출처선<br>
+        <code>&lt;div class="tpl-lines"&gt;&lt;/div&gt;</code> 를 넣으면 글 줄에 맞춘 줄선이 그어져요. 색은 <code>var(--tpl-ink)</code> 글씨색 · <code>var(--tpl-accent)</code> 강조색
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button id="tplCancel">취소</button>
+      <button id="tplPreview">미리보기</button>
+      <button class="primary" id="tplSave">저장</button>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="fontOverlay">
   <div class="modal">
     <div class="modal-head">글씨체 추가</div>
@@ -3228,6 +3281,7 @@
     if (!data.fonts) data.fonts = [];
     if (!data.fontScales) data.fontScales = {};
     if (!data.presets) data.presets = [];
+    if (!Array.isArray(data.templates)) data.templates = [];
     // 예전 '설정 프리셋'(setups)은 색 테마로 합쳐졌으므로 옮겨 담는다
     if (Array.isArray(data.setups) && data.setups.length) {
       data.setups.forEach(it => {
@@ -4746,6 +4800,7 @@
     cardSep.style.display = state.showCredit ? 'flex' : 'none';
     cardCredit.style.display = state.showCredit ? '' : 'none';
 
+    if (typeof applyTemplate === 'function') applyTemplate();
     updatePageNav();
   }
   // "이름｜" 을 다 치는 순간(또는 붙여넣는 순간) 이름에 __굵게__ 를 실제로 넣는다.
@@ -6171,6 +6226,290 @@
     renderCard();
   }));
 
+  // ============ 템플릿 — 카드 모양을 통째로 바꾸는 HTML·CSS 장식 ============
+  // 템플릿 CSS 의 '.card' 는 카드 자체, 나머지 선택자는 모두 카드 안으로 한정된다.
+  // 장식 HTML 은 #cardTpl(배경 위·글자 아래)에 들어가고 {{char}} 같은 값이 채워진다.
+  const TPL_HIDE_CREDIT = '.card .card-credit, .card .card-sep { display: none !important; }\n';
+  const TPL_BUILTIN = [
+    { id: 'letter', name: '편지지', ic: '✉', colors: { text: '#4a3b2c', accent: '#b5895a', bg: '#f6efe2' },
+      html: '<div class="lt-frame"></div><div class="tpl-lines"></div>' +
+            '<div class="lt-to">To. {{char}}</div><div class="lt-from">From. {{maker}}</div>',
+      css: TPL_HIDE_CREDIT +
+        '.card .card-inner { margin: 34px 4px 40px; }\n' +
+        '.lt-frame { position: absolute; inset: 14px; border: 1px solid var(--tpl-accent); border-radius: 4px; opacity: .55; }\n' +
+        '.lt-to { position: absolute; top: 26px; left: 32px; font-size: 15px; font-weight: 600; opacity: .85; }\n' +
+        '.lt-from { position: absolute; bottom: 26px; right: 32px; font-size: 13px; opacity: .75; }' },
+    { id: 'note', name: '노트', ic: '✎', colors: { text: '#2d3340', accent: '#7aa2d6', bg: '#fdfdfb' },
+      html: '<div class="nt-top"></div><div class="nt-margin"></div><div class="tpl-lines"></div><div class="nt-date">{{date}}</div>',
+      css: '.card .card-inner { margin: 22px 0 6px 30px; }\n' +
+        '.nt-top { position: absolute; left: 0; right: 0; top: 0; height: 10px; background: var(--tpl-accent); }\n' +
+        '.nt-margin { position: absolute; top: 10px; bottom: 0; left: 54px; border-left: 2px solid #e8a3a3; }\n' +
+        '.nt-date { position: absolute; top: 22px; right: 26px; font-size: 12px; opacity: .55; }' },
+    { id: 'sns', name: 'SNS 게시글', ic: '◍', colors: { text: '#14171a', accent: '#4a90e2', bg: '#dfe6ee' },
+      html: '<div class="sn-box"><div class="sn-head"><div class="sn-av">{{initial}}</div><div>' +
+            '<div class="sn-name">{{char}}</div><div class="sn-id">@{{maker}} · {{date}}</div></div></div>' +
+            '<div class="sn-foot"><span>♡ 좋아요</span><span>답글</span><span>공유</span></div></div>',
+      css: TPL_HIDE_CREDIT +
+        '.card { padding: 112px 58px 84px !important; }\n' +
+        '.sn-box { position: absolute; inset: 26px; background: #ffffff; border-radius: 16px; box-shadow: 0 6px 22px rgba(0,0,0,.12); }\n' +
+        '.sn-head { position: absolute; top: 22px; left: 24px; right: 24px; display: flex; gap: 11px; align-items: center; }\n' +
+        '.sn-av { width: 42px; height: 42px; border-radius: 50%; background: var(--tpl-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; flex-shrink: 0; }\n' +
+        '.sn-name { font-weight: 700; font-size: 15px; color: #14171a; }\n' +
+        '.sn-id { font-size: 12px; color: #8899a6; margin-top: 2px; }\n' +
+        '.sn-foot { position: absolute; left: 24px; right: 24px; bottom: 16px; border-top: 1px solid #e6ecf0; padding-top: 11px; font-size: 12.5px; color: #8899a6; display: flex; gap: 22px; }' },
+    { id: 'polaroid', name: '폴라로이드', ic: '▣', colors: { text: '#ffffff', accent: '#ffffff', bg: '#3a4152' },
+      html: '<div class="pl-frame"></div><div class="pl-cap">{{char}}</div><div class="pl-sub">{{maker}} · {{date}}</div>',
+      css: TPL_HIDE_CREDIT +
+        '.card { padding: 62px 62px 150px !important; }\n' +
+        '.pl-frame { position: absolute; inset: 0; border: 26px solid #fbfaf6; border-bottom-width: 116px; }\n' +
+        '.pl-cap { position: absolute; left: 30px; right: 30px; bottom: 48px; text-align: center; color: #34302c; font-size: 19px; font-weight: 600; }\n' +
+        '.pl-sub { position: absolute; left: 30px; right: 30px; bottom: 26px; text-align: center; color: #34302c; font-size: 12px; opacity: .55; }' },
+    { id: 'memo', name: '메모지', ic: '▤', colors: { text: '#4a4020', accent: '#c9a227', bg: '#cdb38a' },
+      html: '<div class="mm-note"></div><div class="mm-tape"></div>',
+      css: '.card { padding: 84px 72px 70px !important; }\n' +
+        '.mm-note { position: absolute; inset: 36px 36px 32px; background: #fff3a6; border-radius: 2px 2px 22px 2px; box-shadow: 0 8px 18px rgba(0,0,0,.2); }\n' +
+        '.mm-tape { position: absolute; top: 22px; left: 50%; width: 112px; height: 30px; margin-left: -56px; background: rgba(255,255,255,.6); box-shadow: 0 1px 3px rgba(0,0,0,.12); transform: rotate(-3deg); }' },
+    { id: 'book', name: '책 페이지', ic: '❦', colors: { text: '#3b3127', accent: '#8a6d4b', bg: '#f3ead8' },
+      html: '<div class="bk-head">{{char}}</div><div class="bk-rule"></div><div class="bk-num">— {{page}} —</div>',
+      css: '.card .card-inner { margin: 26px 0; }\n' +
+        '.bk-head { position: absolute; top: 22px; left: 40px; right: 40px; text-align: center; font-size: 11px; letter-spacing: .25em; opacity: .6; }\n' +
+        '.bk-rule { position: absolute; left: 40px; right: 40px; top: 44px; border-top: 1px solid var(--tpl-accent); opacity: .35; }\n' +
+        '.bk-num { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center; font-size: 12px; opacity: .6; }' }
+  ];
+  state.template = state.template || '';
+  let tplPreviewObj = null;          // 편집 창에서 '미리보기' 중인 템플릿
+  function tplFind(id) {
+    if (!id) return null;
+    return TPL_BUILTIN.find(t => t.id === id) || (data.templates || []).find(t => t.id === id) || null;
+  }
+  // 직접 쓴 HTML 에서 실행될 수 있는 것은 걷어낸다
+  function tplSanitize(html) {
+    const doc = new DOMParser().parseFromString('<body>' + (html || '') + '</body>', 'text/html');
+    doc.body.querySelectorAll('script,iframe,object,embed,link,meta,base,form,style').forEach(n => n.remove());
+    doc.body.querySelectorAll('*').forEach(el => {
+      Array.from(el.attributes).forEach(a => {
+        const v = a.value.replace(/\s+/g, '').toLowerCase();
+        if (/^on/i.test(a.name) || ((a.name === 'href' || a.name === 'src' || a.name === 'xlink:href') && v.indexOf('javascript:') === 0)) el.removeAttribute(a.name);
+      });
+    });
+    return doc.body.innerHTML;
+  }
+  // CSS 선택자를 카드 안으로 한정 — '.card' 는 카드 자체를 뜻한다
+  function tplScopeCss(css) {
+    const PRE = '#card.tpl-on';
+    const tmp = document.createElement('style');
+    tmp.media = 'not all';
+    tmp.textContent = (css || '').replace(/@import[^;]*;?/gi, '');
+    document.head.appendChild(tmp);
+    let out = '';
+    const scopeSel = sel => sel.split(',').map(x => {
+      x = x.trim();
+      if (!x) return '';
+      if (x.indexOf('#card') === 0) return x;
+      if (/^\.card(?![\w-])/.test(x)) return PRE + x.slice(5);
+      if (/^(html|body|:root)\b/.test(x)) return PRE;
+      return PRE + ' ' + x;
+    }).filter(Boolean).join(', ');
+    const walk = rules => {
+      let o = '';
+      Array.from(rules || []).forEach(r => {
+        if (r.type === 1) o += scopeSel(r.selectorText) + ' { ' + r.style.cssText + ' }\n';
+        else if (r.type === 4) o += '@media ' + r.media.mediaText + ' { ' + walk(r.cssRules) + ' }\n';
+        else if (r.type === 7 || r.type === 5) o += r.cssText + '\n';   // keyframes, font-face
+      });
+      return o;
+    };
+    try { out = walk(tmp.sheet && tmp.sheet.cssRules); } catch (e) { out = ''; }
+    tmp.remove();
+    return out;
+  }
+  function tplHexRgba(hex, a) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return 'rgba(0,0,0,' + a + ')';
+    const n = parseInt(m[1], 16);
+    return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  let tplCssKey = null;
+  function applyTemplate() {
+    if (!window.__tplReady) return;
+    const t = tplPreviewObj || tplFind(state.template);
+    const layer = $('cardTpl');
+    let st = $('tplStyle');
+    if (!st) { st = document.createElement('style'); st.id = 'tplStyle'; document.head.appendChild(st); }
+    if (!t || !layer) {
+      card.classList.remove('tpl-on');
+      if (layer) layer.innerHTML = '';
+      st.textContent = ''; tplCssKey = null;
+      return;
+    }
+    card.classList.add('tpl-on');
+    const key = t.id + '\u0001' + (t.css || '');
+    if (tplCssKey !== key) { st.textContent = tplScopeCss(t.css); tplCssKey = key; }
+    const ink = $('textColor').value, acc = $('accentColor').value;
+    card.style.setProperty('--tpl-ink', ink);
+    card.style.setProperty('--tpl-accent', acc);
+    card.style.setProperty('--tpl-line', tplHexRgba(ink, 0.2));
+    const pages = getPages();
+    const c = plainName(charInput.value), m = plainName(makerInput.value);
+    const d = new Date();
+    const vals = {
+      char: c, maker: m, title: plainName($('titleInput').value),
+      date: d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0'),
+      page: String(curPage + 1), pages: String(pages.length),
+      initial: (Array.from(c || m || '?')[0] || '?')
+    };
+    const html = (TPL_BUILTIN.includes(t) ? t.html : tplSanitize(t.html))
+      .replace(/\{\{\s*(\w+)\s*\}\}/g, (all, k) => Object.prototype.hasOwnProperty.call(vals, k) ? escapeHtml(vals[k]) : all);
+    if (layer.dataset.html !== html) { layer.innerHTML = html; layer.dataset.html = html; }
+    setTimeout(tplDrawLines, 0);
+  }
+  // 줄선 — 본문 줄 높이에 맞춰 카드 아래까지 긋는다 (저장 이미지에도 그대로 나오게 평범한 div 로)
+  function tplDrawLines() {
+    const box = document.querySelector('#cardTpl .tpl-lines');
+    if (!box) return;
+    box.innerHTML = '';
+    if (state.vertical) return;
+    const cs = getComputedStyle(quoteText), ccs = getComputedStyle(card);
+    let lh = parseFloat(cs.lineHeight);
+    if (!(lh > 4)) lh = parseFloat(cs.fontSize) * 1.75;
+    const cr = card.getBoundingClientRect();
+    const k = cr.width ? card.offsetWidth / cr.width : 1;     // 미리보기가 축소돼 있어도 카드 좌표로
+    const qr = quoteText.getBoundingClientRect();
+    const top = (qr.top - cr.top) * k;
+    const left = parseFloat(ccs.paddingLeft), right = parseFloat(ccs.paddingRight);
+    const bottom = card.offsetHeight - Math.max(20, parseFloat(ccs.paddingBottom) * 0.6);
+    // 글 위쪽 빈자리도 같은 간격으로 채운다
+    const topLim = Math.max(20, parseFloat(ccs.paddingTop) * 0.6);
+    let y0 = top + lh - 2;
+    while (y0 - lh >= topLim) y0 -= lh;
+    let html = '';
+    for (let y = y0, n = 0; y < bottom && n < 200; y += lh, n++) {
+      html += '<i style="top:' + y.toFixed(1) + 'px;left:' + left + 'px;right:' + right + 'px"></i>';
+    }
+    box.innerHTML = html;
+  }
+  // 고르면 어울리는 색으로 — 입력칸 이벤트를 그대로 태워 나머지 화면도 따라오게
+  function tplApplyColors(t) {
+    if (!t || !t.colors) return;
+    const set = (id, v) => { const el = $(id); if (el && v) { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); } };
+    set('textColor', t.colors.text);
+    set('accentColor', t.colors.accent);
+    if (t.colors.bg) {
+      const mb = document.querySelector('#bgModeSeg button[data-mode="color"]');
+      if (mb && state.bgMode !== 'color') mb.click();
+      set('bgColor', t.colors.bg);
+      set('dimRange', '0');
+    }
+  }
+  function selectTemplate(id) {
+    state.template = id || '';
+    const t = tplFind(id);
+    if (t) tplApplyColors(t);
+    renderTplGrid();
+    applyStyle();
+    renderCard();
+  }
+  function renderTplGrid() {
+    if (!window.__tplReady) return;
+    const g = $('tplGrid');
+    if (!g) return;
+    g.innerHTML = '';
+    const mk = (t, label, ic, bg, fg) => {
+      const b = document.createElement('div');
+      b.className = 'tpl-item' + ((state.template || '') === (t ? t.id : '') ? ' active' : '');
+      b.tabIndex = 0;
+      b.style.background = bg; b.style.color = fg;
+      b.innerHTML = '<span class="tpl-ic"></span><span class="tpl-nm"></span>';
+      b.querySelector('.tpl-ic').textContent = ic;
+      b.querySelector('.tpl-nm').textContent = label;
+      b.addEventListener('click', () => selectTemplate(t ? t.id : ''));
+      b.addEventListener('keydown', ev => { if (ev.key === 'Enter') selectTemplate(t ? t.id : ''); });
+      g.appendChild(b);
+      return b;
+    };
+    mk(null, '없음', '∅', 'var(--panel)', 'var(--text)');
+    const acts = (b, list) => {
+      const a = document.createElement('div'); a.className = 'tpl-acts';
+      list.forEach(([txt, title, fn]) => {
+        const s = document.createElement('span'); s.textContent = txt; s.title = title;
+        s.addEventListener('click', ev => { ev.stopPropagation(); fn(); });
+        a.appendChild(s);
+      });
+      b.appendChild(a);
+    };
+    TPL_BUILTIN.forEach(t => {
+      const b = mk(t, t.name, t.ic, t.colors.bg, t.colors.text);
+      acts(b, [['⧉', '복제해서 고치기', () => openTplEditor(null, t)]]);
+    });
+    (data.templates || []).forEach(t => {
+      const b = mk(t, t.name, '✦', 'var(--panel)', 'var(--text)');
+      acts(b, [
+        ['✎', '고치기', () => openTplEditor(t)],
+        ['⧉', '복제', () => openTplEditor(null, t)],
+        ['×', '지우기', async () => {
+          if (!(await askConfirm('템플릿 지우기', '"' + t.name + '" 템플릿을 지울까요?', '지우기'))) return;
+          data.templates = data.templates.filter(x => x !== t);
+          if (state.template === t.id) state.template = '';
+          saveData(); renderTplGrid(); renderCard();
+        }]
+      ]);
+    });
+    const add = document.createElement('div');
+    add.className = 'tpl-item tpl-add'; add.tabIndex = 0;
+    add.textContent = '+ 만들기';
+    add.addEventListener('click', () => openTplEditor(null, null));
+    g.appendChild(add);
+  }
+  let tplEditing = null;
+  function openTplEditor(t, from) {
+    tplEditing = t;
+    const src = t || from;
+    $('tplHead').textContent = t ? '템플릿 고치기' : '템플릿 만들기';
+    $('tplName').value = t ? t.name : (from ? from.name + ' 복사' : '');
+    $('tplHtml').value = src ? src.html : '<div class="frame"></div>\n<div class="tag">{{char}}</div>';
+    $('tplCss').value = src ? src.css : '.frame { position: absolute; inset: 16px; border: 2px solid var(--tpl-accent); border-radius: 10px; }\n.tag { position: absolute; top: 24px; left: 28px; font-size: 13px; font-weight: 700; }\n.card .card-inner { margin-top: 20px; }';
+    $('tplOverlay').classList.add('show');
+    setTimeout(() => $('tplName').focus(), 30);
+  }
+  function closeTplEditor() {
+    $('tplOverlay').classList.remove('show');
+    tplPreviewObj = null; tplEditing = null;
+    renderCard();
+  }
+  $('tplCancel').addEventListener('click', closeTplEditor);
+  $('tplPreview').addEventListener('click', () => {
+    tplPreviewObj = { id: '__preview', name: 'preview', html: $('tplHtml').value, css: $('tplCss').value, builtin: false };
+    renderCard();
+    toast('미리보기 — 저장하거나 취소하면 끝나요');
+  });
+  $('tplSave').addEventListener('click', () => {
+    const name = $('tplName').value.trim() || '내 템플릿';
+    const html = $('tplHtml').value, css = $('tplCss').value;
+    let t = tplEditing;
+    if (t) { t.name = name; t.html = html; t.css = css; }
+    else {
+      t = { id: 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, html, css };
+      data.templates.push(t);
+    }
+    saveData();
+    $('tplOverlay').classList.remove('show');
+    tplPreviewObj = null; tplEditing = null;
+    tplCssKey = null;
+    selectTemplate(t.id);
+    toast('"' + name + '" 템플릿 저장됨');
+  });
+  // 입력창의 Tab 은 들여쓰기로
+  ['tplHtml', 'tplCss'].forEach(id => $(id).addEventListener('keydown', ev => {
+    if (ev.key !== 'Tab') return;
+    ev.preventDefault();
+    const ta = ev.target, a = ta.selectionStart, b = ta.selectionEnd;
+    ta.value = ta.value.slice(0, a) + '  ' + ta.value.slice(b);
+    ta.selectionStart = ta.selectionEnd = a + 2;
+  }));
+  window.__tplReady = true;
+  renderTplGrid();
+  renderCard();
+
   function applyDecor() {
     const pat = $('cardPattern'), vig = $('cardVignette');
     const corners = $('cardCorners');
@@ -6956,6 +7295,8 @@
     state.blockOff = {};
     state.book = false;
     syncBookUI();
+    state.template = '';
+    if (typeof renderTplGrid === 'function') renderTplGrid();
     state.dragPlace = false;
     $('dragPlaceToggle').classList.remove('on');
     $('dragPlaceToggle').textContent = '\uCF1C\uAE30';
@@ -7765,6 +8106,7 @@
       pageBg: state.pageBg,
       blockOff: state.blockOff,
       book: !!state.book,
+      template: state.template || '',
       // 문구에 실제로 쓰인 이미지만 담는다
       inlineImgs: (function () {
         const used = {};
@@ -7911,6 +8253,8 @@
     state.blockOff = s.blockOff || {};
     state.book = !!s.book;
     syncBookUI();
+    state.template = s.template || '';
+    if (typeof renderTplGrid === 'function') renderTplGrid();
     if (s.inlineImgs && Object.keys(s.inlineImgs).length) {
       state.inlineImgs = Object.assign({}, state.inlineImgs || {}, s.inlineImgs);
     }
