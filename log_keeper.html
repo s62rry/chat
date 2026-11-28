@@ -3047,7 +3047,7 @@ function renderMain() {
       drawn += next.length;
       bindTurnEvents(chat);
       if (drawn < turns.length) requestAnimationFrame(drawMore);
-      else if (logQuery) { highlightHits(inner, logQuery); }
+      else if (logQuery) { updateLogSearchUI(highlightHits(inner, logQuery)); }
     };
     requestAnimationFrame(drawMore);
   } else {
