@@ -905,6 +905,12 @@
     display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; }
   .tpl-item.tpl-add { border-style: dashed; background: transparent; color: var(--text-dim, var(--text)); justify-content: center; align-items: center; font-weight: 500; }
   #tplOverlay .modal { width: 560px; }
+  .tpl-opts { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
+  .tpl-opt-row { display: flex; align-items: center; gap: 7px; }
+  .tpl-opt-row .field-label { flex: 0 0 auto; min-width: 60px; white-space: nowrap; font-size: 12px; }
+  #tplOpts .swatch-input { flex: 0 0 auto; width: 34px !important; height: 26px; }
+  .tpl-opt-row #tplFromBg { margin-left: auto; }
+  .tpl-opt-row #tplDate { flex: 1; min-width: 0; }
   #tplOverlay textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, Menlo, Consolas, monospace;
     font-size: 12px; line-height: 1.5; min-height: 120px; resize: vertical; tab-size: 2; }
   #tplOverlay .tpl-help { font-size: 11.5px; line-height: 1.6; opacity: .8; margin-top: 8px; }
@@ -2277,6 +2283,18 @@
     <div class="section" data-tab="card">
       <div class="section-title">템플릿</div>
       <div class="tpl-grid" id="tplGrid"></div>
+      <div class="tpl-opts" id="tplOpts">
+        <div class="tpl-opt-row">
+          <span class="field-label" style="margin:0;">템플릿 색</span>
+          <input type="color" class="swatch-input" id="tplC1" value="#5fb0f7" title="색 1">
+          <input type="color" class="swatch-input" id="tplC2" value="#ff7fb0" title="색 2">
+          <button type="button" class="mini-btn" id="tplFromBg" title="배경이 그라데이션이면 그 두 색, 단색이면 배경색·강조색">배경에서 가져오기</button>
+        </div>
+        <div class="tpl-opt-row">
+          <span class="field-label" style="margin:0;">날짜</span>
+          <input type="text" id="tplDate" placeholder="비우면 오늘 날짜" maxlength="40">
+        </div>
+      </div>
       <div class="hint">카드 모양을 통째로 바꿔요. 고르면 어울리는 색으로 바뀌고, 색·글씨는 그 뒤에 마음대로 바꿔도 돼요. ⧉ 로 복제해 고치거나 <b>+ 만들기</b>로 직접 HTML·CSS를 써서 넣을 수 있어요.</div>
     </div>
 
@@ -3120,9 +3138,10 @@
       <label class="field-label" style="margin-top:12px;">CSS</label>
       <textarea id="tplCss" spellcheck="false" placeholder=".frame { position:absolute; inset:16px; border:2px solid currentColor; }"></textarea>
       <div class="tpl-help">
-        넣을 수 있는 값: <code>{{char}}</code> 캐릭터 <code>{{maker}}</code> 제작자 <code>{{title}}</code> 제목 <code>{{date}}</code> 오늘 <code>{{page}}</code>/<code>{{pages}}</code> 장 <code>{{initial}}</code> 캐릭터 첫 글자<br>
+        넣을 수 있는 값: <code>{{char}}</code> 캐릭터 <code>{{maker}}</code> 제작자 <code>{{title}}</code> 제목 <code>{{date}}</code> 날짜(비우면 오늘) <code>{{page}}</code>/<code>{{pages}}</code> 장 <code>{{initial}}</code> 캐릭터 첫 글자<br>
         CSS 는 카드 안에서만 적용돼요. <code>.card</code> 카드 자체 · <code>.card-inner</code> 글 묶음 · <code>#quoteText</code> 본문 · <code>.card-credit</code> 출처 · <code>.card-sep</code> 출처선<br>
-        <code>&lt;div class="tpl-lines"&gt;&lt;/div&gt;</code> 를 넣으면 글 줄에 맞춘 줄선이 그어져요. 색은 <code>var(--tpl-ink)</code> 글씨색 · <code>var(--tpl-accent)</code> 강조색
+        <code>&lt;div class="tpl-lines"&gt;&lt;/div&gt;</code> 를 넣으면 글 줄에 맞춘 줄선이 그어져요. 색은 <code>var(--tpl-ink)</code> 글씨색 · <code>var(--tpl-accent)</code> 강조색<br>
+        템플릿 색: <code>var(--tpl-c1)</code> · <code>var(--tpl-c2)</code>, 옅게 <code>-l</code> · 더 옅게 <code>-xl</code> · 아주 옅게 <code>-t</code> · 짙게 <code>-d</code> · 반투명 <code>-a</code> (예: <code>var(--tpl-c1-l)</code>)
       </div>
     </div>
     <div class="modal-foot">
@@ -6364,12 +6383,21 @@
     card.style.setProperty('--tpl-ink', ink);
     card.style.setProperty('--tpl-accent', acc);
     card.style.setProperty('--tpl-line', tplHexRgba(ink, 0.2));
+    // 템플릿 색 두 개 — 옅게/짙게/반투명 변형까지 만들어 둔다 (저장 이미지에서도 그대로 나오게 실제 색으로)
+    [['c1', state.tplC1 || '#5fb0f7'], ['c2', state.tplC2 || '#ff7fb0']].forEach(([k, c]) => {
+      card.style.setProperty('--tpl-' + k, c);
+      card.style.setProperty('--tpl-' + k + '-l', tplMix(c, '#ffffff', 0.6));
+      card.style.setProperty('--tpl-' + k + '-xl', tplMix(c, '#ffffff', 0.3));
+      card.style.setProperty('--tpl-' + k + '-t', tplMix(c, '#ffffff', 0.14));
+      card.style.setProperty('--tpl-' + k + '-d', tplMix(c, '#1d2540', 0.82));
+      card.style.setProperty('--tpl-' + k + '-a', tplHexRgba(c, 0.16));
+    });
     const pages = getPages();
     const c = plainName(charInput.value), m = plainName(makerInput.value);
     const d = new Date();
     const vals = {
       char: c, maker: m, title: plainName($('titleInput').value),
-      date: d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0'),
+      date: (state.tplDate || '').trim() || d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0'),
       page: String(curPage + 1), pages: String(pages.length),
       initial: (Array.from(c || m || '?')[0] || '?')
     };
@@ -6427,9 +6455,22 @@
     state.template = id || '';
     const t = tplFind(id);
     if (t) tplApplyColors(t);
+    syncTplOpts();
     renderTplGrid();
     applyStyle();
     renderCard();
+  }
+  function tplMix(a, b, k) {
+    const h = x => { const m = /^#?([0-9a-f]{6})$/i.exec(x || ''); const n = m ? parseInt(m[1], 16) : 0; return [n >> 16, (n >> 8) & 255, n & 255]; };
+    const A = h(a), B = h(b);
+    return 'rgb(' + A.map((v, i) => Math.round(v * k + B[i] * (1 - k))).join(',') + ')';
+  }
+  function syncTplOpts() {
+    if (!$('tplOpts')) return;
+    $('tplOpts').style.display = state.template ? '' : 'none';
+    $('tplC1').value = state.tplC1 || '#5fb0f7';
+    $('tplC2').value = state.tplC2 || '#ff7fb0';
+    $('tplDate').value = state.tplDate || '';
   }
   function renderTplGrid() {
     if (!window.__tplReady) return;
@@ -6528,7 +6569,19 @@
     ta.value = ta.value.slice(0, a) + '  ' + ta.value.slice(b);
     ta.selectionStart = ta.selectionEnd = a + 2;
   }));
+  ['tplC1', 'tplC2'].forEach(id => $(id).addEventListener('input', () => {
+    state[id] = $(id).value; renderCard();
+  }));
+  $('tplDate').addEventListener('input', () => { state.tplDate = $('tplDate').value; renderCard(); });
+  $('tplFromBg').addEventListener('click', () => {
+    const grad = state.bgMode === 'gradient';
+    state.tplC1 = grad ? $('gradColor1').value : $('bgColor').value;
+    state.tplC2 = grad ? $('gradColor2').value : $('accentColor').value;
+    syncTplOpts(); renderCard();
+    toast('배경 색을 템플릿 색으로 가져왔어요');
+  });
   window.__tplReady = true;
+  syncTplOpts();
   renderTplGrid();
   renderCard();
 
@@ -7318,6 +7371,8 @@
     state.book = false;
     syncBookUI();
     state.template = '';
+    state.tplDate = '';
+    if (typeof syncTplOpts === 'function') syncTplOpts();
     if (typeof renderTplGrid === 'function') renderTplGrid();
     state.dragPlace = false;
     $('dragPlaceToggle').classList.remove('on');
@@ -8129,6 +8184,7 @@
       blockOff: state.blockOff,
       book: !!state.book,
       template: state.template || '',
+      tplC1: state.tplC1, tplC2: state.tplC2, tplDate: state.tplDate || '',
       // 문구에 실제로 쓰인 이미지만 담는다
       inlineImgs: (function () {
         const used = {};
@@ -8276,6 +8332,10 @@
     state.book = !!s.book;
     syncBookUI();
     state.template = s.template || '';
+    if (s.tplC1) state.tplC1 = s.tplC1;
+    if (s.tplC2) state.tplC2 = s.tplC2;
+    state.tplDate = s.tplDate || '';
+    if (typeof syncTplOpts === 'function') syncTplOpts();
     if (typeof renderTplGrid === 'function') renderTplGrid();
     if (s.inlineImgs && Object.keys(s.inlineImgs).length) {
       state.inlineImgs = Object.assign({}, state.inlineImgs || {}, s.inlineImgs);
