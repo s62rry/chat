@@ -2292,7 +2292,7 @@
         </div>
         <div class="tpl-opt-row">
           <span class="field-label" style="margin:0;">날짜</span>
-          <input type="text" id="tplDate" placeholder="비우면 오늘 날짜" maxlength="40">
+          <input type="date" id="tplDate" title="비우면 오늘 날짜"><span class="hint" style="margin:0;white-space:nowrap;">비우면 오늘</span>
         </div>
       </div>
       <div class="hint">카드 모양을 통째로 바꿔요. 고르면 어울리는 색으로 바뀌고, 색·글씨는 그 뒤에 마음대로 바꿔도 돼요. ⧉ 로 복제해 고치거나 <b>+ 만들기</b>로 직접 HTML·CSS를 써서 넣을 수 있어요.</div>
@@ -6397,7 +6397,7 @@
     const d = new Date();
     const vals = {
       char: c, maker: m, title: plainName($('titleInput').value),
-      date: (state.tplDate || '').trim() || d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0'),
+      date: (state.tplDate || '').trim().replace(/-/g, '.') || d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0'),
       page: String(curPage + 1), pages: String(pages.length),
       initial: (Array.from(c || m || '?')[0] || '?')
     };
@@ -8334,7 +8334,7 @@
     state.template = s.template || '';
     if (s.tplC1) state.tplC1 = s.tplC1;
     if (s.tplC2) state.tplC2 = s.tplC2;
-    state.tplDate = s.tplDate || '';
+    state.tplDate = /^\d{4}-\d{2}-\d{2}$/.test(s.tplDate || '') ? s.tplDate : '';
     if (typeof syncTplOpts === 'function') syncTplOpts();
     if (typeof renderTplGrid === 'function') renderTplGrid();
     if (s.inlineImgs && Object.keys(s.inlineImgs).length) {
