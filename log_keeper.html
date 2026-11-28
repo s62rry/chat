@@ -2668,8 +2668,31 @@ function markCurrentHit(doScroll) {
   if (logHitIdx < 0 || logHitIdx >= marks.length) return;
   const cur = marks[logHitIdx];
   cur.classList.add("current");
-  if (doScroll !== false)
-    settleScrollTo(cur, "center", true);
+  if (doScroll !== false) {
+    revealHit(cur);
+    // 그래도 안 보이는 곳(스킨이 숨긴 칸 등)이면 보이는 가장 가까운 부모로 간다
+    let t = cur;
+    while (t && t !== document.body && t.getClientRects().length === 0) t = t.parentElement;
+    const tb = t && t.closest(".turn");
+    settleScrollTo(t && t !== document.body ? t : (tb || cur), "center", true);
+  }
+}
+// 접힌 상태창(<details>)이나 다른 리롤 칸 안에 있는 결과면 펼쳐서 보이게 한다
+function revealHit(el) {
+  for (let p = el.parentElement; p && p.id !== "scrollInner"; p = p.parentElement) {
+    if (p.tagName === "DETAILS" && !p.open) p.open = true;
+    if (p.classList.contains("roll-pane") && p.hidden) {
+      const box = p.parentElement, nav = box && box.querySelector(":scope > .roll-nav");
+      const panes = box ? [...box.querySelectorAll(":scope > .roll-pane")] : [p];
+      const cur = panes.indexOf(p);
+      panes.forEach((q, i) => { q.hidden = i !== cur; });
+      if (nav) {
+        nav.dataset.cur = cur;
+        const lb = nav.querySelector(".roll-lbl b"); if (lb) lb.textContent = cur + 1;
+        const pk = nav.querySelector(".roll-pick"); if (pk) pk.textContent = p.dataset.chosen === "1" ? "고른 답" : "";
+      }
+    }
+  }
 }
 // 다음/이전 일치 항목으로 이동
 function moveLogHit(dir) {
